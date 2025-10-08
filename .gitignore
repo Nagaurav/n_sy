@@ -1,0 +1,30 @@
+# Dependencies
+/node_modules
+
+# Bundles
+*.js.map
+*.bundle
+
+# Build directory
+/build
+/android/build
+/ios/build
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.user
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.*
+
+    
