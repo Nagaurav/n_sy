@@ -1,23 +1,18 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useContext, useEffect, ReactNode } from 'react';
+import { useAppSelector, useAppDispatch } from '../store';
+import { signInAsync, signOutAsync, updateUserAsync, rehydrateAuthAsync, rehydrateAuth } from '../store/authSlice';
+import { apiService } from '../services/api';
 
-type User = {
-  _id: string;
-  phone: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  // Add other user fields as needed
-};
+import { User } from '../types/auth';
 
 type AuthContextData = {
   user: User | null;
   token: string | null;
   isLoading: boolean;
+  isAuthenticated: boolean;
   signIn: (userData: { user: User; token: string }) => Promise<void>;
   signOut: () => Promise<void>;
-  updateUser: (userData: Partial<User>) => void;
+  updateUser: (userData: Partial<User>) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
@@ -27,40 +22,43 @@ type AuthProviderProps = {
 };
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const dispatch = useAppDispatch();
+  const { user, token, isLoading, isAuthenticated } = useAppSelector((state) => state.auth);
+
+  console.log('🔍 AuthProvider state:', { 
+    isLoading, 
+    isAuthenticated, 
+    hasUser: !!user,
+    hasToken: !!token 
+  });
 
   useEffect(() => {
-    loadStoredData();
-  }, []);
+    console.log('🚀 AuthProvider mounting, starting rehydration...');
+    
+    // Rehydrate auth state from AsyncStorage on app start
+    dispatch(rehydrateAuthAsync() as any);
+    
+    // Fallback timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      console.log('⚠️ Auth rehydration timeout, forcing loading to false');
+      dispatch(rehydrateAuth(null));
+    }, 3000); // 3 second timeout (reduced for faster testing)
+    
+    return () => clearTimeout(timeout);
+  }, [dispatch]);
 
-  async function loadStoredData() {
-    try {
-      const [storedUser, storedToken] = await Promise.all([
-        AsyncStorage.getItem('@Auth:user'),
-        AsyncStorage.getItem('@Auth:token'),
-      ]);
-
-      if (storedUser && storedToken) {
-        setUser(JSON.parse(storedUser));
-        setToken(storedToken);
-      }
-    } catch (error) {
-      console.error('Failed to load auth data', error);
-    } finally {
-      setIsLoading(false);
+  useEffect(() => {
+    // Update API service token when token changes
+    if (token) {
+      apiService.setAuthToken(token);
+    } else {
+      apiService.setAuthToken(null);
     }
-  }
+  }, [token]);
 
   async function signIn({ user, token }: { user: User; token: string }) {
     try {
-      await AsyncStorage.multiSet([
-        ['@Auth:user', JSON.stringify(user)],
-        ['@Auth:token', token],
-      ]);
-      setUser(user);
-      setToken(token);
+      await dispatch(signInAsync({ user, token }) as any);
     } catch (error) {
       console.error('Failed to sign in', error);
       throw error;
@@ -69,21 +67,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   async function signOut() {
     try {
-      await AsyncStorage.multiRemove(['@Auth:user', '@Auth:token']);
-      setUser(null);
-      setToken(null);
+      await dispatch(signOutAsync() as any);
     } catch (error) {
       console.error('Failed to sign out', error);
       throw error;
     }
   }
 
-  function updateUser(userData: Partial<User>) {
-    if (!user) return;
-    
-    const updatedUser = { ...user, ...userData };
-    setUser(updatedUser);
-    AsyncStorage.setItem('@Auth:user', JSON.stringify(updatedUser)).catch(console.error);
+  async function updateUser(userData: Partial<User>) {
+    try {
+      await dispatch(updateUserAsync(userData) as any);
+    } catch (error) {
+      console.error('Failed to update user', error);
+      throw error;
+    }
   }
 
   return (
@@ -92,6 +89,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         user,
         token,
         isLoading,
+        isAuthenticated,
         signIn,
         signOut,
         updateUser,

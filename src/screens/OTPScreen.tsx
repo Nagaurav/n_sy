@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { theme } from '../theme';
 import { apiService } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 type Styles = {
   container: ViewStyle;
@@ -170,6 +171,7 @@ const styles = StyleSheet.create<Styles>({
 
 const OTPScreen = ({ navigation, route }: any) => {
   const { phoneNumber } = route.params;
+  const { signIn } = useAuth();
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -250,13 +252,22 @@ const OTPScreen = ({ navigation, route }: any) => {
           // New user - navigate to signup
           navigation.navigate('Signup', { phoneNumber });
         } else {
-          // Existing user - store token and navigate to home
-          if (response.data.token) {
-            // TODO: Store token in Redux/AsyncStorage
-            console.log('User token:', response.data.token);
-            console.log('User data:', response.data.user);
+          // Existing user - store token and let auth state handle navigation
+          if (response.data.token && response.data.user) {
+            try {
+              await signIn({
+                user: response.data.user,
+                token: response.data.token
+              });
+              // Navigation will happen automatically due to auth state change
+              // No manual navigation needed
+            } catch (authError) {
+              console.error('Authentication error:', authError);
+              setError('Failed to authenticate. Please try again.');
+            }
+          } else {
+            setError('Authentication data missing. Please try again.');
           }
-          navigation.navigate('Home');
         }
       } else {
         setError(response.error || 'Invalid OTP. Please try again.');
