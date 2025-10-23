@@ -8,6 +8,7 @@ import {
   SignupData,
   User 
 } from '../types/auth';
+import { YogaClass, YogaClassesFilters, PaginationInfo } from '../types/yogaClasses';
 import {
   CreateBookingRequest,
   UpdateBookingRequest,
@@ -16,7 +17,8 @@ import {
   ProfessionalsResponse,
   SlotsResponse,
   Professional,
-  TimeSlot
+  TimeSlot,
+  ProfessionalFilters
 } from '../types/booking';
 
 const API_BASE_URL = 'http://88.222.241.179:7000/api/v1';
@@ -165,6 +167,11 @@ class ApiService {
     }
   }
 
+  // --- NEW GENERIC GET METHOD ---
+  public async get<T = any>(endpoint: string, config?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, 'GET', undefined, config);
+  }
+
   // OTP Related APIs (No auth required)
   public async sendOTP(phoneNumber: string): Promise<ApiResponse<OTPResponse>> {
     return this.request<OTPResponse>('/user/otp/sendotp', 'POST', { phone: phoneNumber }, {}, false);
@@ -182,9 +189,9 @@ class ApiService {
     return this.request<SignupResponse>('/user/auth/signup', 'POST', userData, {}, false);
   }
 
-  // User Related APIs (Auth required - user_id automatically scoped via token)
+  // User Related APIs (Auth required)
   public async getUserProfile(userId: string): Promise<ApiResponse<{ user: User }>> {
-    return this.request<{ user: User }>(`/user/${userId}`, 'GET');
+    return this.get<{ user: User }>(`/user/${userId}`);
   }
 
   public async updateUserProfile(
@@ -194,66 +201,37 @@ class ApiService {
     return this.request<{ user: User }>(`/user/${userId}`, 'PUT', userData);
   }
 
-  // Consultation Booking APIs (Auth required - user_id scoped)
+  // Consultation Booking & Payment APIs (Auth required)
   public async getUserAppointments(userId: string): Promise<ApiResponse<AppointmentsResponse>> {
-    return this.request<AppointmentsResponse>(`/user/consultation-booking/user/${userId}`, 'GET');
+    return this.get<AppointmentsResponse>(`/user/consultation-booking/user/${userId}`);
   }
 
   public async createConsultationBooking(bookingData: CreateBookingRequest): Promise<ApiResponse<BookingResponse>> {
     return this.request<BookingResponse>('/user/consultation-booking/create', 'POST', bookingData);
   }
-
-  public async getConsultationBookingById(bookingId: string): Promise<ApiResponse<BookingResponse>> {
-    return this.request<BookingResponse>(`/user/consultation-booking/${bookingId}`, 'GET');
+  
+  public async getPaymentStatus(bookingId: string): Promise<ApiResponse<any>> {
+    return this.get<any>(`/user/consultation-booking/payment-status/${bookingId}`);
   }
 
-  public async updateConsultationBooking(
-    bookingId: string,
-    updateData: UpdateBookingRequest
-  ): Promise<ApiResponse<BookingResponse>> {
-    return this.request<BookingResponse>(`/user/consultation-booking/${bookingId}`, 'PUT', updateData);
+  public async getConsultationBookingById(bookingId: string): Promise<ApiResponse<BookingResponse>> {
+    return this.get<BookingResponse>(`/user/consultation-booking/details/${bookingId}`);
   }
 
   public async cancelConsultationBooking(bookingId: string): Promise<ApiResponse<{ message: string }>> {
-    return this.request<{ message: string }>(`/user/consultation-booking/${bookingId}`, 'DELETE');
+    return this.request<{ message: string }>(`/user/consultation-booking/cancel/${bookingId}`, 'PUT');
   }
 
   // Professional APIs (Auth required)
   public async getAllProfessionals(): Promise<ApiResponse<ProfessionalsResponse>> {
-    return this.request<ProfessionalsResponse>('/user/professional/all', 'GET');
+    return this.get<ProfessionalsResponse>('/user/professional/all');
   }
 
   public async getProfessionalById(professionalId: string): Promise<ApiResponse<{ professional: Professional }>> {
-    return this.request<{ professional: Professional }>(`/user/professional/${professionalId}`, 'GET');
+    return this.get<{ professional: Professional }>(`/user/professional/${professionalId}`);
   }
 
-  // Slot APIs (Auth required)
-  public async getAvailableSlots(professionalId: string, date: string): Promise<ApiResponse<SlotsResponse>> {
-    return this.request<SlotsResponse>(`/user/slot/professional/${professionalId}/date/${date}`, 'GET');
-  }
-
-  // Categories API (Auth required)
-  public async getWellnessCategories(): Promise<ApiResponse<{ categories: any[] }>> {
-    return this.request<{ categories: any[] }>('/categories', 'GET');
-  }
-
-  // Next Appointment API (Auth required)
-  public async getNextAppointment(userId: string): Promise<ApiResponse<{ appointment: any }>> {
-    return this.request<{ appointment: any }>(`/user/consultation-booking/next/${userId}`, 'GET');
-  }
-
-  // Search Professionals API (Auth required)
-  public async searchProfessionals(searchQuery: string): Promise<ApiResponse<ProfessionalsResponse>> {
-    return this.request<ProfessionalsResponse>(`/user/professional/filter?search_query=${encodeURIComponent(searchQuery)}`, 'GET');
-  }
-
-  // Filter Professionals by Category API (Auth required)
-  public async getProfessionalsByCategory(categoryId: string): Promise<ApiResponse<ProfessionalsResponse>> {
-    return this.request<ProfessionalsResponse>(`/user/professional/category/${categoryId}`, 'GET');
-  }
-
-  // Enhanced Search Professionals with Filters API (Auth required)
-  public async searchProfessionalsWithFilters(filters: any): Promise<ApiResponse<ProfessionalsResponse>> {
+  public async searchProfessionalsWithFilters(filters: ProfessionalFilters): Promise<ApiResponse<ProfessionalsResponse>> {
     const queryParams = new URLSearchParams();
     
     Object.entries(filters).forEach(([key, value]) => {
@@ -265,10 +243,53 @@ class ApiService {
     const queryString = queryParams.toString();
     const endpoint = `/user/professional/filter${queryString ? `?${queryString}` : ''}`;
     
-    return this.request<ProfessionalsResponse>(endpoint, 'GET');
+    return this.get<ProfessionalsResponse>(endpoint);
   }
 
-  // Add more user-specific API methods as needed
+  // Slot APIs (Auth required)
+  public async getAvailableSlots(professionalId: string, date: string): Promise<ApiResponse<SlotsResponse>> {
+    return this.get<SlotsResponse>(`/user/slot/professional/${professionalId}/date/${date}`);
+  }
+
+  // Categories API (Auth required)
+  public async getWellnessCategories(): Promise<ApiResponse<{ categories: any[] }>> {
+    return this.get<{ categories: any[] }>('/categories');
+  }
+
+  // Next Appointment API (Auth required)
+  public async getNextAppointment(userId: string): Promise<ApiResponse<{ appointment: any }>> {
+    return this.get<{ appointment: any }>(`/user/consultation-booking/next/${userId}`);
+  }
+
+  // Customer Support APIs (Auth required)
+  public async submitSupportTicket(userId: string, subject: string, message: string): Promise<ApiResponse<any>> {
+    const payload = { 
+      user_id: parseInt(userId, 10), 
+      subject, 
+      message 
+    };
+    return this.request<any>('/user/customer-support/create', 'POST', payload);
+  }
+
+  public async getUserSupportTickets(userId: string): Promise<ApiResponse<{ tickets: any[] }>> {
+    return this.get<{ tickets: any[] }>(`/user/customer-support/${userId}`);
+  }
+
+  // FAQ API (Auth required)
+  public async getFaqs(): Promise<ApiResponse<{ data: any[] }>> {
+    return this.get<{ data: any[] }>('/user/faq/get');
+  }
+
+  // Yoga Classes API (Auth required)
+  public async getYogaClasses(filters: YogaClassesFilters = {}): Promise<ApiResponse<{
+    data: YogaClass[];
+    pagination: PaginationInfo;
+  }>> {
+    return this.get<{
+      data: YogaClass[];
+      pagination: PaginationInfo;
+    }>('/user/yoga-classes', { params: filters });
+  }
 }
 
 export const apiService = ApiService.getInstance();

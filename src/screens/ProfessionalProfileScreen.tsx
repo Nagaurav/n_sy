@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,18 +13,16 @@ import {
   Share,
   Alert,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
-import type { HomeStackParamList } from '../../App';
+import type { HomeStackParamList } from '../types/navigation';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../services/api';
+import { apiService } from '../services/apiService';
 
 const { width } = Dimensions.get('window');
 
-interface RouteParams {
-  professionalId: string;
-}
+type ProfessionalProfileRouteProp = RouteProp<HomeStackParamList, 'ProfessionalProfile'>;
 
 interface Service {
   service_id: number;
@@ -65,8 +63,8 @@ type ProfessionalProfileScreenNavigationProp = StackNavigationProp<HomeStackPara
 
 const ProfessionalProfileScreen = () => {
   const navigation = useNavigation<ProfessionalProfileScreenNavigationProp>();
-  const route = useRoute();
-  const { professionalId } = (route.params as RouteParams) || {};
+  const route = useRoute<ProfessionalProfileRouteProp>();
+  const { professionalId } = route.params || {};
   const { user } = useAuth();
 
   // State management
@@ -80,59 +78,82 @@ const ProfessionalProfileScreen = () => {
   const servicesRef = useRef<View>(null);
   const reviewsRef = useRef<View>(null);
   const scrollViewRef = useRef<ScrollView>(null);
+  
+  // Memoize the professional details to prevent unnecessary re-renders
+  const memoizedProfessionalDetails = useRef<ProfessionalDetails | null>(null);
 
   useEffect(() => {
-    if (professionalId) {
-      fetchProfessionalDetails();
-    } else {
-      setError('Invalid professional ID');
+    console.log('🔵 Professional ID from route params:', professionalId);
+    if (!professionalId) {
+      const errorMsg = '❌ Professional ID is required';
+      console.error(errorMsg);
+      setError(errorMsg);
       setIsLoading(false);
+      return;
     }
+    fetchProfessionalDetails();
   }, [professionalId]);
 
-  const fetchProfessionalDetails = async () => {
-    if (!user?._id) return;
-
+  const fetchProfessionalDetails = useCallback(async () => {
+    console.log('🔄 Starting to fetch professional details...');
+    
+    // Check if we already have the data
+    if (memoizedProfessionalDetails.current?.professional_id.toString() === professionalId) {
+      console.log('📦 Using cached professional details');
+      setProfessionalDetails(memoizedProfessionalDetails.current);
+      setIsLoading(false);
+      return;
+    }
+    
+    console.log('ℹ️ Fetching public professional profile');
+    
     setIsLoading(true);
     setError('');
+    
+    // Add a small delay to prevent rapid state updates
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // State is already set above
 
     try {
       console.log('🔍 Fetching professional details for ID:', professionalId);
       
-      const response = await apiService.getProfessionalById(professionalId);
-
-      if (response.success && response.data?.professional) {
-        console.log('✅ Professional details loaded');
-        // Transform Professional to ProfessionalDetails format
-        const professional = response.data.professional;
-        const professionalDetails: ProfessionalDetails = {
-          professional_id: professional.professional_id || parseInt(professional._id),
-          first_name: professional.first_name || professional.firstName,
-          last_name: professional.last_name || professional.lastName,
-          full_name: `${professional.first_name || professional.firstName} ${professional.last_name || professional.lastName}`,
-          speciality: professional.speciality || professional.specialization,
-          profile_picture_url: professional.profile_picture_url || professional.profileImage,
-          average_rating: professional.average_rating || professional.rating || 0,
-          total_reviews: professional.total_reviews || 0,
-          is_online: professional.is_online ?? professional.availability ?? true,
-          city: professional.city || 'Remote',
-          bio: professional.description || 'Experienced wellness professional dedicated to helping you achieve your health goals.',
-          qualifications: ['Certified Professional'], // Default qualification
-          experience_years: professional.experience || 5,
-          languages_spoken: professional.languages || ['English'],
+      const professional = await apiService.getProfessionalProfile(professionalId);
+      console.log('✅ Professional details loaded:', professional);
+      
+      if (!professional) {
+        throw new Error('No professional data returned from API');
+      }
+      
+      // Transform Professional to ProfessionalDetails format
+      const professionalDetails: ProfessionalDetails = {
+        professional_id: professional.id || 0,
+        first_name: professional.first_name || '',
+        last_name: professional.last_name || '',
+        full_name: `${professional.first_name || ''} ${professional.last_name || ''}`.trim() || 'Professional',
+        speciality: professional.specialization || 'Wellness Professional',
+        profile_picture_url: professional.profile_picture || '',
+        average_rating: professional.rating || 0,
+        total_reviews: professional.review_count || 0,
+        is_online: professional.is_available !== undefined ? professional.is_available : true,
+        city: 'Remote', // Default value since city is not in the Professional type
+        bio: professional.bio || 'Experienced wellness professional dedicated to helping you achieve your health goals.',
+        qualifications: ['Certified Professional'], // Default value
+        experience_years: professional.experience_years || 0,
+        languages_spoken: professional.languages || ['English'],
           services: [
             {
               service_id: 1,
               name: '30-Min Consultation',
               description: 'Personal consultation session',
-              price: professional.min_session_price || 50,
+              price: 50, // Default price
               duration_minutes: 30,
             },
             {
               service_id: 2,
               name: '60-Min Session',
               description: 'Extended consultation session',
-              price: (professional.min_session_price || 50) * 1.8,
+              price: 90, // Default price
               duration_minutes: 60,
             },
           ],
@@ -140,23 +161,48 @@ const ProfessionalProfileScreen = () => {
             {
               review_id: 1,
               user_name: 'Anonymous User',
-              rating: professional.average_rating || professional.rating || 5,
+              rating: professional.rating || 5,
               comment: 'Great professional, highly recommended!',
-              review_date: new Date().toISOString(),
-            },
-          ],
+              review_date: new Date().toISOString()
+            }
+          ]
         };
+        
+        // Update the ref and state
+        memoizedProfessionalDetails.current = professionalDetails;
         setProfessionalDetails(professionalDetails);
-      } else {
-        setError(response.error || 'Failed to load professional details');
+        setError('');
+      } catch (error) {
+        let errorMessage = 'Failed to load professional details';
+        
+        if (error instanceof Error) {
+          console.error('❌ Error fetching professional details:', error.message);
+          errorMessage = error.message;
+          
+          // Handle specific error cases
+          if (error.message.includes('network')) {
+            errorMessage = 'Network error. Please check your internet connection.';
+          } else if (error.message.includes('timeout')) {
+            errorMessage = 'Request timed out. The server is taking too long to respond.';
+          } else if (error.message.includes('404')) {
+            errorMessage = 'Professional not found. The requested profile does not exist.';
+          }
+        } else {
+          console.error('❌ Unknown error:', error);
+        }
+        
+        setError(errorMessage);
+        
+        // Show a more detailed error in development
+        if (__DEV__) {
+          console.error('Detailed error:', error);
+        }
+      } finally {
+        setIsLoading(false);
       }
-    } catch (err) {
-      console.error('❌ Error fetching professional details:', err);
-      setError('Network error. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    },
+    [professionalId]
+  );
 
   const handleShare = async () => {
     if (!professionalDetails) return;
@@ -171,30 +217,55 @@ const ProfessionalProfileScreen = () => {
     }
   };
 
-  const handleServiceSelect = (service: Service) => {
+  const handleServiceSelect = useCallback((service: Service) => {
+    if (!professionalDetails) {
+      console.error('No professional details available');
+      return;
+    }
+    
     setSelectedService(service);
-    // Navigate to DateTimeSelectionScreen with service details
-    navigation.navigate('DateTimeSelection', {
-      professionalId: professionalDetails?.professional_id.toString() || professionalId,
+    
+    // Prepare navigation params
+    const navigationParams = {
+      professionalId: professionalDetails.professional_id.toString(),
+      professionalName: professionalDetails.full_name,
       serviceId: service.service_id.toString(),
       serviceName: service.name,
       price: service.price,
       duration: service.duration_minutes,
-    });
-  };
+      serviceDetails: {
+        id: service.service_id.toString(),
+        name: service.name,
+        duration: service.duration_minutes,
+        price: service.price
+      }
+    };
+    
+    console.log('Navigating to DateTimeSelection with params:', navigationParams);
+    navigation.navigate('DateTimeSelection', navigationParams);
+  }, [professionalDetails, navigation]);
 
-  const handleBookNow = () => {
-    if (!professionalDetails) return;
+  const handleBookNow = useCallback(() => {
+    if (!professionalDetails) {
+      console.error('No professional details available');
+      return;
+    }
 
     if (selectedService) {
       handleServiceSelect(selectedService);
     } else {
-      // Navigate with professional ID only, let user choose service later
-      navigation.navigate('DateTimeSelection', {
-        professionalId: professionalDetails.professional_id.toString(),
-      });
+      // Prepare default service details
+      const defaultService = {
+        service_id: 0,
+        name: 'Consultation',
+        description: 'Default consultation service',
+        price: 0,
+        duration_minutes: 30
+      };
+      
+      handleServiceSelect(defaultService);
     }
-  };
+  }, [professionalDetails, selectedService, handleServiceSelect]);
 
   const scrollToSection = (ref: React.RefObject<View | null>) => {
     if (ref.current && scrollViewRef.current) {

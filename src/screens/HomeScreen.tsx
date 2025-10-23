@@ -4,47 +4,49 @@ import {
   Text, 
   StyleSheet, 
   ScrollView, 
-  ViewStyle, 
-  TextStyle, 
   ActivityIndicator, 
   RefreshControl,
   TouchableOpacity,
-  TextInput,
-  FlatList,
-  Image,
   StatusBar,
   SafeAreaView,
-  Dimensions
+  Dimensions,
+  Linking
 } from 'react-native';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { HomeStackParamList } from '../../App';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { theme, commonStyles } from '../theme';
+import { theme } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
-import { ConsultationBooking } from '../types/booking';
 
 const { width } = Dimensions.get('window');
 
-interface Category {
-  id: string;
-  name: string;
-  icon: string;
-}
-
 interface NextAppointment {
+  id: string;
   professional_name: string;
   speciality: string;
   date: string;
   time: string;
+  mode: 'online' | 'offline';
   session_link?: string;
+  status?: 'scheduled' | 'completed' | 'cancelled';
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface ActionCardProps {
+  title: string;
+  description: string;
+  icon: string;
+  onPress: () => void;
+  color: string;
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F8FAFC',
   },
   header: {
     backgroundColor: '#1E88E5',
@@ -60,11 +62,178 @@ const styles = StyleSheet.create({
   },
   menuButton: {
     padding: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 8,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    flex: 1,
+    padding: 16,
+  },
+  greetingSection: {
+    marginBottom: 24,
+  },
+  greetingText: {
+    fontSize: 16,
+    color: '#4B5563',
+    marginBottom: 4,
+  },
+  userNameText: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  welcomeMessage: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 16,
+  },
+  appointmentCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  appointmentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  appointmentTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  professionalName: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  speciality: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  appointmentDateTime: {
+    fontSize: 15,
+    color: '#374151',
+    fontWeight: '500',
+    marginBottom: 16,
+  },
+  actionButton: {
+    backgroundColor: '#1E88E5',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  noDataContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  noDataText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 12,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  actionCardsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  actionCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    alignItems: 'center',
+  },
+  actionCardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  actionCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  actionCardDescription: {
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  actionCardButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    width: '100%',
+  },
+  actionCardButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 16,
+    color: '#4B5563',
+    fontSize: 16,
   },
   appTitle: {
-    fontSize: 20,
+    color: 'white',
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFFFFF',
     flex: 1,
     textAlign: 'center',
   },
@@ -74,304 +243,119 @@ const styles = StyleSheet.create({
   },
   notificationBadge: {
     position: 'absolute',
-    top: 4,
     right: 4,
-    backgroundColor: '#EF4444',
+    top: 4,
+    backgroundColor: 'red',
     borderRadius: 10,
-    width: 20,
-    height: 20,
+    width: 16,
+    height: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   badgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
+    color: 'white',
+    fontSize: 10,
     fontWeight: 'bold',
-  },
-  searchContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  searchIcon: {
-    marginRight: 12,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#1F2937',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 20,
-  },
-  greetingSection: {
-    marginBottom: 24,
-  },
-  greetingText: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  userNameText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  welcomeMessage: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  viewAllButton: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  viewAllText: {
-    fontSize: 14,
-    color: '#1E88E5',
-    fontWeight: '500',
-  },
-  appointmentCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  appointmentInfo: {
-    flex: 1,
-  },
-  professionalName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  speciality: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  appointmentDateTime: {
-    fontSize: 14,
-    color: '#1F2937',
-    fontWeight: '500',
-  },
-  joinButton: {
-    backgroundColor: '#1E88E5',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginLeft: 12,
-  },
-  joinButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  noAppointmentCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  noAppointmentText: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  bookFirstButton: {
-    backgroundColor: '#1E88E5',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  bookFirstButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  categoryCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    width: (width - 48) / 2,
-    marginBottom: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  categoryIcon: {
-    marginBottom: 8,
-  },
-  categoryName: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1F2937',
-    textAlign: 'center',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6B7280',
   },
   errorContainer: {
     backgroundColor: '#FEF2F2',
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#FECACA',
   },
   errorText: {
-    color: '#EF4444',
+    color: '#DC2626',
     fontSize: 14,
     textAlign: 'center',
   },
 });
 
-type HomeScreenNavigationProp = StackNavigationProp<HomeStackParamList>;
+// Action Card Component
+const ActionCard: React.FC<ActionCardProps> = ({ title, description, icon, onPress, color }) => (
+  <TouchableOpacity 
+    style={[styles.actionCard, { borderTopWidth: 4, borderTopColor: color }]}
+    onPress={onPress}
+  >
+    <View style={[styles.actionCardIcon, { backgroundColor: `${color}15` }]}>
+      <Ionicons name={icon} size={24} color={color} />
+    </View>
+    <Text style={styles.actionCardTitle}>{title}</Text>
+    <Text style={styles.actionCardDescription}>{description}</Text>
+    <View style={[styles.actionCardButton, { backgroundColor: `${color}20` }]}>
+      <Text style={[styles.actionCardButtonText, { color }]}>Get Started</Text>
+    </View>
+  </TouchableOpacity>
+);
+
+type HomeScreenNavigationProp = StackNavigationProp<HomeStackParamList, 'Home'>;
 
 const HomeScreen = () => {
   const { user } = useAuth();
   const navigation = useNavigation<HomeScreenNavigationProp>();
   
   // State variables
-  const [nextAppointment, setNextAppointment] = useState<NextAppointment | null>(null);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
-  const [notificationCount] = useState(3); // Mock notification count
+  const [error, setError] = useState<string | null>(null);
+  const [nextAppointment, setNextAppointment] = useState<NextAppointment | null>(null);
 
-  // Fetch all data
-  const fetchHomeData = async () => {
+  // Fetch next appointment data
+  const fetchNextAppointment = async () => {
     if (!user?._id) {
-      console.log('❌ No user ID found, skipping data fetch');
+      console.log('❌ No user ID found, skipping appointment fetch');
       setIsLoading(false);
       return;
     }
 
-    console.log('🔄 Fetching home data for user:', user._id);
-
     try {
-      setError('');
+      setIsLoading(true);
+      setError(null);
       
-      console.log('📡 Making API calls...');
-      
-      // Fetch next appointment and categories in parallel
-      const [nextAppResponse, categoriesResponse] = await Promise.all([
-        apiService.getNextAppointment(user._id),
-        apiService.getWellnessCategories(),
-      ]);
+      console.log('🔄 Fetching next appointment for user:', user._id);
+      const response = await apiService.getNextAppointment(user._id);
+      console.log('📊 Next appointment response:', response);
 
-      console.log('📊 API Responses:', {
-        nextAppointment: nextAppResponse.success,
-        categories: categoriesResponse.success
-      });
-
-      if (nextAppResponse.success && nextAppResponse.data?.appointment) {
+      if (response.success && response.data?.appointment) {
         console.log('✅ Next appointment found');
-        setNextAppointment(nextAppResponse.data.appointment);
+        setNextAppointment(response.data.appointment);
       } else {
-        console.log('ℹ️ No next appointment or API failed');
-      }
-
-      if (categoriesResponse.success && categoriesResponse.data?.categories) {
-        console.log('✅ Categories loaded:', categoriesResponse.data.categories.length);
-        setCategories(categoriesResponse.data.categories);
-      } else {
-        console.log('⚠️ Categories failed to load');
+        console.log('ℹ️ No upcoming appointments');
+        setNextAppointment(null);
       }
     } catch (err) {
-      console.error('❌ Error fetching home data:', err);
-      setError('Failed to load data. Please try again.');
+      console.error('❌ Error fetching next appointment:', err);
+      setError('Failed to load appointment details. Please try again.');
     } finally {
-      console.log('✅ Home data fetch completed');
       setIsLoading(false);
       setRefreshing(false);
     }
   };
 
   useEffect(() => {
-    fetchHomeData();
+    fetchNextAppointment();
     
     // Fallback timeout to prevent infinite loading
     const timeout = setTimeout(() => {
       console.log('⚠️ HomeScreen loading timeout, forcing completion');
       setIsLoading(false);
       setError('Loading took too long. Please try refreshing.');
-    }, 10000); // 10 second timeout
+    }, 10000);
     
     return () => clearTimeout(timeout);
   }, [user?._id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchHomeData();
+    fetchNextAppointment();
   }, []);
-
-  const handleSearch = useCallback((query: string) => {
-    if (query.trim()) {
-      // Navigate to professionals list with search query
-      navigation.navigate('ProfessionalsList', { searchQuery: query.trim() });
-    }
-  }, [navigation]);
-
-  const handleCategoryPress = useCallback((categoryId: string) => {
-    navigation.navigate('ProfessionalsList', { categoryId });
-  }, [navigation]);
 
   const openDrawer = () => {
     navigation.dispatch(DrawerActions.openDrawer());
   };
 
   const navigateToAppointments = () => {
-    // Navigate to the drawer's Appointments screen
     navigation.getParent()?.navigate('Appointments');
   };
 
@@ -386,28 +370,38 @@ const HomeScreen = () => {
     });
   };
 
-  const renderCategoryItem = ({ item }: { item: Category }) => (
-    <TouchableOpacity
-      style={styles.categoryCard}
-      onPress={() => handleCategoryPress(item.id)}
-    >
-      <View style={styles.categoryIcon}>
-        <Ionicons 
-          name={item.icon as any} 
-          size={32} 
-          color="#1E88E5" 
-        />
-      </View>
-      <Text style={styles.categoryName}>{item.name}</Text>
-    </TouchableOpacity>
-  );
+  const handleFindClass = () => {
+    navigation.navigate('ClassesList');
+  };
+
+  const handleBookConsultation = () => {
+    navigation.navigate('ProfessionalsList', { 
+      categoryName: 'Consultations',
+      searchQuery: 'consultation'
+    });
+  };
+
+  const handleJoinSession = () => {
+    if (nextAppointment?.session_link) {
+      // Open the session link in a webview or browser
+      Linking.openURL(nextAppointment.session_link);
+    }
+  };
+
+  // Get time-based greeting
+  const getGreetingTime = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Morning';
+    if (hour < 18) return 'Afternoon';
+    return 'Evening';
+  };
 
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar backgroundColor="#1E88E5" barStyle="light-content" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#1E88E5" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>Loading your wellness dashboard...</Text>
         </View>
       </SafeAreaView>
@@ -418,117 +412,100 @@ const HomeScreen = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#1E88E5" barStyle="light-content" />
       
-      {/* Custom Header */}
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <TouchableOpacity style={styles.menuButton} onPress={openDrawer}>
+          <TouchableOpacity onPress={openDrawer} style={styles.menuButton}>
             <Ionicons name="menu" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           
           <Text style={styles.appTitle}>SAMYAYOG</Text>
-          
-          <TouchableOpacity style={styles.notificationButton}>
-            <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
-            {notificationCount > 0 && (
-              <View style={styles.notificationBadge}>
-                <Text style={styles.badgeText}>{notificationCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color="#6B7280" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search for professionals or services..."
-            placeholderTextColor="#6B7280"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={() => handleSearch(searchQuery)}
-            returnKeyType="search"
-          />
         </View>
       </View>
-
-      <ScrollView
-        style={styles.content}
+      
+      <ScrollView 
+        style={styles.container}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={['#1E88E5']}
+            colors={[theme.colors.primary]}
+            tintColor={theme.colors.primary}
           />
         }
       >
-        {/* Greeting Section */}
-        <View style={styles.greetingSection}>
-          <Text style={styles.greetingText}>Hello,</Text>
-          <Text style={styles.userNameText}>{user?.firstName || 'User'}!</Text>
-          <Text style={styles.welcomeMessage}>Ready to find your inner peace?</Text>
-        </View>
-
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
+        <View style={styles.content}>
+          {/* Greeting Section */}
+          <View style={styles.greetingSection}>
+            <Text style={styles.greetingText}>Good {getGreetingTime()}</Text>
+            <Text style={styles.userNameText}>
+              {user?.first_name || user?.firstName || 'Welcome back'}
+            </Text>
+            <Text style={styles.welcomeMessage}>What would you like to do today?</Text>
           </View>
-        )}
-
-        {/* Next Appointment Section */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Your Next Appointment</Text>
-          <TouchableOpacity style={styles.viewAllButton} onPress={navigateToAppointments}>
-            <Text style={styles.viewAllText}>View All</Text>
-          </TouchableOpacity>
-        </View>
-
-        {nextAppointment ? (
-          <View style={styles.appointmentCard}>
-            <View style={styles.appointmentInfo}>
-              <Text style={styles.professionalName}>{nextAppointment.professional_name}</Text>
-              <Text style={styles.speciality}>{nextAppointment.speciality}</Text>
+          
+          {/* Next Appointment Section */}
+          <Text style={styles.sectionTitle}>Your Next Session</Text>
+          
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : nextAppointment ? (
+            <View style={styles.appointmentCard}>
+              <View style={styles.appointmentHeader}>
+                <Text style={styles.appointmentTitle}>Upcoming Session</Text>
+                <Ionicons name="time-outline" size={20} color="#6B7280" />
+              </View>
+              <Text style={styles.professionalName}>
+                {nextAppointment.professional_name}
+              </Text>
+              <Text style={styles.speciality}>
+                {nextAppointment.speciality}
+              </Text>
               <Text style={styles.appointmentDateTime}>
                 {formatAppointmentDateTime(nextAppointment.date, nextAppointment.time)}
               </Text>
+              {nextAppointment.session_link && (
+                <TouchableOpacity 
+                  style={[styles.actionButton, { backgroundColor: '#10B981' }]}
+                  onPress={handleJoinSession}
+                >
+                  <Text style={styles.actionButtonText}>Join Session</Text>
+                </TouchableOpacity>
+              )}
             </View>
-            {nextAppointment.session_link && (
-              <TouchableOpacity style={styles.joinButton}>
-                <Text style={styles.joinButtonText}>Join Session</Text>
+          ) : (
+            <View style={styles.noDataContainer}>
+              <Ionicons name="calendar-outline" size={48} color="#9CA3AF" />
+              <Text style={styles.noDataText}>No upcoming sessions</Text>
+              <TouchableOpacity 
+                style={[styles.actionButton, { marginTop: 16 }]}
+                onPress={handleBookConsultation}
+              >
+                <Text style={styles.actionButtonText}>Book a Session</Text>
               </TouchableOpacity>
-            )}
+            </View>
+          )}
+          
+          {/* Action Cards */}
+          <Text style={styles.sectionTitle}>Get Started</Text>
+          <View style={styles.actionCardsContainer}>
+            <ActionCard
+              title="Find a Class"
+              description="Explore group sessions & programs"
+              icon="people-outline"
+              onPress={handleFindClass}
+              color="#8B5CF6" // Purple
+            />
+            <ActionCard
+              title="Book a Consultation"
+              description="Schedule a one-on-one session"
+              icon="person-outline"
+              onPress={handleBookConsultation}
+              color="#10B981" // Green
+            />
           </View>
-        ) : (
-          <View style={styles.noAppointmentCard}>
-            <Text style={styles.noAppointmentText}>No upcoming appointments.</Text>
-            <TouchableOpacity style={styles.bookFirstButton}>
-              <Text style={styles.bookFirstButtonText}>Book your first session</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Wellness Categories Section */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Explore Wellness Categories</Text>
-        </View>
-
-        <View style={styles.categoriesGrid}>
-          {categories.map((category) => (
-            <TouchableOpacity
-              key={category.id}
-              style={styles.categoryCard}
-              onPress={() => handleCategoryPress(category.id)}
-            >
-              <View style={styles.categoryIcon}>
-                <Ionicons 
-                  name={category.icon as any} 
-                  size={32} 
-                  color="#1E88E5" 
-                />
-              </View>
-              <Text style={styles.categoryName}>{category.name}</Text>
-            </TouchableOpacity>
-          ))}
         </View>
       </ScrollView>
     </SafeAreaView>

@@ -54,6 +54,7 @@ if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/armeabi-v7a/safeareacontext_autolinked_build/cmake_install.cmake")
   include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/armeabi-v7a/rnscreens_autolinked_build/cmake_install.cmake")
   include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/armeabi-v7a/RNVectorIconsSpec_autolinked_build/cmake_install.cmake")
+  include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/armeabi-v7a/RNCWebViewSpec_autolinked_build/cmake_install.cmake")
 
 endif()
 

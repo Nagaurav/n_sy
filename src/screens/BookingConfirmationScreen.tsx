@@ -138,7 +138,7 @@ const BookingConfirmationScreen = ({ navigation, route }: any) => {
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Name:</Text>
             <Text style={styles.detailValue}>
-              {user?.firstName} {user?.lastName}
+              {user?.first_name || user?.firstName} {user?.last_name || user?.lastName}
             </Text>
           </View>
 

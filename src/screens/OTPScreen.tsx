@@ -255,6 +255,10 @@ const OTPScreen = ({ navigation, route }: any) => {
           // Existing user - store token and let auth state handle navigation
           if (response.data.token && response.data.user) {
             try {
+              console.log('🔐 OTP Verified - User object from API:', response.data.user);
+              console.log('🔐 User has _id?', '_id' in response.data.user);
+              console.log('🔐 User has id?', 'id' in response.data.user);
+              
               await signIn({
                 user: response.data.user,
                 token: response.data.token

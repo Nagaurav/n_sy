@@ -18,6 +18,11 @@ import PhoneNumberScreen from './src/screens/PhoneNumberScreen';
 import OTPScreen from './src/screens/OTPScreen';
 import SignupScreen from './src/screens/SignupScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import DateTimeSelectionScreen from './src/screens/DateTimeSelectionScreen';
+import BookingConfirmationScreen from './src/screens/BookingConfirmationScreen';
+import PaymentGatewayScreen from './src/screens/PaymentGatewayScreen';
+import BookingSuccessScreen from './src/screens/BookingSuccessScreen';
+import BookingFailedScreen from './src/screens/BookingFailedScreen';
 
 // Navigation Types
 export type AuthStackParamList = {
@@ -30,8 +35,11 @@ export type AuthStackParamList = {
 export type DrawerParamList = {
   HomeStack: undefined;
   Appointments: undefined;
+  Articles: undefined;
   Profile: undefined;
   Settings: undefined;
+  Support: undefined;
+  FAQ: undefined;
   HelpSupport: undefined;
 };
 
@@ -39,15 +47,40 @@ export type HomeStackParamList = {
   Home: undefined;
   ProfessionalsList: { categoryId?: string; searchQuery?: string; categoryName?: string };
   ProfessionalProfile: { professionalId: string };
+  ClassesList: undefined;
   DateTimeSelection: { 
-    professionalId: string; 
+    professionalId: string;
+    professionalName: string;
     serviceId?: string; 
     serviceName?: string; 
     price?: number; 
-    duration?: number; 
+    duration?: number;
+    serviceDetails?: {
+      id: string;
+      name: string;
+      duration: number;
+      price: number;
+    };
   };
   BookingConfirmation: { bookingData: any };
-  Payment: { bookingId: string };
+  PaymentGateway: {
+    paymentUrl: string;
+    bookingId: string;
+  };
+  BookingSuccess: {
+    bookingId: string;
+    amount: number;
+    bookingDetails?: {
+      professionalName?: string;
+      serviceName?: string;
+      date?: string;
+      time?: string;
+    };
+  };
+  BookingFailed: {
+    bookingId?: string;
+    error?: string;
+  };
 };
 
 const AuthStack = createStackNavigator<AuthStackParamList>();
@@ -56,27 +89,57 @@ const HomeStack = createStackNavigator<HomeStackParamList>();
 
 // Import additional screens for drawer
 import AppointmentsScreen from './src/screens/AppointmentsScreen';
+import ArticlesScreen from './src/screens/ArticlesScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import SupportScreen from './src/screens/SupportScreen';
+import FaqScreen from './src/screens/FaqScreen';
 import HelpSupportScreen from './src/screens/HelpSupportScreen';
 
 // Import additional screens for home stack
 import ProfessionalsListScreen from './src/screens/ProfessionalsListScreen';
 import ProfessionalProfileScreen from './src/screens/ProfessionalProfileScreen';
+import ClassesListScreen from './src/screens/ClassesListScreen';
 
 // Home Stack Navigator
-const HomeStackNavigator = () => {
-  return (
-    <HomeStack.Navigator screenOptions={{ headerShown: false }}>
-      <HomeStack.Screen name="Home" component={HomeScreen} />
-      <HomeStack.Screen name="ProfessionalsList" component={ProfessionalsListScreen} />
-      <HomeStack.Screen name="ProfessionalProfile" component={ProfessionalProfileScreen} />
-      {/* Add other home stack screens here */}
-    </HomeStack.Navigator>
-  );
-};
+const HomeStackNavigator = () => (
+  <HomeStack.Navigator
+    screenOptions={{
+      headerShown: false,
+      cardStyle: { backgroundColor: '#FFFFFF' } 
+    }}
+  >
+    <HomeStack.Screen name="Home" component={HomeScreen} />
+    <HomeStack.Screen name="ProfessionalsList" component={ProfessionalsListScreen} />
+    <HomeStack.Screen name="ProfessionalProfile" component={ProfessionalProfileScreen} />
+    <HomeStack.Screen name="ClassesList" component={ClassesListScreen} />
+    <HomeStack.Screen name="DateTimeSelection" component={DateTimeSelectionScreen} />
+    <HomeStack.Screen name="BookingConfirmation" component={BookingConfirmationScreen} />
+    <HomeStack.Screen 
+      name="PaymentGateway" 
+      component={PaymentGatewayScreen} 
+      options={{
+        gestureEnabled: false,
+      }}
+    />
+    <HomeStack.Screen 
+      name="BookingSuccess" 
+      component={BookingSuccessScreen} 
+      options={{
+        gestureEnabled: false,
+      }}
+    />
+    <HomeStack.Screen 
+      name="BookingFailed" 
+      component={BookingFailedScreen}
+      options={{
+        gestureEnabled: true,
+      }}
+    />
+  </HomeStack.Navigator>
+);
 
-// Custom Drawer Content Component (will be created separately)
+// Custom Drawer Content Component
 import CustomDrawerContent from './src/components/CustomDrawerContent';
 
 // Main Drawer Navigator
@@ -113,6 +176,16 @@ const MainDrawerNavigator = () => {
         }}
       />
       <Drawer.Screen 
+        name="Articles" 
+        component={ArticlesScreen}
+        options={{
+          drawerLabel: 'Wellness Articles',
+          drawerIcon: ({ color }) => (
+            <Ionicons name="newspaper-outline" size={24} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen 
         name="Profile" 
         component={ProfileScreen}
         options={{
@@ -129,6 +202,26 @@ const MainDrawerNavigator = () => {
           drawerLabel: 'Settings',
           drawerIcon: ({ color }) => (
             <Ionicons name="settings-outline" size={24} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen 
+        name="Support" 
+        component={SupportScreen}
+        options={{
+          drawerLabel: 'Support',
+          drawerIcon: ({ color }) => (
+            <Ionicons name="headset-outline" size={24} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen 
+        name="FAQ" 
+        component={FaqScreen}
+        options={{
+          drawerLabel: 'FAQ',
+          drawerIcon: ({ color }) => (
+            <Ionicons name="help-buoy-outline" size={24} color={color} />
           ),
         }}
       />

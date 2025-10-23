@@ -36,7 +36,7 @@ const ProfileScreen = () => {
           
           <View style={styles.infoRow}>
             <Text style={styles.label}>Name:</Text>
-            <Text style={styles.value}>{user?.firstName} {user?.lastName}</Text>
+            <Text style={styles.value}>{user?.first_name || user?.firstName} {user?.last_name || user?.lastName}</Text>
           </View>
           
           <View style={styles.infoRow}>

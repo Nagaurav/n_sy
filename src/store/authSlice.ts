@@ -2,12 +2,26 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface User {
-  _id: string;
+  user_id: number; // API returns user_id as number
+  _id?: string; // Keep for backward compatibility
   phone: string;
-  firstName: string;
-  lastName: string;
+  first_name: string; // API uses snake_case
+  last_name: string; // API uses snake_case
+  firstName?: string; // Keep for backward compatibility
+  lastName?: string; // Keep for backward compatibility
   email: string;
-  // Add other user fields as needed
+  password?: string;
+  dob?: string;
+  gender?: string;
+  city?: string;
+  location_latitude?: string;
+  location_longitude?: string;
+  profileImage?: string;
+  profile_picture_url?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AuthState {
@@ -114,7 +128,7 @@ export const rehydrateAuthAsync = () => async (dispatch: any) => {
 
     if (storedUser && storedToken) {
       const user = JSON.parse(storedUser);
-      console.log('✅ Rehydrating with user:', user.firstName);
+      console.log('✅ Rehydrating with user:', user.first_name || user.firstName);
       dispatch(rehydrateAuth({ user, token: storedToken }));
     } else {
       console.log('❌ No stored auth data, staying logged out');

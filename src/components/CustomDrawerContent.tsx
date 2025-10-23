@@ -86,6 +86,16 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
 
           <TouchableOpacity
             style={styles.menuItem}
+            onPress={() => props.navigation.navigate('Articles')}
+          >
+            <Ionicons name="newspaper-outline" size={24} color="#6B7280" />
+            <Text style={styles.menuItemText}>Wellness Articles</Text>
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          <TouchableOpacity
+            style={styles.menuItem}
             onPress={navigateToProfile}
           >
             <Ionicons name="person-outline" size={24} color="#6B7280" />
@@ -100,12 +110,22 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
             <Text style={styles.menuItemText}>Settings</Text>
           </TouchableOpacity>
 
+          <View style={styles.divider} />
+
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => props.navigation.navigate('HelpSupport')}
+            onPress={() => props.navigation.navigate('Support')}
           >
-            <Ionicons name="help-circle-outline" size={24} color="#6B7280" />
-            <Text style={styles.menuItemText}>Help & Support</Text>
+            <Ionicons name="headset-outline" size={24} color="#6B7280" />
+            <Text style={styles.menuItemText}>Support</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => props.navigation.navigate('FAQ')}
+          >
+            <Ionicons name="help-buoy-outline" size={24} color="#6B7280" />
+            <Text style={styles.menuItemText}>FAQ</Text>
           </TouchableOpacity>
         </View>
       </DrawerContentScrollView>
@@ -201,6 +221,12 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     marginLeft: 15,
     fontWeight: '500',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 8,
+    marginHorizontal: 10,
   },
 });
 

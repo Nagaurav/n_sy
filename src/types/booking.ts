@@ -24,13 +24,10 @@ export interface Professional {
 }
 
 export interface TimeSlot {
-  _id: string;
-  professional_id: string;
-  date: string;
+  id: string;
   startTime: string;
   endTime: string;
   isAvailable: boolean;
-  duration: number;
 }
 
 export interface ConsultationBooking {

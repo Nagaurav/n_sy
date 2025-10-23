@@ -1,0 +1,74 @@
+{
+    "blogs": [
+        {
+            "id": 6,
+            "title": "Mastering JavaScript: Tips and Best Practices",
+            "slug": "mastering-best-practices",
+            "meta_description": "Discover advanced JavaScript techniques...",
+            "keywords": [
+                "JavaScript",
+                "Best Practices",
+                "Programming"
+            ],
+            "content": "<p>JavaScript is a powerful language...</p>",
+            "author": "Jane Doe",
+            "publish_date": "2024-03-16T12:00:00.000Z",
+            "category": "Programming",
+            "tags": [
+                "JavaScript",
+                "Best Practices"
+            ],
+            "featured_image": null,
+            "excerpt": "Improve your JavaScript coding skills...",
+            "reading_time": 7,
+            "status": "published",
+            "views": 320,
+            "canonical_url": "https://example.com/blog/mastering-javascript-tips-best-practices",
+            "og_title": "Mastering JavaScript: Tips and Best Practices",
+            "og_description": "Learn essential JavaScript best practices...",
+            "og_image": "https://example.com/images/javascript-tips.jpg",
+            "og_url": "https://example.com/blog/mastering-javascript-tips-best-practices",
+            "schema_markup": {
+                "@context": "https://schema.org",
+                "@type": "BlogPosting",
+                "headline": "Mastering JavaScript: Tips and Best Practices",
+                "author": {
+                    "@type": "Person",
+                    "name": "Jane Doe"
+                }
+            },
+            "updated_at": "2025-03-17T02:16:32.000Z"
+        },
+        {
+            "id": 8,
+            "title": "Understanding JavaScript Closures with Love Babber",
+            "slug": "beginners-guide-to-react",
+            "meta_description": null,
+            "keywords": [
+                "React",
+                "JavaScript",
+                "Frontendnnnnnnnnncccccccc"
+            ],
+            "content": "<p>React is a JavaScript library for building user interfaces...</p>",
+            "author": "Jane Smith",
+            "publish_date": null,
+            "category": "React",
+            "tags": [
+                "React",
+                "JavaScript"
+            ],
+            "featured_image": null,
+            "excerpt": "A complete guide to getting started with React.",
+            "reading_time": null,
+            "status": "published",
+            "views": 200,
+            "canonical_url": null,
+            "og_title": null,
+            "og_description": null,
+            "og_image": null,
+            "og_url": null,
+            "schema_markup": {},
+            "updated_at": "2025-03-17T02:29:17.000Z"
+        }
+    ]
+}

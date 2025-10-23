@@ -437,6 +437,10 @@ const SignupScreen: React.FC = () => {
       }
 
       if (responseData.success && responseData.data?.token && responseData.data?.user) {
+        console.log('🔐 Signup Success - User object from API:', responseData.data.user);
+        console.log('🔐 User has _id?', '_id' in responseData.data.user);
+        console.log('🔐 User has id?', 'id' in responseData.data.user);
+        
         // Sign in the user and store the session
         await signIn({
           user: responseData.data.user,

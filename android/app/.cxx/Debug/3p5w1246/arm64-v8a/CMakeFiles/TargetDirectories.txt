@@ -31,3 +31,6 @@ C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/arm64-v8a/rnscreens_autolin
 C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/arm64-v8a/RNVectorIconsSpec_autolinked_build/CMakeFiles/react_codegen_RNVectorIconsSpec.dir
 C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/arm64-v8a/RNVectorIconsSpec_autolinked_build/CMakeFiles/edit_cache.dir
 C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/arm64-v8a/RNVectorIconsSpec_autolinked_build/CMakeFiles/rebuild_cache.dir
+C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/arm64-v8a/RNCWebViewSpec_autolinked_build/CMakeFiles/react_codegen_RNCWebViewSpec.dir
+C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/arm64-v8a/RNCWebViewSpec_autolinked_build/CMakeFiles/edit_cache.dir
+C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/arm64-v8a/RNCWebViewSpec_autolinked_build/CMakeFiles/rebuild_cache.dir
