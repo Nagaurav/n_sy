@@ -3,6 +3,7 @@ import { Dimensions } from 'react-native';
 export type ColorPalette = {
   primary: string;
   accent: string;
+  error: string; // Added error color at the root level for direct access
   text: {
     primary: string;
     secondary: string;
@@ -13,6 +14,14 @@ export type ColorPalette = {
   };
   feedback: {
     error: string;
+  };
+  // For backward compatibility
+  colors?: {
+    primary: string;
+    error: string;
+    text: string;
+    background: string;
+    border: string;
   };
 };
 
@@ -45,6 +54,7 @@ export const theme: Theme = {
   colors: {
     primary: '#1E88E5',
     accent: '#50E3C2',
+    error: '#EF4444', // Added error at root level
     text: {
       primary: '#1F2937',
       secondary: '#6B7280',
@@ -55,6 +65,14 @@ export const theme: Theme = {
     },
     feedback: {
       error: '#EF4444',
+    },
+    // For backward compatibility with existing code
+    colors: {
+      primary: '#1E88E5',
+      error: '#EF4444',
+      text: '#1F2937',
+      background: '#FFFFFF',
+      border: '#E5E7EB',
     },
   },
   spacing: {

@@ -234,21 +234,42 @@ class ApiService {
   public async searchProfessionalsWithFilters(filters: ProfessionalFilters): Promise<ApiResponse<ProfessionalsResponse>> {
     const queryParams = new URLSearchParams();
     
-    Object.entries(filters).forEach(([key, value]) => {
+    // Map filter parameters to match the API expected format
+    const apiFilters = {
+      city: filters.city,
+      state: filters.state,
+      gender: filters.gender,
+      language: filters.language,
+      role: filters.role,
+      speciality_id: filters.speciality_id,
+      min_price: filters.min_price,
+      max_price: filters.max_price,
+      page: filters.page || 1,
+      limit: filters.limit || 10,
+      search_query: filters.search_query,
+      is_online: filters.is_online,
+      sort_by: filters.sort_by
+    };
+
+    // Add non-empty filter parameters to the query
+    Object.entries(apiFilters).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
-        queryParams.append(key, String(value));
+        // Convert boolean values to strings
+        const paramValue = typeof value === 'boolean' ? String(value) : String(value);
+        queryParams.append(key, paramValue);
       }
     });
 
     const queryString = queryParams.toString();
-    const endpoint = `/user/professional/filter${queryString ? `?${queryString}` : ''}`;
+    const endpoint = `/user/professional/getProfessional${queryString ? `?${queryString}` : ''}`;
     
     return this.get<ProfessionalsResponse>(endpoint);
   }
 
   // Slot APIs (Auth required)
-  public async getAvailableSlots(professionalId: string, date: string): Promise<ApiResponse<SlotsResponse>> {
-    return this.get<SlotsResponse>(`/user/slot/professional/${professionalId}/date/${date}`);
+  public async getAvailableSlots(professionalId: string, date?: string): Promise<ApiResponse<SlotsResponse>> {
+    // Use the correct endpoint: /professional/slot/get/:id
+    return this.get<SlotsResponse>(`/professional/slot/get/${professionalId}`);
   }
 
   // Categories API (Auth required)

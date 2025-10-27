@@ -271,12 +271,16 @@ const styles = StyleSheet.create<Styles>({
   },
 });
 
+// Navigation props
 type SignupScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Signup'>;
 type SignupScreenRouteProp = RouteProp<RootStackParamList, 'Signup'>;
 
-const SignupScreen: React.FC = () => {
-  const navigation = useNavigation<SignupScreenNavigationProp>();
-  const route = useRoute<SignupScreenRouteProp>();
+interface SignupScreenProps {
+  navigation: SignupScreenNavigationProp;
+  route: SignupScreenRouteProp;
+}
+
+const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
   const { phoneNumber } = route.params;
   const { signIn } = useAuth();
 
@@ -378,24 +382,73 @@ const SignupScreen: React.FC = () => {
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-
-    if (!formData.first_name.trim()) newErrors.first_name = 'First name is required';
-    if (!formData.last_name.trim()) newErrors.last_name = 'Last name is required';
+    const today = new Date();
+    const minDate = new Date();
+    minDate.setFullYear(today.getFullYear() - 120); // 120 years max age
+    const maxDate = new Date();
+    maxDate.setFullYear(today.getFullYear() - 13); // 13 years minimum age
+    
+    // Validate first name
+    if (!formData.first_name.trim()) {
+      newErrors.first_name = 'First name is required';
+    } else if (formData.first_name.trim().length < 2) {
+      newErrors.first_name = 'First name must be at least 2 characters';
+    }
+    
+    // Validate last name
+    if (!formData.last_name.trim()) {
+      newErrors.last_name = 'Last name is required';
+    } else if (formData.last_name.trim().length < 2) {
+      newErrors.last_name = 'Last name must be at least 2 characters';
+    }
+    
+    // Validate email
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email';
+      newErrors.email = 'Please enter a valid email address';
     }
-    if (!formData.dob) newErrors.dob = 'Date of birth is required';
-    if (!formData.gender) newErrors.gender = 'Please select a gender';
-    if (!formData.city.trim()) newErrors.city = 'City is required';
+    
+    // Validate date of birth
+    if (!formData.dob) {
+      newErrors.dob = 'Date of birth is required';
+    } else {
+      const dobDate = new Date(formData.dob);
+      if (isNaN(dobDate.getTime())) {
+        newErrors.dob = 'Invalid date of birth';
+      } else if (dobDate > maxDate) {
+        newErrors.dob = 'You must be at least 13 years old to register';
+      } else if (dobDate < minDate) {
+        newErrors.dob = 'Please enter a valid date of birth';
+      }
+    }
+    
+    // Validate gender
+    if (!formData.gender) {
+      newErrors.gender = 'Please select a gender';
+    }
+    
+    // Validate city
+    if (!formData.city.trim()) {
+      newErrors.city = 'City is required';
+    }
+    
+    // Validate password
     if (!formData.password) {
       newErrors.password = 'Password is required';
     } else if (formData.password.length < 8) {
       newErrors.password = 'Password must be at least 8 characters';
-    } else if (!/(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9])/.test(formData.password)) {
-      newErrors.password = 'Password must contain at least one uppercase letter, one number, and one special character';
+    } else if (!/(?=.*[a-z])/.test(formData.password)) {
+      newErrors.password = 'Password must contain at least one lowercase letter';
+    } else if (!/(?=.*[A-Z])/.test(formData.password)) {
+      newErrors.password = 'Password must contain at least one uppercase letter';
+    } else if (!/(?=.*[0-9])/.test(formData.password)) {
+      newErrors.password = 'Password must contain at least one number';
+    } else if (!/(?=.*[!@#$%^&*])/.test(formData.password)) {
+      newErrors.password = 'Password must contain at least one special character (!@#$%^&*)';
     }
+    
+    // Validate confirm password
     if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';
     }
@@ -413,7 +466,7 @@ const SignupScreen: React.FC = () => {
         first_name: formData.first_name.trim(),
         last_name: formData.last_name.trim(),
         phone: formData.phone,
-        email: formData.email.trim(),
+        email: formData.email.trim().toLowerCase(),
         dob: formData.dob,
         gender: formData.gender,
         city: formData.city.trim(),
@@ -426,6 +479,7 @@ const SignupScreen: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
         body: JSON.stringify(payload),
       });
@@ -433,7 +487,32 @@ const SignupScreen: React.FC = () => {
       const responseData = await response.json();
 
       if (!response.ok) {
-        throw new Error(responseData.message || 'Signup failed');
+        // Handle specific error cases
+        if (response.status === 400) {
+          // Handle validation errors from the server
+          if (responseData.errors) {
+            const serverErrors: Record<string, string> = {};
+            Object.entries(responseData.errors).forEach(([field, messages]) => {
+              if (Array.isArray(messages) && messages.length > 0) {
+                serverErrors[field] = messages[0];
+              }
+            });
+            setErrors(prev => ({
+              ...prev,
+              ...serverErrors,
+              _server: responseData.message || 'Please correct the errors below',
+            }));
+            return;
+          }
+          throw new Error(responseData.message || 'Please check your input and try again');
+        } else if (response.status === 409) {
+          // Handle conflict (e.g., email/phone already exists)
+          throw new Error('An account with this email or phone number already exists');
+        } else if (response.status >= 500) {
+          throw new Error('Server error. Please try again later.');
+        } else {
+          throw new Error(responseData.message || 'Signup failed. Please try again.');
+        }
       }
 
       if (responseData.success && responseData.data?.token && responseData.data?.user) {
@@ -460,7 +539,25 @@ const SignupScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Signup error:', error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Something went wrong');
+      
+      // Handle network errors
+      if (error instanceof TypeError && error.message.includes('Network request failed')) {
+        Alert.alert(
+          'Network Error',
+          'Unable to connect to the server. Please check your internet connection and try again.',
+          [{ text: 'OK' }],
+          { cancelable: false }
+        );
+      } else {
+        // Show user-friendly error message
+        const errorMessage = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
+        Alert.alert(
+          'Error',
+          errorMessage,
+          [{ text: 'OK' }],
+          { cancelable: false }
+        );
+      }
     } finally {
       setIsLoading(false);
     }

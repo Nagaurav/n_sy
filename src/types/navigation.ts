@@ -3,7 +3,10 @@ import { StackNavigationProp } from '@react-navigation/stack';
 export type HomeStackParamList = {
   Home: undefined;
   ClassesList: undefined;
-  ProfessionalProfile: { professionalId: string };
+  ProfessionalProfile: { 
+    professionalId: string; 
+    refresh?: boolean;  // Optional refresh flag to trigger data reload
+  };
   DateTimeSelection: {
     professionalId: string;
     professionalName: string;

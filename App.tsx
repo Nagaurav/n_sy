@@ -43,10 +43,18 @@ export type DrawerParamList = {
   HelpSupport: undefined;
 };
 
+// Combined root navigation types
+export type RootStackParamList = AuthStackParamList & 
+  Omit<DrawerParamList, keyof AuthStackParamList> & 
+  Omit<HomeStackParamList, keyof AuthStackParamList | keyof DrawerParamList>;
+
 export type HomeStackParamList = {
   Home: undefined;
   ProfessionalsList: { categoryId?: string; searchQuery?: string; categoryName?: string };
-  ProfessionalProfile: { professionalId: string };
+  ProfessionalProfile: { 
+    professionalId: string;
+    refresh?: boolean;  // Optional refresh flag to trigger data reload
+  };
   ClassesList: undefined;
   DateTimeSelection: { 
     professionalId: string;
@@ -62,13 +70,18 @@ export type HomeStackParamList = {
       price: number;
     };
   };
-  BookingConfirmation: { bookingData: any };
+  BookingConfirmation: { 
+    bookingData: any;
+    onGoBack?: () => void;
+  };
   PaymentGateway: {
     paymentUrl: string;
     bookingId: string;
+    paymentId: string;
   };
   BookingSuccess: {
     bookingId: string;
+    paymentId: string;
     amount: number;
     bookingDetails?: {
       professionalName?: string;

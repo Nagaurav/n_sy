@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,11 +11,16 @@ import {
   TextInput,
   ScrollView,
   Dimensions,
-  Platform
+  Platform,
+  PermissionsAndroid,
+  Alert,
+  AccessibilityInfo,
+  findNodeHandle
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import Geolocation from 'react-native-geolocation-service';
 
 import { apiService } from '../services/api';
 import { YogaClass, YogaClassesFilters, PaginationInfo } from '../types/yogaClasses';
@@ -43,68 +48,153 @@ const ClassesListScreen = () => {
   const [paginationInfo, setPaginationInfo] = useState<PaginationInfo | null>(null);
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null);
 
-  // Location handling - using browser geolocation API
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          });
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-      );
-    } else {
-      console.log('Geolocation is not supported by this browser');
+  // Request location permission and get current position
+  const requestLocationPermission = useCallback(async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: 'Location Permission',
+            message: 'This app needs access to your location to show nearby classes.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          },
+        );
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          return true;
+        } else {
+          console.log('Location permission denied');
+          return false;
+        }
+      } catch (err) {
+        console.warn('Error requesting location permission:', err);
+        return false;
+      }
     }
+    return true; // For iOS, we'll rely on the native permission prompt
   }, []);
 
-  // Fetch classes with current filters
-  const fetchClasses = useCallback(async (isRefreshing = false) => {
+  // Location handling with react-native-geolocation-service
+  const getCurrentLocation = useCallback(async () => {
+    const hasPermission = await requestLocationPermission();
+    if (!hasPermission) {
+      setError('Location permission is required for nearby class features');
+      return;
+    }
+
     try {
-      if (isFetchingMore || (paginationInfo && filters.page && filters.page > paginationInfo.pages)) {
-        return;
-      }
+      const position = await new Promise<Geolocation.GeoPosition>((resolve, reject) => {
+        Geolocation.getCurrentPosition(
+          resolve,
+          reject,
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+        );
+      });
 
-      setIsLoading(true);
-      setError(null);
+      setUserLocation({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      });
+    } catch (error: any) {
+      console.error('Error getting location:', error);
+      setError('Could not get your location. Showing all classes.');
+    }
+  }, [requestLocationPermission]);
 
-      const filtersWithLocation = { ...filters };
-      if (filters.sort_by === 'near_to_far' && userLocation) {
-        filtersWithLocation.latitude = userLocation.latitude;
-        filtersWithLocation.longitude = userLocation.longitude;
-      }
+  // Get location when component mounts or when sort changes to near_to_far
+  useEffect(() => {
+    if (filters.sort_by === 'near_to_far') {
+      getCurrentLocation();
+    }
+  }, [filters.sort_by, getCurrentLocation]);
 
-      const response = await apiService.getYogaClasses(filtersWithLocation);
-      
-      if (response?.data) {
-        const responseData = response.data;
-        
-        if (responseData.data) {
-          setPaginationInfo(responseData.pagination);
-          
-          if (filters.page === 1 || isRefreshing) {
-            setClasses(responseData.data || []);
-          } else {
-            setClasses(prev => [...prev, ...(responseData.data || [])]);
-          }
+  // Fetch classes with current filters and retry logic
+  const fetchClasses = useCallback(async (isRefreshing = false) => {
+    const MAX_RETRIES = 3;
+    let retryCount = 0;
+    let lastError: Error | null = null;
+
+    const attemptFetch = async (): Promise<void> => {
+      try {
+        if (isFetchingMore || (paginationInfo && filters.page && filters.page > paginationInfo.pages)) {
+          return;
         }
-      } else {
-        setError('Failed to fetch classes. Please try again.');
+
+        setIsLoading(true);
+        setError(null);
+
+        const filtersWithLocation = { ...filters };
+        if (filters.sort_by === 'near_to_far' && userLocation) {
+          filtersWithLocation.latitude = userLocation.latitude;
+          filtersWithLocation.longitude = userLocation.longitude;
+        }
+
+        const response = await apiService.getYogaClasses(filtersWithLocation);
+        
+        if (response?.data) {
+          const responseData = response.data;
+          
+          if (responseData.data) {
+            setPaginationInfo(responseData.pagination);
+            
+            if (filters.page === 1 || isRefreshing) {
+              setClasses(responseData.data || []);
+            } else {
+              setClasses(prev => [...prev, ...(responseData.data || [])]);
+            }
+          }
+          return; // Success, exit retry loop
+        } else {
+          throw new Error('No data in response');
+        }
+      } catch (err) {
+        lastError = err as Error;
+        console.error(`Attempt ${retryCount + 1} failed:`, err);
+        
+        if (retryCount < MAX_RETRIES - 1) {
+          // Exponential backoff: 1s, 2s, 4s, etc.
+          const delay = 1000 * Math.pow(2, retryCount);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          retryCount++;
+          return attemptFetch(); // Retry
+        }4
+        throw lastError; // Max retries reached
+      } finally {
+        if (retryCount >= MAX_RETRIES - 1) {
+          setIsLoading(false);
+          setIsFetchingMore(false);
+          setIsRefreshing(false);
+        }
       }
+    };
+
+    try {
+      await attemptFetch();
     } catch (err) {
-      console.error('Error fetching classes:', err);
-      setError('An error occurred while fetching classes.');
+      console.error('All fetch attempts failed:', err);
+      let errorMessage = 'Failed to fetch classes. Please check your connection and try again.';
+      
+      if (lastError) {
+        if (typeof lastError === 'object' && lastError !== null) {
+          errorMessage = (lastError as Error).message || JSON.stringify(lastError);
+        } else {
+          errorMessage = String(lastError);
+        }
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
       setIsFetchingMore(false);
       setIsRefreshing(false);
     }
-  }, [filters, userLocation]);
+  }, [filters, userLocation, isFetchingMore, paginationInfo]);
 
   // Initial fetch
   useEffect(() => {
@@ -136,60 +226,113 @@ const ClassesListScreen = () => {
     setShowFilters(false);
   };
 
-  // Handle class card press
-  const handleClassPress = (classItem: YogaClass) => {
-    navigation.navigate('ProfessionalProfile', { professionalId: classItem.professional_id.toString() });
-  };
+  // Handle class card press with error boundary
+  const handleClassPress = useCallback((classItem: YogaClass) => {
+    try {
+      if (!classItem.professional_id) {
+        throw new Error('Professional ID is missing');
+      }
+      navigation.navigate('ProfessionalProfile', { 
+        professionalId: classItem.professional_id.toString() 
+      });
+    } catch (error) {
+      console.error('Error navigating to professional profile:', error);
+      Alert.alert(
+        'Navigation Error',
+        'Unable to load the professional profile. Please try again later.',
+        [{ text: 'OK' }]
+      );
+    }
+  }, [navigation]);
 
-  // Format price for display
-  const formatPrice = (price: number | null) => {
+  // Memoized price formatter to prevent recreation on each render
+  const formatPrice = useCallback((price: number | null) => {
     if (price === null) return 'Price not available';
     return `₹${price.toLocaleString()}`;
-  };
+  }, []);
 
-  // Render class item
-  const renderClassItem = ({ item }: { item: YogaClass }) => (
-    <TouchableOpacity 
-      style={styles.classCard}
-      onPress={() => handleClassPress(item)}
-    >
-      <View style={styles.classHeader}>
-        <Text style={styles.classTitle} numberOfLines={1}>{item.title}</Text>
-        <Text style={styles.classPrice}>
-          {formatPrice(item.effective_price)}
+  // Memoized class item component for better performance
+  const ClassItem = React.memo(({ item, onPress }: { item: YogaClass; onPress: (item: YogaClass) => void }) => {
+    const viewRef = React.useRef<View>(null);
+    
+    // Set accessibility focus when the component mounts
+    useEffect(() => {
+      if (viewRef.current) {
+        const reactTag = findNodeHandle(viewRef.current);
+        if (reactTag) {
+          setTimeout(() => {
+            AccessibilityInfo.setAccessibilityFocus(reactTag);
+          }, 100);
+        }
+      }
+    }, [item.id]);
+
+    return (
+      <TouchableOpacity 
+        ref={viewRef}
+        style={styles.classCard}
+        onPress={() => onPress(item)}
+        accessible={true}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.title}. ${item.description}. ${formatPrice(item.effective_price)}. ${item.duration.replace('_', ' ')}. ${item.days}. ${item.city ? `Located in ${item.city}.` : ''}${item.disease ? ` Specializes in ${item.disease}.` : ''}`}
+        accessibilityHint="Double tap to view professional details"
+      >
+        <View style={styles.classHeader}>
+          <Text 
+            style={styles.classTitle} 
+            numberOfLines={1}
+            accessibilityElementsHidden={true} // Hide from accessibility tree as we're handling it at the parent level
+          >
+            {item.title}
+          </Text>
+          <Text 
+            style={styles.classPrice}
+            accessibilityElementsHidden={true}
+          >
+            {formatPrice(item.effective_price)}
+          </Text>
+        </View>
+        
+        <Text 
+          style={styles.classDescription} 
+          numberOfLines={2}
+          accessibilityElementsHidden={true}
+        >
+          {item.description}
         </Text>
-      </View>
-      
-      <Text style={styles.classDescription} numberOfLines={2}>
-        {item.description}
-      </Text>
-      
-      <View style={styles.classMeta}>
-        <View style={styles.metaItem}>
-          <Ionicons name="time-outline" size={16} color="#666" />
-          <Text style={styles.metaText}>{item.duration.replace('_', ' ')}</Text>
+        
+        <View style={styles.classMeta}>
+          <View style={styles.metaItem} accessibilityElementsHidden={true}>
+            <Ionicons name="time-outline" size={16} color="#666" />
+            <Text style={styles.metaText}>{item.duration.replace('_', ' ')}</Text>
+          </View>
+          
+          <View style={styles.metaItem} accessibilityElementsHidden={true}>
+            <Ionicons name="calendar-outline" size={16} color="#666" />
+            <Text style={styles.metaText} numberOfLines={1}>{item.days}</Text>
+          </View>
+          
+          {item.city && (
+            <View style={styles.metaItem} accessibilityElementsHidden={true}>
+              <Ionicons name="location-outline" size={16} color="#666" />
+              <Text style={styles.metaText} numberOfLines={1}>{item.city}</Text>
+            </View>
+          )}
         </View>
         
-        <View style={styles.metaItem}>
-          <Ionicons name="calendar-outline" size={16} color="#666" />
-          <Text style={styles.metaText} numberOfLines={1}>{item.days}</Text>
-        </View>
-        
-        {item.city && (
-          <View style={styles.metaItem}>
-            <Ionicons name="location-outline" size={16} color="#666" />
-            <Text style={styles.metaText} numberOfLines={1}>{item.city}</Text>
+        {item.disease && (
+          <View style={styles.tag} accessibilityElementsHidden={true}>
+            <Text style={styles.tagText}>{item.disease}</Text>
           </View>
         )}
-      </View>
-      
-      {item.disease && (
-        <View style={styles.tag}>
-          <Text style={styles.tagText}>{item.disease}</Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  });
+
+  // Memoize the class item renderer to prevent unnecessary re-renders
+  const renderClassItem = useCallback(({ item }: { item: YogaClass }) => (
+    <ClassItem item={item} onPress={handleClassPress} />
+  ), []);
 
   // Render loading indicator for pagination
   const renderFooter = () => {
@@ -201,14 +344,33 @@ const ClassesListScreen = () => {
     );
   };
 
-  // Render empty state
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Ionicons name="sad-outline" size={48} color="#999" />
-      <Text style={styles.emptyText}>No classes found</Text>
-      <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
+  // Render empty state with accessibility
+  const renderEmpty = useCallback(() => (
+    <View 
+      style={styles.emptyContainer}
+      accessible={true}
+      accessibilityLabel="No classes found. Try adjusting your filters."
+    >
+      <Ionicons 
+        name="sad-outline" 
+        size={48} 
+        color="#999" 
+        accessible={false}
+      />
+      <Text 
+        style={styles.emptyText}
+        accessibilityElementsHidden={true}
+      >
+        No classes found
+      </Text>
+      <Text 
+        style={styles.emptySubtext}
+        accessibilityElementsHidden={true}
+      >
+        Try adjusting your filters
+      </Text>
     </View>
-  );
+  ), []);
 
   return (
     <View style={styles.container}>
@@ -254,6 +416,7 @@ const ClassesListScreen = () => {
               onRefresh={handleRefresh}
               colors={[theme.colors.primary]}
               tintColor={theme.colors.primary}
+              accessibilityLabel="Pull to refresh"
             />
           }
           ListEmptyComponent={!isLoading ? renderEmpty : null}
@@ -261,6 +424,13 @@ const ClassesListScreen = () => {
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
           showsVerticalScrollIndicator={false}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={50}
+          initialNumToRender={10}
+          windowSize={11} // Render one screen worth of items
+          removeClippedSubviews={true}
+          accessibilityElementsHidden={false}
+          importantForAccessibility="yes"
         />
       )}
 

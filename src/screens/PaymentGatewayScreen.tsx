@@ -12,14 +12,13 @@ import {
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
-import { HomeStackParamList } from '../../App';
+import { RootStackParamList } from '../../App';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 // Define the route and navigation types
-type PaymentGatewayRouteProp = RouteProp<HomeStackParamList, 'PaymentGateway'>;
-type PaymentGatewayNavigationProp = StackNavigationProp<HomeStackParamList, 'PaymentGateway'>;
+type PaymentGatewayRouteProp = RouteProp<RootStackParamList, 'PaymentGateway'>;
+type PaymentGatewayNavigationProp = StackNavigationProp<RootStackParamList, 'PaymentGateway'>;
 
 // Define the API response type
 interface PaymentStatusResponse {
@@ -40,8 +39,7 @@ interface PaymentStatusResponse {
 const PaymentGatewayScreen = () => {
   const navigation = useNavigation<PaymentGatewayNavigationProp>();
   const route = useRoute<PaymentGatewayRouteProp>();
-  const { paymentUrl, bookingId } = route.params;
-  const { user } = useAuth();
+  const { paymentUrl, bookingId, paymentId } = route.params;
   
   const webViewRef = useRef<WebView>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,21 +77,39 @@ const PaymentGatewayScreen = () => {
 
   // Handle navigation state changes in WebView
   const handleNavigationStateChange = async (navState: WebViewNavigation) => {
-    const { url } = navState;
+    const { url, loading, title } = navState;
     
-    console.log('WebView navigation URL:', url);
+    // Skip processing if URL is undefined or about:blank
+    if (!url || url === 'about:blank') {
+      console.log('WebView: Blank or undefined URL, skipping...');
+      return;
+    }
+    
+    console.log('WebView navigation:', {
+      url,
+      loading,
+      title: title || 'No title',
+      canGoBack: navState.canGoBack,
+      canGoForward: navState.canGoForward
+    });
     
     // Check if the navigation is to the payment completion callback URL
-    // Adjust this URL pattern to match your actual callback URL from PhonePe
-    if (url.includes('samyayog.com/payment-complete') || 
-        url.includes('/payment/success') || 
-        url.includes('/payment/failure') ||
-        url.includes('payment-complete')) {
-      
-      // Prevent further navigation and trigger verification
-      console.log('Payment completion detected, verifying status...');
+    const isPaymentCompletionUrl = [
+      'samyayog.com/payment-complete',
+      '/payment/success',
+      '/payment/failure',
+      'payment-complete',
+      'payment/success',
+      'payment/failure'
+    ].some(pattern => url.includes(pattern));
+    
+    if (isPaymentCompletionUrl) {
+      console.log('Payment completion detected, verifying status...', { url });
       setIsVerifying(true);
-      await verifyPaymentStatus();
+      // Small delay to ensure the page has fully loaded
+      setTimeout(() => {
+        verifyPaymentStatus();
+      }, 1000);
     }
   };
 
@@ -109,7 +125,7 @@ const PaymentGatewayScreen = () => {
       console.log('Calling getPaymentStatus for booking:', bookingId);
       
       // Call the payment status endpoint
-      const response = await apiService.getPaymentStatus(bookingId);
+      const response: PaymentStatusResponse = await apiService.getPaymentStatus(bookingId);
       
       console.log('Payment status response:', response);
       
@@ -121,6 +137,7 @@ const PaymentGatewayScreen = () => {
           console.log('Payment successful, navigating to success screen');
           navigation.replace('BookingSuccess', {
             bookingId,
+            paymentId,
             amount: amount || 0,
             bookingDetails: bookingDetails || {}
           });
@@ -161,16 +178,32 @@ const PaymentGatewayScreen = () => {
     setIsLoading(false);
   };
 
-  const handleLoadStart = () => {
+  const handleLoadStart = (syntheticEvent: any) => {
+    const { nativeEvent } = syntheticEvent;
+    console.log('WebView load started:', {
+      url: nativeEvent.url,
+      loading: nativeEvent.loading,
+      title: nativeEvent.title || 'No title'
+    });
     setIsLoading(true);
   };
 
-  const handleLoadEnd = () => {
+  const handleLoadEnd = (syntheticEvent: any) => {
+    const { nativeEvent } = syntheticEvent;
+    console.log('WebView load finished:', {
+      url: nativeEvent.url,
+      loading: nativeEvent.loading,
+      title: nativeEvent.title || 'No title'
+    });
     setIsLoading(false);
   };
 
-  const handleLoad = () => {
-    console.log('WebView loaded successfully');
+  const handleLoad = (syntheticEvent: any) => {
+    const { nativeEvent } = syntheticEvent;
+    console.log('WebView loaded successfully:', {
+      url: nativeEvent.url,
+      title: nativeEvent.title || 'No title'
+    });
     setIsLoading(false);
   };
 
@@ -245,10 +278,23 @@ const PaymentGatewayScreen = () => {
             onError={handleError}
             javaScriptEnabled={true}
             domStorageEnabled={true}
-            startInLoadingState={false}
+            startInLoadingState={true}
+            renderLoading={() => (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#4A90E2" />
+                <Text style={styles.loadingText}>Loading payment gateway...</Text>
+              </View>
+            )}
             scalesPageToFit={true}
-            mixedContentMode="always"
+            mixedContentMode="compatibility"
             thirdPartyCookiesEnabled={true}
+            allowsBackForwardNavigationGestures={true}
+            cacheEnabled={false}
+            incognito={false}
+            onContentProcessDidTerminate={() => {
+              console.log('WebView process terminated, reloading...');
+              webViewRef.current?.reload();
+            }}
           />
         </>
       )}

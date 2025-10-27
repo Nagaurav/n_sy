@@ -1,234 +1,432 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
-  ScrollView,
   ActivityIndicator,
   Alert,
+  SectionList,
+  Platform,
+  SectionListData,
+  StatusBar
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { Calendar } from 'react-native-calendars';
+import { format, parseISO } from 'date-fns';
 import { HomeStackParamList } from '../../App';
-import { apiService } from '../services/api';
-import { TimeSlot } from '../types/booking';
-import { format } from 'date-fns';
+import { apiService } from '../services/apiService';
+import { theme } from '../theme';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { 
+  AvailableSlot, 
+  FormattedAvailableSlot, 
+  SectionData 
+} from '../types/booking';
 
-// Define the detailed route parameters for type safety
-interface DateTimeSelectionScreenRouteParams {
-  professionalId: string;
-  professionalName: string;
-  serviceId?: string;
-  serviceName?: string;
-  price?: number;
-  duration?: number;
-  serviceDetails?: {
-    id: string;
-    name: string;
-    duration: number;
-    price: number;
-  };
-}
-
-
-// Define the specific route and navigation prop types for this screen
-type DateTimeSelectionScreenRouteProp = RouteProp<HomeStackParamList, 'DateTimeSelection'>;
-type DateTimeSelectionScreenNavigationProp = StackNavigationProp<HomeStackParamList, 'DateTimeSelection'>;
+type DateTimeSelectionRouteProp = RouteProp<HomeStackParamList, 'DateTimeSelection'>;
+type DateTimeSelectionNavigationProp = StackNavigationProp<HomeStackParamList, 'DateTimeSelection'>;
 
 const DateTimeSelectionScreen = () => {
-  const navigation = useNavigation<DateTimeSelectionScreenNavigationProp>();
-  const route = useRoute<DateTimeSelectionScreenRouteProp>();
+  const navigation = useNavigation<DateTimeSelectionNavigationProp>();
+  const route = useRoute<DateTimeSelectionRouteProp>();
   const { 
     professionalId, 
-    professionalName = 'Professional', 
-    serviceDetails,
-    serviceId = serviceDetails?.id,
-    serviceName = serviceDetails?.name || 'Consultation',
-    price = serviceDetails?.price || 0,
-    duration = serviceDetails?.duration || 30,
+    professionalName, 
+    serviceDetails 
   } = route.params;
 
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
-  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [sectionedSlots, setSectionedSlots] = useState<SectionData[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<FormattedAvailableSlot | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Fetch available slots when a date is selected
-  useEffect(() => {
-    if (selectedDate) {
-      fetchSlotsForDate(selectedDate);
-    }
-  }, [selectedDate]);
-
-  const fetchSlotsForDate = async (date: string) => {
-    setIsLoading(true);
-    setError(null);
-    setAvailableSlots([]);
-    setSelectedSlot(null);
-
+  
+  // Format time to 12-hour format with AM/PM
+  const formatTime = (dateString: string): string => {
     try {
-      const response = await apiService.getAvailableSlots(professionalId, date);
+      // Parse the time string (e.g., '1970-01-01T03:30:00.000Z')
+      const date = new Date(dateString);
+      // Extract hours and minutes
+      let hours = date.getUTCHours();
+      const minutes = date.getUTCMinutes();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
       
-      if (response.success && response.data && Array.isArray(response.data.slots)) {
-        // Normalize the API response to match our TimeSlot interface
-        const normalizedSlots = response.data.slots.map((slot: any) => ({
-            id: slot.id || slot._id,
-            startTime: slot.startTime || slot.start_time,
-            endTime: slot.endTime || slot.end_time,
-            isAvailable: slot.isAvailable !== undefined ? slot.isAvailable : true,
-        }));
-        setAvailableSlots(normalizedSlots);
-        if (normalizedSlots.length === 0) {
-          setError('No available slots for the selected date');
-        }
-      } else {
-        setError(response.error || 'No availability data received');
+      // Convert to 12-hour format
+      hours = hours % 12;
+      hours = hours || 12; // Convert 0 to 12
+      
+      // Format minutes to always be 2 digits
+      const minutesStr = minutes < 10 ? `0${minutes}` : minutes;
+      
+      return `${hours}:${minutesStr} ${ampm}`;
+    } catch (error) {
+      console.error('Error formatting time:', error);
+      return dateString; // Return original string if parsing fails
+    }
+  };
+
+  // Fetch available slots from the API
+  const fetchAvailableSlots = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      setSelectedSlot(null);
+
+      console.log('🔍 Fetching available slots for professional:', professionalId);
+      
+      // Use the API service to fetch available slots
+      const slots = await apiService.getAllAvailableSlots(professionalId);
+      
+      console.log('📦 Available slots response:', slots);
+
+      // Check if we have any slots
+      if (!slots || !Array.isArray(slots)) {
+        console.warn('⚠️ Invalid slots data format:', slots);
+        setSectionedSlots([]);
+        setError('Could not load available time slots. Please try again later.');
+        return;
       }
-    } catch (err: any) {
-      console.error('Error fetching slots:', err);
-      setError('Failed to load available slots. Please try again.');
+      
+      if (slots.length === 0) {
+        console.log('ℹ️ No available time slots found');
+        setSectionedSlots([]);
+        setError('No available time slots found for this professional. Please check back later.');
+        return;
+      }
+
+      // Process and group slots by date
+      const groupedSlots = (slots as AvailableSlot[]).reduce<SectionData[]>((acc: SectionData[], slot: AvailableSlot) => {
+        const dateKey = slot.date.substring(0, 10); // Extract YYYY-MM-DD
+        
+        // Format the slot with display times
+        const formattedSlot: FormattedAvailableSlot = {
+          ...slot,
+          displayStartTime: formatTime(slot.start_time),
+          displayEndTime: formatTime(slot.end_time),
+          isSelected: false
+        };
+
+        // Find or create the section for this date
+        let section = acc.find((sec: SectionData) => sec.title === dateKey);
+        if (!section) {
+          section = { 
+            title: dateKey, 
+            data: [],
+            formattedDate: format(parseISO(dateKey), 'EEEE, MMMM d, yyyy')
+          };
+          acc.push(section);
+        }
+        section.data.push(formattedSlot);
+
+        return acc;
+      }, [] as SectionData[]);
+
+      // Sort sections by date
+      groupedSlots.sort((a: SectionData, b: SectionData) => a.title.localeCompare(b.title));
+
+      // Sort slots within each section by start time
+      groupedSlots.forEach((section: SectionData) => {
+        section.data.sort((a: FormattedAvailableSlot, b: FormattedAvailableSlot) => 
+          a.start_time.localeCompare(b.start_time)
+        );
+      });
+
+      setSectionedSlots(groupedSlots);
+    } catch (error: any) {
+      console.error('❌ Error fetching available slots:', error);
+      setError(
+        error.response?.data?.message || 
+        error.message || 
+        'Failed to load available time slots. Please try again later.'
+      );
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [professionalId]);
 
-  const handleDateSelect = (day: any) => {
-    setSelectedDate(day.dateString);
-  };
-
-  const handleSlotSelect = (slot: TimeSlot) => {
-    setSelectedSlot(slot);
-  };
-
-  const handleConfirm = () => {
-    if (!selectedDate || !selectedSlot) return;
-
-    const bookingData = {
-      professionalId,
-      professionalName,
-      slot_id: selectedSlot.id,
-      date: selectedDate,
-      time: selectedSlot.startTime, // Use startTime
-      duration,
-      price,
-      serviceName,
-      serviceId,
-    };
-
-    navigation.navigate('BookingConfirmation', { bookingData });
-  };
-
-  const renderTimeSlots = () => {
-    if (isLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4A90E2" />
-          <Text style={styles.loadingText}>Loading available slots...</Text>
-        </View>
-      );
-    }
-
-    if (error) {
-      return (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      );
-    }
-
-    if (!selectedDate) {
-        return (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptySubtext}>Please select a date to see availability</Text>
-            </View>
-          );
-    }
-
-    if (availableSlots.length === 0) {
-      return (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No slots available</Text>
-          <Text style={styles.emptySubtext}>Please select another date</Text>
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.slotsContainer}>
-        {availableSlots.map((slot) => (
-          <TouchableOpacity
-            key={slot.id}
-            style={[
-              styles.slotButton,
-              selectedSlot?.id === slot.id && styles.selectedSlotButton,
-            ]}
-            onPress={() => handleSlotSelect(slot)}
-          >
-            <Text
-              style={[
-                styles.slotText,
-                selectedSlot?.id === slot.id && styles.selectedSlotText,
-              ]}
-            >
-              {slot.startTime} - {slot.endTime}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+  // Handle slot selection
+  const handleSlotSelect = (slot: FormattedAvailableSlot) => {
+    setSelectedSlot(prevSlot => 
+      prevSlot?.id === slot.id ? null : slot
     );
   };
 
+  // Handle booking confirmation
+  const handleConfirm = useCallback(() => {
+    if (!selectedSlot) {
+      Alert.alert('No Slot Selected', 'Please select a time slot to continue.');
+      return;
+    }
+
+    if (!serviceDetails) {
+      Alert.alert('No Service Selected', 'Please select a service to continue.');
+      return;
+    }
+
+    // Use the getSlotPrice function to ensure consistent price calculation
+    const price = getSlotPrice(selectedSlot);
+    
+    // Get the slot duration in minutes
+    const slotDuration = getSlotDuration(selectedSlot.start_time, selectedSlot.end_time);
+
+    // Format the booking data as expected by BookingConfirmationScreen
+    const bookingData = {
+      professionalId,
+      professionalName,
+      slotId: selectedSlot.id,
+      date: selectedSlot.date,
+      startTime: selectedSlot.start_time,
+      endTime: selectedSlot.end_time,
+      duration: slotDuration,
+      price: price,
+      isOnline: selectedSlot.is_online,
+      serviceDetails: {
+        id: serviceDetails.id,
+        name: serviceDetails.name,
+        duration: slotDuration,
+        price: price
+      }
+    };
+
+    // Navigate to booking confirmation
+    navigation.navigate('BookingConfirmation', {
+      bookingData,
+    });
+  }, [navigation, professionalId, professionalName, selectedSlot, serviceDetails]);
+
+  useFocusEffect(
+    useCallback(() => {
+      // Optional: Add any cleanup or state reset logic here
+    }, [])
+  );
+
+  // Fetch slots when component mounts
+  useEffect(() => {
+    fetchAvailableSlots();
+  }, [fetchAvailableSlots]);
+
+  // Get the duration in minutes from start and end times
+  const getSlotDuration = (startTime: string, endTime: string): number => {
+    try {
+      const start = new Date(startTime);
+      const end = new Date(endTime);
+      return Math.round((end.getTime() - start.getTime()) / (1000 * 60)); // Convert ms to minutes
+    } catch (error) {
+      console.error('Error calculating slot duration:', error);
+      return 0;
+    }
+  };
+
+  // Get the price based on slot duration and online/offline status
+  const getSlotPrice = (slot: AvailableSlot): number => {
+    try {
+      const duration = getSlotDuration(slot.start_time, slot.end_time);
+      const isOnline = slot.is_online;
+      
+      // Determine which price to use based on duration and online status
+      if (duration <= 15 && slot.price_online_15min !== null) {
+        return isOnline ? slot.price_online_15min : (slot.price_offline_15min || 0);
+      } else if (duration <= 30 && slot.price_online_30min !== null) {
+        return isOnline ? slot.price_online_30min : (slot.price_offline_30min || 0);
+      } else if (duration > 30 && slot.price_online_60min !== null) {
+        return isOnline ? slot.price_online_60min : (slot.price_offline_60min || 0);
+      }
+      
+      // Fallback to first available price
+      if (slot.price_online_15min !== null) {
+        return isOnline ? slot.price_online_15min : (slot.price_offline_15min || 0);
+      } else if (slot.price_online_30min !== null) {
+        return isOnline ? slot.price_online_30min : (slot.price_offline_30min || 0);
+      } else if (slot.price_online_60min !== null) {
+        return isOnline ? slot.price_online_60min : (slot.price_offline_60min || 0);
+      }
+      
+      return 0; // Default to 0 if no price is available
+    } catch (error) {
+      console.error('Error calculating slot price:', error);
+      return 0;
+    }
+  };
+
+  // Render individual time slot item
+  const renderSlotItem = ({ item }: { item: FormattedAvailableSlot }) => {
+    const duration = getSlotDuration(item.start_time, item.end_time);
+    const price = getSlotPrice(item);
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.slotButton,
+          selectedSlot?.id === item.id && styles.selectedSlotButton
+        ]}
+        onPress={() => handleSlotSelect(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.slotTimeContainer}>
+          <Text 
+            style={[
+              styles.slotButtonText,
+              selectedSlot?.id === item.id && styles.selectedSlotText
+            ]}
+          >
+            {item.displayStartTime} - {item.displayEndTime}
+          </Text>
+          <Text style={styles.slotDurationText}>
+            {duration} min
+          </Text>
+        </View>
+        <Text style={styles.slotPriceText}>
+          ${price}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
+  // Render section header with formatted date
+  const renderSectionHeader = ({ 
+    section 
+  }: { 
+    section: SectionListData<FormattedAvailableSlot> & { formattedDate?: string } 
+  }) => (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionHeaderText}>
+        {section.formattedDate || section.title}
+      </Text>
+    </View>
+  );
+
+  // Render empty state when no slots are available
+  const renderEmptyComponent = () => (
+    <View style={styles.emptyContainer}>
+      <Ionicons 
+        name="time-outline" 
+        size={48} 
+        color={theme.colors.primary} 
+        style={styles.emptyIcon}
+      />
+      <Text style={styles.emptyText}>
+        {isLoading ? 'Loading available slots...' : 'No available time slots found.'}
+      </Text>
+      {!isLoading && (
+        <TouchableOpacity 
+          style={styles.retryButton}
+          onPress={fetchAvailableSlots}
+        >
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  // Render loading state
+  if (isLoading && sectionedSlots.length === 0) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={styles.loadingText}>Loading available time slots...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  // Render error state
+  if (error) {
+    return (
+      <SafeAreaView style={styles.errorContainer}>
+        <Ionicons 
+          name="alert-circle-outline" 
+          size={48} 
+          color={theme.colors.error} 
+        />
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity 
+          style={styles.retryButton}
+          onPress={fetchAvailableSlots}
+        >
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollContainer}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Select Date & Time</Text>
-          <Text style={styles.subtitle}>{professionalName}</Text>
-          <Text style={styles.serviceName}>{serviceName}</Text>
-        </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          accessibilityLabel="Go back"
+          accessibilityRole="button"
+        >
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {professionalName || 'Select Time'}
+        </Text>
+        <View style={styles.headerRight} />
+      </View>
 
-        <View style={styles.calendarContainer}>
-          <Calendar
-            onDayPress={handleDateSelect}
-            markedDates={{
-              [selectedDate || '']: {
-                selected: true,
-                selectedColor: '#4A90E2',
-              },
-            }}
-            theme={{
-              selectedDayBackgroundColor: '#4A90E2',
-              todayTextColor: '#4A90E2',
-              arrowColor: '#4A90E2',
-            }}
-            minDate={format(new Date(), 'yyyy-MM-dd')}
-          />
-        </View>
+      {/* Main Content */}
+      <View style={styles.content}>
+        {/* Service Details */}
+        {serviceDetails && (
+          <View style={styles.serviceDetails}>
+            <Text style={styles.serviceName} numberOfLines={1}>
+              {serviceDetails.name || 'Consultation'}
+            </Text>
+            <Text style={styles.serviceDuration}>
+              {serviceDetails.duration || 30} min • 
+              {selectedSlot?.is_online ? 'Online' : 'In-Person'}
+            </Text>
+          </View>
+        )}
 
-        <View style={styles.slotsSection}>
-          <Text style={styles.sectionTitle}>
-            {selectedDate
-              ? `Available Slots for ${format(new Date(selectedDate), 'MMMM d, yyyy')}`
-              : 'Select a date to see available slots'}
-          </Text>
-          {renderTimeSlots()}
-        </View>
-      </ScrollView>
+        {/* Available Time Slots */}
+        <SectionList
+          sections={sectionedSlots}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderSlotItem}
+          renderSectionHeader={renderSectionHeader}
+          ListEmptyComponent={renderEmptyComponent()}
+          contentContainerStyle={styles.sectionListContent}
+          stickySectionHeadersEnabled={false}
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={5}
+          windowSize={10}
+        />
+      </View>
 
+      {/* Fixed Footer Button */}
       <View style={styles.footer}>
-        <TouchableOpacity
+        <TouchableOpacity 
           style={[
             styles.confirmButton,
-            (!selectedDate || !selectedSlot) && styles.disabledButton,
+            !selectedSlot && styles.disabledButton,
           ]}
           onPress={handleConfirm}
-          disabled={!selectedDate || !selectedSlot}
+          disabled={!selectedSlot}
+          accessibilityRole="button"
+          accessibilityLabel="Confirm time slot"
+          accessibilityHint="Proceed to booking confirmation"
         >
-          <Text style={styles.confirmButtonText}>Proceed to Confirm</Text>
+          <Text style={styles.confirmButtonText}>
+            {selectedSlot 
+              ? `Confirm ${selectedSlot.displayStartTime} Slot`
+              : 'Select a Time Slot'}
+          </Text>
+          
+          {selectedSlot && (
+            <View style={styles.priceContainer}>
+              <Text style={styles.priceText}>
+                ${getSlotPrice(selectedSlot).toFixed(2)}
+              </Text>
+              <Text style={styles.priceLabel}>
+                for {getSlotDuration(selectedSlot.start_time, selectedSlot.end_time)} min
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -238,130 +436,224 @@ const DateTimeSelectionScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.background.white,
   },
-  scrollContainer: {
+  content: {
     flex: 1,
+    backgroundColor: theme.colors.background.light,
   },
   header: {
-    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    backgroundColor: theme.colors.background.white,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
+    borderBottomColor: theme.colors.colors?.border || '#E5E7EB',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+    zIndex: 10,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
-    marginBottom: 4,
+  backButton: {
+    padding: 8,
+    marginRight: 8,
   },
-  subtitle: {
+  headerTitle: {
+    flex: 1,
     fontSize: 18,
-    color: '#4A4A4A',
-    marginBottom: 4,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    textAlign: 'center',
+    marginHorizontal: 8,
+  },
+  headerRight: {
+    width: 40,
+  },
+  serviceDetails: {
+    padding: 16,
+    backgroundColor: theme.colors.background.white,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.colors?.border || '#E5E7EB',
   },
   serviceName: {
-    fontSize: 16,
-    color: '#666666',
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 4,
   },
-  calendarContainer: {
-    margin: 16,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+  serviceDuration: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
   },
-  slotsSection: {
-    padding: 16,
+  sectionListContent: {
+    paddingBottom: 100, // Space for the footer button
+    paddingTop: 8,
   },
-  sectionTitle: {
+  sectionHeader: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: theme.colors.background.white,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.colors?.border || '#E5E7EB',
+  },
+  sectionHeaderText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333333',
-    marginBottom: 16,
-  },
-  slotsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    color: theme.colors.text.primary,
   },
   slotButton: {
-    width: '48%',
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    padding: 16,
+    marginHorizontal: 16,
+    marginVertical: 4,
+    backgroundColor: theme.colors.background.white,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.colors?.border || '#E5E7EB',
   },
   selectedSlotButton: {
-    borderColor: '#4A90E2',
-    backgroundColor: '#F0F7FF',
+    backgroundColor: 'rgba(30, 136, 229, 0.1)',
+    borderColor: theme.colors.primary,
   },
-  slotText: {
-    fontSize: 14,
-    color: '#333333',
+  slotButtonText: {
+    fontSize: 16,
+    color: theme.colors.text.primary,
+  },
+  slotTimeContainer: {
+    flexDirection: 'column',
+  },
+  slotDurationText: {
+    fontSize: 12,
+    color: theme.colors.text.secondary,
+    marginTop: 2,
   },
   selectedSlotText: {
-    color: '#4A90E2',
+    color: theme.colors.primary,
     fontWeight: '600',
   },
-  loadingContainer: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 8,
-    color: '#666666',
-  },
-  errorContainer: {
-    padding: 20,
-    backgroundColor: '#FFF0F0',
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF4D4F',
-  },
-  errorText: {
-    color: '#FF4D4F',
+  slotPriceText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.primary,
   },
   emptyContainer: {
-    padding: 20,
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    padding: 32,
+  },
+  emptyIcon: {
+    marginBottom: 16,
   },
   emptyText: {
     fontSize: 16,
-    color: '#666666',
-    marginBottom: 4,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: 16,
   },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#999999',
-  },
-  footer: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
-    backgroundColor: '#FFFFFF',
-  },
-  confirmButton: {
-    backgroundColor: '#4A90E2',
-    padding: 16,
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: theme.colors.primary,
     borderRadius: 8,
-    alignItems: 'center',
   },
-  disabledButton: {
-    backgroundColor: '#CCCCCC',
-  },
-  confirmButtonText: {
-    color: '#FFFFFF',
+  retryButtonText: {
+    color: theme.colors.background.white,
     fontSize: 16,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.colors.background.white,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: theme.colors.text.secondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    backgroundColor: theme.colors.background.white,
+  },
+  errorText: {
+    fontSize: 16,
+    color: theme.colors.error,
+    textAlign: 'center',
+    marginVertical: 16,
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    backgroundColor: theme.colors.background.white,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.colors?.border || '#E5E7EB',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  confirmButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: theme.colors.primary,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  confirmButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  confirmButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  priceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  priceText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: theme.colors.primary,
+    marginRight: 4,
+  },
+  priceLabel: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+  },
+  disabledButton: {
+    opacity: 0.6,
+    backgroundColor: theme.colors.text.secondary,
   },
 });
 
 export default DateTimeSelectionScreen;
-
