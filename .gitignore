@@ -1,0 +1,25 @@
+# create .gitignore with recommended content
+@"
+# Node modules
+node_modules/
+
+# Android / iOS build outputs
+android/build/
+android/app/build/
+ios/build/
+
+# Gradle / IDE
+.gradle/
+.idea/
+*.iml
+
+# Binaries / artifacts
+*.apk
+*.so
+*.keystore
+*.log
+
+# Misc
+.env
+.vscode/
+"@ | Out-File -Encoding UTF8 .gitignore
