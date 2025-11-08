@@ -1,4 +1,3 @@
-// TimeSelectionScreen.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -12,28 +11,30 @@ import {
   Alert,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation, useRoute } from '@react-navigation/native';
-
+import { useRoute } from '@react-navigation/native';
+import { useTypedNavigation } from '../hooks/useTypedNavigation';
 import { colors } from '../theme/colors';
 import { ROUTES } from '../navigation/constants';
-import { professionalService } from '../services';
+import { ProfessionalService } from '../services/professional/ProfessionalService';
 import type { Professional } from '../services/professional/ProfessionalService';
 
 interface TimeSlot {
   id: string;
   time: string;
   isAvailable: boolean;
-  fullSlotData?: any; // For any additional slot data from the API
+  fullSlotData?: any;
 }
 
+const professionalService = ProfessionalService.getInstance();
+
 const TimeSelectionScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useTypedNavigation();
   const route = useRoute();
   const { selectedDate, mode, location, professionalId } = route.params as {
     selectedDate: string;
     mode: 'online' | 'offline';
     location?: { city: string; latitude: number; longitude: number };
-    professionalId?: string;
+    professionalId: string;
   };
 
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
@@ -43,161 +44,90 @@ const TimeSelectionScreen: React.FC = () => {
   const [professional, setProfessional] = useState<Professional | null>(null);
 
   const fetchTimeSlots = useCallback(async () => {
-    if (!professionalId) {
-      generateDefaultTimeSlots();
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    
     try {
-      // Get professional details and slots in parallel
+      if (!professionalId) throw new Error('Professional ID not provided');
+
+      setLoading(true);
+      setError(null);
+
       const [profResponse, slotsResponse] = await Promise.all([
         professionalService.getProfessionalById(professionalId),
-        professionalService.checkSlotAvailability(professionalId)
+        professionalService.checkSlotAvailability(professionalId),
       ]);
 
-      // Handle professional data
-      if (profResponse.success && profResponse.data) {
-        setProfessional(profResponse.data);
-      } else {
+      if (!profResponse.success || !profResponse.data)
         throw new Error(profResponse.message || 'Failed to load professional details');
-      }
 
-      // Handle time slots
-      if (slotsResponse.success && slotsResponse.data) {
-        const selectedDaySlots = slotsResponse.data.find(
-          (day: { date: string }) => day.date === selectedDate
-        );
+      setProfessional(profResponse.data);
 
-        if (selectedDaySlots?.slots?.length) {
-          const availableSlots = selectedDaySlots.slots
-            .filter((slot: { isAvailable: boolean }) => slot.isAvailable)
-            .map((slot: { startTime: string }) => ({
-              id: `slot_${slot.startTime}`,
-              time: slot.startTime,
-              isAvailable: true,
-              fullSlotData: {
-                ...slot,
-                date: selectedDate,
-                professionalId,
-                professional: profResponse.data
-              }
-            }));
+      if (!slotsResponse.success || !slotsResponse.data)
+        throw new Error(slotsResponse.message || 'Failed to load available time slots');
 
-          setTimeSlots(availableSlots.length > 0 ? availableSlots : []);
-        } else {
-          setTimeSlots([]);
-        }
-      } else {
-        throw new Error(slotsResponse.message || 'Failed to load time slots');
-      }
-    } catch (error) {
-      console.error('Error in fetchTimeSlots:', error);
-      setError('Failed to load time slots. Please try again.');
+      const selectedDaySlots = slotsResponse.data.find(
+        (day: { date: string }) =>
+          new Date(day.date).toDateString() === new Date(selectedDate).toDateString()
+      );
+
+      const availableSlots =
+        selectedDaySlots?.slots
+          ?.filter((slot: { isAvailable: boolean }) => slot.isAvailable)
+          ?.map((slot: { startTime: string }) => ({
+            id: `slot_${slot.startTime}`,
+            time: slot.startTime,
+            isAvailable: true,
+            fullSlotData: { ...slot, date: selectedDate, professionalId },
+          })) || [];
+
+      setTimeSlots(availableSlots);
+    } catch (err: any) {
+      console.error('Error in fetchTimeSlots:', err);
+      setError(err.message || 'Failed to load available slots.');
       setTimeSlots([]);
     } finally {
       setLoading(false);
     }
   }, [selectedDate, professionalId]);
 
-  const generateDefaultTimeSlots = () => {
-    const slots: TimeSlot[] = [];
-    const startHour = 9; // 9 AM
-    const endHour = 18; // 6 PM
-    
-    for (let hour = startHour; hour < endHour; hour++) {
-      // Add slots every hour
-      slots.push({
-        id: `slot_${hour}:00`,
-        time: `${hour.toString().padStart(2, '0')}:00`,
-        isAvailable: true,
-      });
-      
-      // Add half-hour slots
-      if (hour < endHour - 1) {
-        slots.push({
-          id: `slot_${hour}:30`,
-          time: `${hour.toString().padStart(2, '0')}:30`,
-          isAvailable: true,
-        });
-      }
-    }
-    
-    setTimeSlots(slots);
-  };
-
   useEffect(() => {
     fetchTimeSlots();
   }, [fetchTimeSlots]);
-
-  const handleTimeSelect = (timeSlot: TimeSlot) => {
-    if (!timeSlot.isAvailable) {
-      Alert.alert('Time Not Available', 'This time slot is not available for booking.');
-      return;
-    }
-    setSelectedTime(timeSlot);
-  };
 
   const handleContinue = () => {
     if (!selectedTime) {
       Alert.alert('Select Time', 'Please select a time slot to continue.');
       return;
     }
-
     if (!professional) {
-      Alert.alert('Error', 'Professional information not available');
+      Alert.alert('Error', 'Professional information not available.');
       return;
     }
 
-    // Format the selected date and time
-    const [hours, minutes] = selectedTime.time.split(':');
-    const [year, month, day] = selectedDate.split('-');
-    const selectedDateTime = new Date(
-      parseInt(year),
-      parseInt(month) - 1,
-      parseInt(day),
-      parseInt(hours),
-      parseInt(minutes)
-    );
+    const [hours, minutes] = selectedTime.time.split(':').map(Number);
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const start = new Date(year, month - 1, day, hours, minutes);
 
-    // Prepare professional data for booking
-    const bookingProfessionalData = {
+    const bookingProfessional = {
       id: professional.id,
-      name: `${professional.firstName} ${professional.lastName}`,
+      name: `${professional.firstName || ''} ${professional.lastName || ''}`.trim(),
       title: professional.specializations?.[0] || 'Professional',
-      price: professional.serviceTypes?.[0]?.price || 0
+      price: professional.serviceTypes?.[0]?.price || 0,
     };
 
-    // Prepare slot data
-    const slotData = {
-      id: selectedTime.id,
-      time: selectedTime.time,
-      date: selectedDate,
-      duration: 60, // Default 60 minutes
-      professionalId: professional.id,
-      professional: bookingProfessionalData,
-      ...(selectedTime as any).fullSlotData // Type assertion for additional slot data
-    };
-
-    // Navigate directly to BOOK_CONSULTATION with all necessary data
     navigation.navigate(ROUTES.BOOK_CONSULTATION, {
-      professional: bookingProfessionalData,
-      selectedTime: selectedDateTime.toISOString(),
+      professional: bookingProfessional,
+      selectedTime: start.toISOString(),
       mode,
       location,
-      slot: slotData,
-      // Include any additional data needed for the booking flow
+      slot: selectedTime.fullSlotData,
       bookingData: {
-        startTime: selectedDateTime.toISOString(),
-        endTime: new Date(selectedDateTime.getTime() + 60 * 60 * 1000).toISOString(), // 1 hour duration
+        professional: bookingProfessional,
+        startTime: start.toISOString(),
+        endTime: new Date(start.getTime() + 60 * 60 * 1000).toISOString(),
         mode,
         location,
-        professional: bookingProfessionalData,
         serviceType: 'consultation',
-        price: professional.serviceTypes?.[0]?.price || 0
-      }
+        price: professional.serviceTypes?.[0]?.price || 0,
+      },
     });
   };
 
@@ -208,14 +138,16 @@ const TimeSelectionScreen: React.FC = () => {
         selectedTime?.id === item.id && styles.selectedTimeCard,
         !item.isAvailable && styles.unavailableTimeCard,
       ]}
-      onPress={() => handleTimeSelect(item)}
+      onPress={() => item.isAvailable && setSelectedTime(item)}
       disabled={!item.isAvailable}
     >
-      <Text style={[
-        styles.timeLabel,
-        selectedTime?.id === item.id && styles.selectedTimeLabel,
-        !item.isAvailable && styles.unavailableTimeLabel,
-      ]}>
+      <Text
+        style={[
+          styles.timeLabel,
+          selectedTime?.id === item.id && styles.selectedTimeLabel,
+          !item.isAvailable && styles.unavailableTimeLabel,
+        ]}
+      >
         {item.time}
       </Text>
       {selectedTime?.id === item.id && (
@@ -224,87 +156,57 @@ const TimeSelectionScreen: React.FC = () => {
     </TouchableOpacity>
   );
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString('en-US', {
       weekday: 'long',
       month: 'long',
       day: 'numeric',
       year: 'numeric',
     });
-  };
 
-  if (loading) {
+  if (loading)
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <MaterialCommunityIcons name="arrow-left" size={24} color={colors.primaryText} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Select Time</Text>
-          <View style={styles.placeholder} />
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primaryGreen} />
-          <Text style={styles.loadingText}>Loading available time slots...</Text>
-        </View>
+        <StatusBar barStyle="dark-content" />
+        <ActivityIndicator size="large" color={colors.primaryGreen} style={{ marginTop: 100 }} />
       </SafeAreaView>
     );
-  }
+
+  if (error)
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchTimeSlots}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      
-      {/* Header */}
+      <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <MaterialCommunityIcons name="arrow-left" size={24} color={colors.primaryText} />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Select Time</Text>
-        <View style={styles.placeholder} />
       </View>
 
-      {/* Content */}
       <View style={styles.content}>
         <MaterialCommunityIcons name="clock" size={60} color={colors.primaryGreen} />
         <Text style={styles.title}>Choose Your Time</Text>
-        <Text style={styles.subtitle}>
-          Select a time slot for your {mode} consultation
-        </Text>
-        <Text style={styles.dateText}>
-          {formatDate(selectedDate)}
-        </Text>
-        
-        {error && (
-          <Text style={styles.errorText}>{error}</Text>
-        )}
+        <Text style={styles.subtitle}>Select a time slot for your {mode} consultation</Text>
+        <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
       </View>
 
-      {/* Time Slots Grid */}
       <FlatList
         data={timeSlots}
         renderItem={renderTimeSlot}
         keyExtractor={(item) => item.id}
         numColumns={3}
         contentContainerStyle={styles.timeGrid}
-        showsVerticalScrollIndicator={false}
       />
 
-      {/* Action Button */}
       <View style={styles.bottomAction}>
         <TouchableOpacity
-          style={[
-            styles.button,
-            !selectedTime && styles.buttonDisabled,
-          ]}
+          style={[styles.button, !selectedTime && styles.buttonDisabled]}
           onPress={handleContinue}
           disabled={!selectedTime}
         >
@@ -316,128 +218,37 @@ const TimeSelectionScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: colors.primaryText,
-  },
-  placeholder: {
-    width: 40,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: colors.secondaryText,
-  },
-  content: {
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700' as const,
-    color: colors.primaryText,
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: colors.secondaryText,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  dateText: {
-    fontSize: 14,
-    color: colors.primaryGreen,
-    marginBottom: 20,
-    textAlign: 'center',
-    fontWeight: '600' as const,
-  },
-  errorText: {
-    fontSize: 14,
-    color: colors.error,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  timeGrid: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  header: { alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: colors.primaryText },
+  content: { alignItems: 'center', padding: 20 },
+  title: { fontSize: 24, fontWeight: '700', color: colors.primaryText, marginTop: 16 },
+  subtitle: { fontSize: 16, color: colors.secondaryText },
+  dateText: { fontSize: 14, color: colors.primaryGreen, marginTop: 12 },
+  timeGrid: { paddingHorizontal: 20, paddingBottom: 20 },
   timeCard: {
     backgroundColor: colors.offWhite,
     borderRadius: 12,
-    padding: 16,
+    padding: 14,
     margin: 6,
     borderWidth: 1,
     borderColor: colors.border,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     flex: 1,
     minWidth: 100,
-  },
-  selectedTimeCard: {
-    backgroundColor: colors.primaryGreen,
-    borderColor: colors.primaryGreen,
-  },
-  unavailableTimeCard: {
-    backgroundColor: colors.background,
-    borderColor: colors.border,
-    opacity: 0.6,
-  },
-  timeLabel: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: colors.primaryText,
-  },
-  selectedTimeLabel: {
-    color: colors.offWhite,
-  },
-  unavailableTimeLabel: {
-    color: colors.secondaryText,
-  },
-  bottomAction: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  button: {
-    backgroundColor: colors.primaryGreen,
-    borderRadius: 12,
-    paddingVertical: 16,
     alignItems: 'center',
   },
-  buttonDisabled: {
-    backgroundColor: colors.border,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: colors.offWhite,
-  },
+  selectedTimeCard: { backgroundColor: colors.primaryGreen, borderColor: colors.primaryGreen },
+  unavailableTimeCard: { opacity: 0.6 },
+  timeLabel: { fontSize: 16, fontWeight: '600', color: colors.primaryText },
+  selectedTimeLabel: { color: colors.offWhite },
+  unavailableTimeLabel: { color: colors.secondaryText },
+  bottomAction: { padding: 20, borderTopWidth: 1, borderTopColor: colors.border },
+  button: { backgroundColor: colors.primaryGreen, borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
+  buttonDisabled: { backgroundColor: colors.border },
+  buttonText: { fontSize: 16, fontWeight: '600', color: colors.offWhite },
+  errorText: { color: colors.error, textAlign: 'center', marginTop: 100, fontSize: 16 },
+  retryButton: { alignSelf: 'center', marginTop: 20, backgroundColor: colors.primaryGreen, padding: 10, borderRadius: 8 },
+  retryButtonText: { color: colors.offWhite },
 });
 
 export default TimeSelectionScreen;

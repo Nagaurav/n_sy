@@ -1,4 +1,3 @@
-// FAQScreen.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -12,9 +11,9 @@ import {
   RefreshControl,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation } from '@react-navigation/native';
 import { colors } from '../theme/colors';
 import { makeApiRequest } from '../config/api';
+import { useTypedNavigation } from '../hooks/useTypedNavigation';
 
 interface FAQ {
   id: number;
@@ -27,9 +26,9 @@ interface FAQ {
 
 interface FAQResponse {
   success: boolean;
-  message: string;
-  data: FAQ[];
-  pagination: {
+  message?: string;
+  data?: FAQ[];
+  pagination?: {
     page: number;
     limit: number;
     total: number;
@@ -38,110 +37,97 @@ interface FAQResponse {
 }
 
 const FAQScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useTypedNavigation();
+
   const [faqs, setFaqs] = useState<FAQ[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 20,
-    total: 0,
-    pages: 0,
-  });
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
-  const fetchFAQs = useCallback(async (isRefresh = false) => {
-    if (isRefresh) {
-      setRefreshing(true);
-      setPagination(prev => ({ ...prev, page: 1 }));
-    } else {
-      setLoading(true);
-    }
-    
-    setError(null);
-    
-    try {
-      const response = await makeApiRequest('/faqs', 'GET', {
-        page: isRefresh ? 1 : pagination.page,
-        limit: pagination.limit,
-      });
-      
-      if (response.success && response.data) {
-        if (isRefresh) {
-          setFaqs(response.data);
-        } else {
-          setFaqs(prev => [...prev, ...response.data]);
-        }
-        
-        setPagination({
-          page: response.pagination.page,
-          limit: response.pagination.limit,
-          total: response.pagination.total,
-          pages: response.pagination.pages,
+  /** 🧠 Fetch FAQs from API */
+  const fetchFAQs = useCallback(
+    async (isRefresh = false) => {
+      if (isRefresh) {
+        setRefreshing(true);
+        setPage(1);
+      } else {
+        setLoading(true);
+      }
+
+      try {
+        const response: FAQResponse = await makeApiRequest('/faqs', 'GET', {
+          page: isRefresh ? 1 : page,
+          limit: 20,
         });
-      } else {
-        setError(response.message || 'Failed to load FAQs');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load FAQs');
-      console.error('Error fetching FAQs:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [pagination.page, pagination.limit]);
 
+        if (response.success && response.data) {
+          const newData = response.data;
+          setFaqs((prev) => (isRefresh ? newData : [...prev, ...newData]));
+          setHasMore(response.pagination?.page! < response.pagination?.pages!);
+        } else {
+          setError(response.message || 'Failed to load FAQs.');
+        }
+      } catch (err: any) {
+        console.error('FAQ Fetch Error:', err);
+        setError(err.message || 'Network error while loading FAQs.');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [page]
+  );
+
+  /** 🧠 Initial Load */
   useEffect(() => {
-    fetchFAQs();
-  }, [fetchFAQs]);
-
-  const onRefresh = useCallback(() => {
     fetchFAQs(true);
-  }, [fetchFAQs]);
+  }, []);
 
-  const loadMore = useCallback(() => {
-    if (pagination.page < pagination.pages && !loading) {
-      setPagination(prev => ({ ...prev, page: prev.page + 1 }));
+  /** 🧠 Refresh Handler */
+  const onRefresh = () => fetchFAQs(true);
+
+  /** 🧠 Load More */
+  const onEndReached = () => {
+    if (!loading && hasMore) {
+      setPage((prev) => prev + 1);
+      fetchFAQs();
     }
-  }, [pagination.page, pagination.pages, loading]);
+  };
 
-  const toggleExpanded = (faqId: number) => {
-    setExpandedItems(prev => {
+  /** 🧠 Expand / Collapse */
+  const toggleExpand = (id: number) => {
+    setExpanded((prev) => {
       const newSet = new Set(prev);
-      if (newSet.has(faqId)) {
-        newSet.delete(faqId);
-      } else {
-        newSet.add(faqId);
-      }
+      newSet.has(id) ? newSet.delete(id) : newSet.add(id);
       return newSet;
     });
   };
 
-  const renderFAQ = ({ item }: { item: FAQ }) => {
-    const isExpanded = expandedItems.has(item.id);
-    
+  /** 🧠 Renderers */
+  const renderFAQItem = ({ item }: { item: FAQ }) => {
+    const isExpanded = expanded.has(item.id);
     return (
-      <View style={styles.faqCard}>
+      <View style={styles.card}>
         <TouchableOpacity
-          style={styles.faqHeader}
-          onPress={() => toggleExpanded(item.id)}
-          activeOpacity={0.7}
+          style={styles.cardHeader}
+          onPress={() => toggleExpand(item.id)}
+          activeOpacity={0.8}
         >
-          <Text style={styles.question} numberOfLines={isExpanded ? undefined : 2}>
-            {item.question}
-          </Text>
+          <Text style={styles.question}>{item.question}</Text>
           <MaterialCommunityIcons
             name={isExpanded ? 'chevron-up' : 'chevron-down'}
-            size={24}
+            size={22}
             color={colors.primaryGreen}
           />
         </TouchableOpacity>
-        
+
         {isExpanded && (
-          <View style={styles.answerContainer}>
+          <View style={styles.cardBody}>
             <Text style={styles.answer}>{item.answer}</Text>
-            <View style={styles.faqMeta}>
+            <View style={styles.metaRow}>
               <Text style={styles.category}>{item.category}</Text>
               <Text style={styles.date}>
                 {new Date(item.updated_at).toLocaleDateString()}
@@ -153,39 +139,39 @@ const FAQScreen: React.FC = () => {
     );
   };
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <MaterialCommunityIcons name="help-circle" size={80} color={colors.secondaryText} />
+  const renderEmpty = () => (
+    <View style={styles.empty}>
+      <MaterialCommunityIcons
+        name="help-circle-outline"
+        size={70}
+        color={colors.secondaryText}
+      />
       <Text style={styles.emptyTitle}>No FAQs Found</Text>
       <Text style={styles.emptySubtitle}>
-        {error || 'Check back later for frequently asked questions'}
+        {error || 'We’ll add some FAQs soon!'}
       </Text>
       {error && (
-        <TouchableOpacity style={styles.retryButton} onPress={() => fetchFAQs(true)}>
-          <Text style={styles.retryButtonText}>Retry</Text>
+        <TouchableOpacity style={styles.retry} onPress={() => fetchFAQs(true)}>
+          <Text style={styles.retryText}>Retry</Text>
         </TouchableOpacity>
       )}
     </View>
   );
 
-  const renderFooter = () => {
-    if (!loading) return null;
-    return (
-      <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color={colors.primaryGreen} />
-        <Text style={styles.loadingText}>Loading more...</Text>
+  const renderFooter = () =>
+    loading && faqs.length > 0 ? (
+      <View style={styles.footer}>
+        <ActivityIndicator color={colors.primaryGreen} size="small" />
+        <Text style={styles.footerText}>Loading more...</Text>
       </View>
-    );
-  };
+    ) : null;
 
+  /** 🧠 Loader Screen */
   if (loading && faqs.length === 0) {
     return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar backgroundColor={colors.background} barStyle="dark-content" />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primaryGreen} />
-          <Text style={styles.loadingText}>Loading FAQs...</Text>
-        </View>
+      <SafeAreaView style={styles.center}>
+        <ActivityIndicator size="large" color={colors.primaryGreen} />
+        <Text style={styles.footerText}>Loading FAQs...</Text>
       </SafeAreaView>
     );
   }
@@ -193,46 +179,42 @@ const FAQScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={colors.background} barStyle="dark-content" />
-      
+
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={colors.primaryText} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Frequently Asked Questions</Text>
-        <View style={styles.headerRight} />
+        <Text style={styles.headerTitle}>FAQs</Text>
+        <View style={{ width: 34 }} />
       </View>
 
+      {/* List */}
       <FlatList
         data={faqs}
-        renderItem={renderFAQ}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
+        renderItem={renderFAQItem}
+        contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             colors={[colors.primaryGreen]}
-            tintColor={colors.primaryGreen}
           />
         }
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.1}
-        ListEmptyComponent={renderEmptyState}
+        ListEmptyComponent={renderEmpty}
         ListFooterComponent={renderFooter}
+        showsVerticalScrollIndicator={false}
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.3}
       />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -242,50 +224,31 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.offWhite,
   },
-  backButton: {
-    padding: 5,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.primaryText,
-    flex: 1,
-    textAlign: 'center',
-  },
-  headerRight: {
-    width: 34,
-  },
-  listContainer: {
-    padding: 20,
-    paddingBottom: 100,
-  },
-  faqCard: {
+  backBtn: { padding: 6 },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: colors.primaryText, textAlign: 'center', flex: 1 },
+  list: { padding: 20, paddingBottom: 60 },
+  card: {
     backgroundColor: colors.cardBackground,
-    borderRadius: 12,
-    marginBottom: 16,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    borderRadius: 10,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: colors.offWhite,
   },
-  faqHeader: {
+  cardHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    padding: 16,
+    padding: 14,
   },
   question: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: colors.primaryText,
     flex: 1,
-    marginRight: 12,
-    lineHeight: 22,
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.primaryText,
+    marginRight: 10,
   },
-  answerContainer: {
+  cardBody: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingBottom: 12,
     borderTopWidth: 1,
     borderTopColor: colors.offWhite,
   },
@@ -293,74 +256,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.secondaryText,
     lineHeight: 20,
-    marginBottom: 12,
+    marginVertical: 8,
   },
-  faqMeta: {
+  metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   category: {
-    fontSize: 12,
+    backgroundColor: colors.lightSage,
     color: colors.primaryGreen,
-    fontWeight: '500',
-    backgroundColor: colors.offWhite,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  date: {
+    paddingVertical: 3,
+    borderRadius: 6,
     fontSize: 12,
-    color: colors.secondaryText,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.primaryText,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: colors.secondaryText,
-    textAlign: 'center',
-    paddingHorizontal: 40,
-    lineHeight: 20,
-  },
-  retryButton: {
-    marginTop: 20,
-    backgroundColor: colors.primaryGreen,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: colors.offWhite,
-    fontSize: 14,
     fontWeight: '500',
   },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  date: { fontSize: 12, color: colors.secondaryText },
+  empty: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
+  emptyTitle: { fontSize: 18, fontWeight: '600', color: colors.primaryText, marginTop: 12 },
+  emptySubtitle: { fontSize: 14, color: colors.secondaryText, textAlign: 'center', marginTop: 6, paddingHorizontal: 40 },
+  retry: {
+    backgroundColor: colors.primaryGreen,
+    paddingHorizontal: 22,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 20,
   },
-  footerLoader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 20,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: colors.secondaryText,
-    marginLeft: 8,
-  },
+  retryText: { color: colors.offWhite, fontWeight: '600' },
+  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 20 },
+  footerText: { fontSize: 14, color: colors.secondaryText, marginLeft: 8 },
 });
 
 export default FAQScreen;

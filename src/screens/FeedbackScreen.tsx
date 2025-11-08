@@ -1,4 +1,3 @@
-// FeedbackScreen.tsx
 import React, { useState } from 'react';
 import {
   View,
@@ -13,11 +12,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation } from '@react-navigation/native';
 import { colors } from '../theme/colors';
 import { makeApiRequest } from '../config/api';
+import { useTypedNavigation } from '../hooks/useTypedNavigation';
 
-interface Feedback {
+interface FeedbackForm {
   rating: number;
   category: string;
   title: string;
@@ -25,10 +24,21 @@ interface Feedback {
   anonymous: boolean;
 }
 
+const CATEGORIES = [
+  { value: 'general', label: 'General Feedback' },
+  { value: 'app', label: 'App Experience' },
+  { value: 'service', label: 'Service Quality' },
+  { value: 'professional', label: 'Professional Experience' },
+  { value: 'booking', label: 'Booking Process' },
+  { value: 'payment', label: 'Payment Experience' },
+  { value: 'suggestion', label: 'Suggestion' },
+  { value: 'complaint', label: 'Complaint' },
+];
+
 const FeedbackScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useTypedNavigation();
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState<Feedback>({
+  const [form, setForm] = useState<FeedbackForm>({
     rating: 0,
     category: 'general',
     title: '',
@@ -36,380 +46,257 @@ const FeedbackScreen: React.FC = () => {
     anonymous: false,
   });
 
-  const categories = [
-    { value: 'general', label: 'General Feedback' },
-    { value: 'app', label: 'App Experience' },
-    { value: 'service', label: 'Service Quality' },
-    { value: 'professional', label: 'Professional Experience' },
-    { value: 'booking', label: 'Booking Process' },
-    { value: 'payment', label: 'Payment Experience' },
-    { value: 'suggestion', label: 'Suggestion' },
-    { value: 'complaint', label: 'Complaint' },
-  ];
+  /** 🧠 Helper Functions */
+  const updateForm = (field: keyof FeedbackForm, value: any) =>
+    setForm((prev) => ({ ...prev, [field]: value }));
+
+  const getRatingText = () => {
+    return ['Select Rating', 'Very Poor', 'Poor', 'Average', 'Good', 'Excellent'][form.rating] || 'Select Rating';
+  };
 
   const handleSubmit = async () => {
-    if (formData.rating === 0) {
-      Alert.alert('Error', 'Please provide a rating');
-      return;
-    }
-
-    if (!formData.title.trim() || !formData.message.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields');
-      return;
-    }
+    if (loading) return;
+    if (form.rating === 0) return Alert.alert('Missing Rating', 'Please provide a rating.');
+    if (!form.title.trim() || !form.message.trim())
+      return Alert.alert('Missing Details', 'Please fill in all required fields.');
 
     setLoading(true);
     try {
-      const response = await makeApiRequest('/feedback', 'POST', formData);
-
+      const response = await makeApiRequest('/feedback', 'POST', form);
       if (response.success) {
         Alert.alert(
           'Thank You!',
-          'Your feedback has been submitted successfully. We appreciate your input!',
-          [
-            {
-              text: 'OK',
-              onPress: () => navigation.goBack(),
-            },
-          ]
+          'Your feedback has been submitted successfully.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
         );
+        setForm({ rating: 0, category: 'general', title: '', message: '', anonymous: false });
       } else {
-        Alert.alert('Error', response.message || 'Failed to submit feedback');
+        Alert.alert('Error', response.message || 'Failed to submit feedback.');
       }
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to submit feedback');
+    } catch (err: any) {
+      console.error('Feedback submission error:', err);
+      Alert.alert('Network Error', err.message || 'Failed to submit feedback.');
     } finally {
       setLoading(false);
     }
   };
 
-  const updateFormData = (field: keyof Feedback, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const renderStar = (starNumber: number) => (
+  /** 🧩 Renderers */
+  const renderStar = (num: number) => (
     <TouchableOpacity
-      key={starNumber}
-      onPress={() => updateFormData('rating', starNumber)}
-      style={styles.starContainer}
+      key={num}
+      onPress={() => updateForm('rating', num)}
+      activeOpacity={0.8}
+      style={styles.starBtn}
     >
       <MaterialCommunityIcons
-        name={starNumber <= formData.rating ? 'star' : 'star-outline'}
+        name={num <= form.rating ? 'star' : 'star-outline'}
         size={32}
-        color={starNumber <= formData.rating ? colors.accentYellow : colors.secondaryText}
+        color={num <= form.rating ? colors.accentYellow : colors.secondaryText}
       />
     </TouchableOpacity>
   );
 
-  const renderCategoryOption = (category: { value: string; label: string }) => (
-    <TouchableOpacity
-      key={category.value}
-      style={[
-        styles.categoryOption,
-        formData.category === category.value && styles.selectedOption,
-      ]}
-      onPress={() => updateFormData('category', category.value)}
-    >
-      <Text
-        style={[
-          styles.categoryText,
-          formData.category === category.value && styles.selectedOptionText,
-        ]}
+  const renderCategory = (item: { value: string; label: string }) => {
+    const selected = form.category === item.value;
+    return (
+      <TouchableOpacity
+        key={item.value}
+        onPress={() => updateForm('category', item.value)}
+        style={[styles.categoryBtn, selected && styles.categoryBtnSelected]}
       >
-        {category.label}
-      </Text>
-      {formData.category === category.value && (
-        <MaterialCommunityIcons name="check" size={20} color={colors.offWhite} />
-      )}
-    </TouchableOpacity>
-  );
-
-  const getRatingText = () => {
-    switch (formData.rating) {
-      case 1: return 'Very Poor';
-      case 2: return 'Poor';
-      case 3: return 'Average';
-      case 4: return 'Good';
-      case 5: return 'Excellent';
-      default: return 'Select Rating';
-    }
+        <Text style={[styles.categoryLabel, selected && styles.categoryLabelSelected]}>
+          {item.label}
+        </Text>
+        {selected && <MaterialCommunityIcons name="check" size={18} color={colors.offWhite} />}
+      </TouchableOpacity>
+    );
   };
 
+  /** 🧱 UI */
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={colors.background} barStyle="dark-content" />
-      
+
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={colors.primaryText} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Feedback</Text>
-        <View style={styles.headerRight} />
+        <View style={{ width: 34 }} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Intro */}
         <View style={styles.infoCard}>
-          <MaterialCommunityIcons name="message-text" size={40} color={colors.primaryGreen} />
+          <MaterialCommunityIcons name="message-text" size={42} color={colors.primaryGreen} />
           <Text style={styles.infoTitle}>Share Your Experience</Text>
           <Text style={styles.infoSubtitle}>
-            Your feedback helps us improve our services and provide better experiences for everyone.
+            Your feedback helps us improve our services and create better experiences.
           </Text>
         </View>
 
-        <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>Overall Rating *</Text>
-          <View style={styles.ratingContainer}>
-            <View style={styles.starsContainer}>
-              {[1, 2, 3, 4, 5].map(renderStar)}
-            </View>
+        {/* Rating */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Overall Rating *</Text>
+          <View style={styles.ratingBox}>
+            <View style={styles.starRow}>{[1, 2, 3, 4, 5].map(renderStar)}</View>
             <Text style={styles.ratingText}>{getRatingText()}</Text>
           </View>
         </View>
 
-        <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>Category</Text>
-          <View style={styles.categoriesContainer}>
-            {categories.map(renderCategoryOption)}
-          </View>
+        {/* Category */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Category</Text>
+          <View style={styles.categoryGrid}>{CATEGORIES.map(renderCategory)}</View>
         </View>
 
-        <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>Title *</Text>
+        {/* Title */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Title *</Text>
           <TextInput
             style={styles.input}
             placeholder="Brief summary of your feedback"
             placeholderTextColor={colors.secondaryText}
-            value={formData.title}
-            onChangeText={(text) => updateFormData('title', text)}
+            value={form.title}
+            onChangeText={(text) => updateForm('title', text)}
             maxLength={100}
           />
         </View>
 
-        <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>Detailed Feedback *</Text>
+        {/* Message */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Detailed Feedback *</Text>
           <TextInput
-            style={[styles.input, styles.messageInput]}
-            placeholder="Please share your detailed experience, suggestions, or concerns..."
-            placeholderTextColor={colors.secondaryText}
-            value={formData.message}
-            onChangeText={(text) => updateFormData('message', text)}
+            style={[styles.input, styles.textarea]}
             multiline
-            numberOfLines={6}
-            textAlignVertical="top"
+            placeholder="Please share your detailed experience or suggestions..."
+            placeholderTextColor={colors.secondaryText}
+            value={form.message}
+            onChangeText={(text) => updateForm('message', text)}
             maxLength={1000}
+            textAlignVertical="top"
           />
-          <Text style={styles.charCount}>
-            {formData.message.length}/1000 characters
-          </Text>
+          <Text style={styles.charCount}>{form.message.length}/1000 characters</Text>
         </View>
 
-        <View style={styles.formSection}>
-          <TouchableOpacity
-            style={styles.anonymousContainer}
-            onPress={() => updateFormData('anonymous', !formData.anonymous)}
-          >
-            <MaterialCommunityIcons
-              name={formData.anonymous ? 'checkbox-marked' : 'checkbox-blank-outline'}
-              size={24}
-              color={formData.anonymous ? colors.primaryGreen : colors.secondaryText}
-            />
-            <Text style={styles.anonymousText}>Submit anonymously</Text>
-          </TouchableOpacity>
-        </View>
-
+        {/* Anonymous Option */}
         <TouchableOpacity
-          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+          style={styles.anonymousRow}
+          onPress={() => updateForm('anonymous', !form.anonymous)}
+        >
+          <MaterialCommunityIcons
+            name={form.anonymous ? 'checkbox-marked' : 'checkbox-blank-outline'}
+            size={22}
+            color={form.anonymous ? colors.primaryGreen : colors.secondaryText}
+          />
+          <Text style={styles.anonymousText}>Submit anonymously</Text>
+        </TouchableOpacity>
+
+        {/* Submit Button */}
+        <TouchableOpacity
           onPress={handleSubmit}
+          style={[styles.submitBtn, loading && styles.submitDisabled]}
           disabled={loading}
+          activeOpacity={0.8}
         >
           {loading ? (
-            <ActivityIndicator size="small" color={colors.offWhite} />
+            <ActivityIndicator color={colors.offWhite} />
           ) : (
             <>
               <MaterialCommunityIcons name="send" size={20} color={colors.offWhite} />
-              <Text style={styles.submitButtonText}>Submit Feedback</Text>
+              <Text style={styles.submitText}>Submit Feedback</Text>
             </>
           )}
         </TouchableOpacity>
 
-        <View style={styles.thankYouNote}>
-          <MaterialCommunityIcons name="heart" size={24} color={colors.primaryGreen} />
-          <Text style={styles.thankYouText}>
-            Thank you for taking the time to share your feedback with us!
-          </Text>
+        {/* Thank You */}
+        <View style={styles.thankYou}>
+          <MaterialCommunityIcons name="heart" size={22} color={colors.primaryGreen} />
+          <Text style={styles.thankText}>Thank you for sharing your thoughts with us!</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 };
 
+/** 💅 Styles */
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: colors.offWhite,
   },
-  backButton: {
-    padding: 5,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.primaryText,
-  },
-  headerRight: {
-    width: 34,
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
+  backBtn: { padding: 6 },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: colors.primaryText },
+  scroll: { padding: 20 },
   infoCard: {
     backgroundColor: colors.cardBackground,
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
     marginBottom: 24,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
   },
-  infoTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: colors.primaryText,
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  infoSubtitle: {
-    fontSize: 14,
-    color: colors.secondaryText,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  formSection: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.primaryText,
-    marginBottom: 12,
-  },
-  ratingContainer: {
-    alignItems: 'center',
-  },
-  starsContainer: {
+  infoTitle: { fontSize: 20, fontWeight: '600', color: colors.primaryText, marginTop: 10 },
+  infoSubtitle: { fontSize: 14, color: colors.secondaryText, textAlign: 'center', marginTop: 6 },
+  section: { marginBottom: 24 },
+  label: { fontSize: 16, fontWeight: '600', color: colors.primaryText, marginBottom: 10 },
+  ratingBox: { alignItems: 'center' },
+  starRow: { flexDirection: 'row', marginBottom: 8 },
+  starBtn: { marginHorizontal: 4 },
+  ratingText: { fontSize: 15, color: colors.primaryText, fontWeight: '500' },
+  categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  categoryBtn: {
     flexDirection: 'row',
-    marginBottom: 8,
+    alignItems: 'center',
+    backgroundColor: colors.offWhite,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.offWhite,
   },
-  starContainer: {
-    marginHorizontal: 4,
-  },
-  ratingText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: colors.primaryText,
-  },
+  categoryBtnSelected: { backgroundColor: colors.primaryGreen, borderColor: colors.primaryGreen },
+  categoryLabel: { fontSize: 14, color: colors.primaryText, fontWeight: '500' },
+  categoryLabelSelected: { color: colors.offWhite },
   input: {
     backgroundColor: colors.cardBackground,
     borderRadius: 8,
-    padding: 16,
+    padding: 14,
     fontSize: 16,
     color: colors.primaryText,
     borderWidth: 1,
     borderColor: colors.offWhite,
   },
-  messageInput: {
-    height: 120,
-    textAlignVertical: 'top',
-  },
-  charCount: {
-    fontSize: 12,
-    color: colors.secondaryText,
-    textAlign: 'right',
-    marginTop: 8,
-  },
-  categoriesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  categoryOption: {
-    backgroundColor: colors.offWhite,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  selectedOption: {
+  textarea: { height: 120 },
+  charCount: { fontSize: 12, color: colors.secondaryText, textAlign: 'right', marginTop: 6 },
+  anonymousRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
+  anonymousText: { fontSize: 15, color: colors.primaryText, fontWeight: '500' },
+  submitBtn: {
     backgroundColor: colors.primaryGreen,
-  },
-  categoryText: {
-    fontSize: 14,
-    color: colors.primaryText,
-    fontWeight: '500',
-  },
-  selectedOptionText: {
-    color: colors.offWhite,
-  },
-  anonymousContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  anonymousText: {
-    fontSize: 16,
-    color: colors.primaryText,
-    fontWeight: '500',
-  },
-  submitButton: {
-    backgroundColor: colors.primaryGreen,
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingVertical: 14,
     gap: 8,
     marginBottom: 24,
   },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    color: colors.offWhite,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  thankYouNote: {
-    backgroundColor: colors.cardBackground,
-    borderRadius: 12,
-    padding: 20,
+  submitDisabled: { opacity: 0.6 },
+  submitText: { color: colors.offWhite, fontSize: 16, fontWeight: '600' },
+  thankYou: {
     alignItems: 'center',
-    marginBottom: 20,
+    backgroundColor: colors.cardBackground,
+    borderRadius: 10,
+    padding: 18,
   },
-  thankYouText: {
-    fontSize: 14,
-    color: colors.secondaryText,
-    textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 20,
-  },
+  thankText: { fontSize: 14, color: colors.secondaryText, textAlign: 'center', marginTop: 6 },
 });
 
 export default FeedbackScreen;

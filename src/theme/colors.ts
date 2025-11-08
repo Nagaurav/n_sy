@@ -1,6 +1,9 @@
 export const colors = {
-  primaryGreen: '#2A7F62', // Main action color
+  // Primary colors
+  primary: '#2A7F62', // Main action color (same as primaryGreen for consistency)
+  primaryGreen: '#2A7F62', // Alias for primary
   accentGreen: '#6BAA75',
+  lightGreen: '#E8F5E8', // Light green background (same as lightSage)
   background: '#F7F8FA', // App background
   cardBackground: '#FFFFFF', // Card background
   primaryText: '#1A202C', // Main text
@@ -10,7 +13,6 @@ export const colors = {
   success: '#2ECC40',
   error: '#FF4C4C',
   errorLight: '#FFE8E8', // Light error background
-  lightSage: '#E8F5E8', // Light green background
   border: '#E2E8F0', // Border color
   
   // Additional colors for BookingDetailsScreen
@@ -25,6 +27,7 @@ export const colors = {
   accentYellow: '#FFD93D',
   accentPurple: '#6C5CE7',
   accentBlue: '#74B9FF',
+  lightBlue: '#E3F2FD', // Light blue background
   accentPink: '#FD79A8',
   accentTeal: '#00B894',
   accentIndigo: '#5F27CD',

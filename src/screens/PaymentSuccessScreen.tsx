@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { colors } from '../theme/colors';
 import { phonePePaymentService } from '../services/phonePePaymentService';
 import { PhonePeStatusResponse, PhonePeVerifyResponse } from '../config/api';
+import { ROUTES } from '../navigation/constants';
 
 type PaymentSuccessRouteProp = RouteProp<{
   PaymentSuccess: {
@@ -32,194 +33,166 @@ type PaymentSuccessRouteProp = RouteProp<{
 const PaymentSuccessScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<PaymentSuccessRouteProp>();
+
   const [loading, setLoading] = useState(true);
-  const [verifying, setVerifying] = useState(false);
   const [paymentDetails, setPaymentDetails] = useState<{
     status: PhonePeStatusResponse;
     verified: PhonePeVerifyResponse;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const {
-    merchantTransactionId,
-    pgTransactionId,
-    paymentStatus,
-    amount,
-    currency,
-    userData
-  } = route.params || {};
+  const { merchantTransactionId, pgTransactionId, amount, currency, userData } =
+    route.params || {};
 
-  useEffect(() => {
-    if (merchantTransactionId && pgTransactionId) {
-      verifyPayment();
-    } else {
+  const isMounted = useRef(true);
+
+  const showAlert = (title: string, message: string) => Alert.alert(title, message);
+
+  /** 🔄 Verify payment with backend */
+  const verifyPayment = useCallback(async () => {
+    if (!merchantTransactionId || !pgTransactionId) {
+      setError('Missing payment information.');
       setLoading(false);
-      setError('Missing payment information');
+      return;
     }
-  }, [merchantTransactionId, pgTransactionId]);
 
-  const verifyPayment = async () => {
-    if (!merchantTransactionId || !pgTransactionId) return;
-    
-    setVerifying(true);
+    setLoading(true);
     try {
       const verification = await phonePePaymentService.verifyAndCompletePayment(
         merchantTransactionId,
         pgTransactionId
       );
-      
-      setPaymentDetails(verification);
-      setError(null);
-    } catch (error: any) {
-      console.error('Payment verification error:', error);
-      setError(error.message || 'Payment verification failed');
+      if (isMounted.current) {
+        setPaymentDetails(verification);
+        setError(null);
+      }
+    } catch (err: any) {
+      console.error('Payment verification error:', err);
+      if (isMounted.current) {
+        setError(err.message || 'Payment verification failed.');
+      }
     } finally {
-      setVerifying(false);
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     }
-  };
+  }, [merchantTransactionId, pgTransactionId]);
 
-  const handleViewReceipt = () => {
-    // Navigate to receipt screen or open receipt
-    Alert.alert('Receipt', 'Receipt functionality will be implemented here');
-  };
+  useEffect(() => {
+    verifyPayment();
+    return () => {
+      isMounted.current = false;
+    };
+  }, [verifyPayment]);
 
-  const handleBookAnother = () => {
-    (navigation as any).navigate('YogaSelection');
-  };
-
-  const handleGoHome = () => {
-    (navigation as any).navigate('Home');
-  };
-
-  const handleSupport = () => {
-    (navigation as any).navigate('CustomerSupport');
-  };
+  /** 📄 Action handlers */
+  const handleViewReceipt = () => showAlert('Receipt', 'Receipt functionality coming soon!');
+  const handleGoHome = () => navigation.navigate(ROUTES.HOME as never);
+  const handleBookAnother = () => navigation.navigate(ROUTES.YOGA_SELECTION as never);
+  const handleSupport = () => navigation.navigate(ROUTES.CUSTOMER_SUPPORT as never);
 
   const openPhonePeApp = async () => {
     try {
-      const phonePeUrl = 'phonepe://';
-      const supported = await Linking.canOpenURL(phonePeUrl);
-      
-      if (supported) {
-        await Linking.openURL(phonePeUrl);
-      } else {
-        // Fallback to Play Store
-        const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.phonepe.app';
-        await Linking.openURL(playStoreUrl);
-      }
-    } catch (error) {
-      console.error('Error opening PhonePe app:', error);
-      Alert.alert('Error', 'Unable to open PhonePe app');
+      const appUrl = 'phonepe://';
+      const fallbackUrl =
+        'https://play.google.com/store/apps/details?id=com.phonepe.app';
+
+      const supported = await Linking.canOpenURL(appUrl);
+      await Linking.openURL(supported ? appUrl : fallbackUrl);
+    } catch (err) {
+      console.error('Error opening PhonePe app:', err);
+      showAlert('Error', 'Unable to open PhonePe app.');
     }
   };
 
+  /** 🕒 Loading State */
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.centered}>
         <ActivityIndicator size="large" color={colors.primaryGreen} />
-        <Text style={styles.loadingText}>Loading payment details...</Text>
+        <Text style={styles.loadingText}>Verifying your payment...</Text>
       </View>
     );
   }
 
+  /** ❌ Error State */
   if (error) {
     return (
-      <View style={styles.container}>
-        <View style={styles.errorSection}>
-          <Text style={styles.errorIcon}>❌</Text>
-          <Text style={styles.errorTitle}>Payment Error</Text>
-          <Text style={styles.errorMessage}>{error}</Text>
-          
-          <TouchableOpacity style={styles.retryButton} onPress={verifyPayment}>
-            <Text style={styles.retryButtonText}>🔄 Retry Verification</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.supportButton} onPress={handleSupport}>
-            <Text style={styles.supportButtonText}>📞 Contact Support</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.centered}>
+        <Text style={styles.errorIcon}>❌</Text>
+        <Text style={styles.errorTitle}>Payment Verification Failed</Text>
+        <Text style={styles.errorMessage}>{error}</Text>
+
+        <TouchableOpacity style={styles.retryButton} onPress={verifyPayment}>
+          <Text style={styles.retryText}>🔄 Retry Verification</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.supportButton} onPress={handleSupport}>
+          <Text style={styles.supportText}>📞 Contact Support</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
-  const isSuccess = paymentDetails?.status?.data?.status === 'SUCCESS';
-  const statusColor = phonePePaymentService.getPaymentStatusColor(paymentDetails?.status?.data?.status || 'PENDING');
-  const statusText = phonePePaymentService.getPaymentStatusDisplay(paymentDetails?.status?.data?.status || 'PENDING');
+  /** ✅ Success or Pending State */
+  const status = paymentDetails?.status?.data?.status || 'PENDING';
+  const isSuccess = status === 'SUCCESS';
+  const statusColor = phonePePaymentService.getPaymentStatusColor(status);
+  const statusText = phonePePaymentService.getPaymentStatusDisplay(status);
+  const transactionId = paymentDetails?.status?.data?.transactionId || merchantTransactionId;
 
   return (
     <ScrollView style={styles.container}>
-      {/* Header */}
+      {/* 🎉 Header */}
       <View style={styles.header}>
-        <Text style={styles.headerIcon}>
-          {isSuccess ? '🎉' : '📱'}
-        </Text>
+        <Text style={styles.emoji}>{isSuccess ? '🎉' : '⏳'}</Text>
         <Text style={styles.headerTitle}>
           {isSuccess ? 'Payment Successful!' : 'Payment Processing'}
         </Text>
         <Text style={styles.headerSubtitle}>
-          {isSuccess ? 'Your payment has been completed successfully' : 'We are processing your payment'}
+          {isSuccess
+            ? 'Your payment was completed successfully.'
+            : 'We’re verifying your payment, please wait.'}
         </Text>
       </View>
 
-      {/* Payment Status */}
-      <View style={styles.statusSection}>
-        <View style={[styles.statusCard, { borderColor: statusColor }]}>
-          <Text style={[styles.statusIcon, { color: statusColor }]}>
-            {isSuccess ? '✅' : '⏳'}
+      {/* 💳 Status */}
+      <View style={styles.statusCard}>
+        <Text style={[styles.statusIcon, { color: statusColor }]}>
+          {isSuccess ? '✅' : '⏳'}
+        </Text>
+        <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
+        {amount && (
+          <Text style={styles.amountText}>
+            {phonePePaymentService.formatAmount(amount, currency || 'INR')}
           </Text>
-          <Text style={[styles.statusText, { color: statusColor }]}>
-            {statusText}
-          </Text>
-          
-          {amount && (
-            <Text style={styles.amountText}>
-              {phonePePaymentService.formatAmount(amount, currency || 'INR')}
-            </Text>
-          )}
-        </View>
+        )}
       </View>
 
-      {/* Payment Details */}
+      {/* 📋 Payment Details */}
       {paymentDetails && (
-        <View style={styles.detailsSection}>
-          <Text style={styles.sectionTitle}>📋 Payment Details</Text>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Transaction ID:</Text>
-            <Text style={styles.detailValue}>
-              {paymentDetails?.status?.data?.transactionId || 'N/A'}
-            </Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Status:</Text>
-            <Text style={styles.detailValue}>
-              {paymentDetails?.status?.data?.status || 'N/A'}
-            </Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Message:</Text>
-            <Text style={styles.detailValue}>
-              {paymentDetails?.status?.data?.message || 'N/A'}
-            </Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Date & Time:</Text>
-            <Text style={styles.detailValue}>
-              {new Date().toLocaleString('en-IN')}
-            </Text>
-          </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Payment Details</Text>
+          {[
+            { label: 'Transaction ID', value: transactionId || 'N/A' },
+            { label: 'Status', value: statusText },
+            { label: 'Message', value: paymentDetails.status?.data?.message || 'N/A' },
+            {
+              label: 'Date & Time',
+              value:
+                paymentDetails.status?.data?.transactionDate ||
+                new Date().toLocaleString('en-IN'),
+            },
+          ].map(({ label, value }) => (
+            <View style={styles.detailRow} key={label}>
+              <Text style={styles.detailLabel}>{label}</Text>
+              <Text style={styles.detailValue}>{String(value)}</Text>
+            </View>
+          ))}
         </View>
       )}
 
-      {/* User Information */}
+      {/* 👤 User Details */}
       {userData && (
-        <View style={styles.userSection}>
-          <Text style={styles.sectionTitle}>👤 User Information</Text>
-          
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>User Information</Text>
           <View style={styles.userCard}>
             <Text style={styles.userName}>{userData.user_name}</Text>
             <Text style={styles.userEmail}>{userData.user_email}</Text>
@@ -228,60 +201,38 @@ const PaymentSuccessScreen: React.FC = () => {
         </View>
       )}
 
-      {/* Action Buttons */}
-      <View style={styles.actionSection}>
+      {/* 🧭 Actions */}
+      <View style={styles.actionContainer}>
         {isSuccess && (
           <TouchableOpacity style={styles.primaryButton} onPress={handleViewReceipt}>
-            <Text style={styles.primaryButtonText}>📄 View Receipt</Text>
+            <Text style={styles.primaryText}>📄 View Receipt</Text>
           </TouchableOpacity>
         )}
-        
         <TouchableOpacity style={styles.secondaryButton} onPress={handleBookAnother}>
-          <Text style={styles.secondaryButtonText}>📚 Book Another Session</Text>
+          <Text style={styles.secondaryText}>📚 Book Another Session</Text>
         </TouchableOpacity>
-        
         <TouchableOpacity style={styles.tertiaryButton} onPress={handleGoHome}>
-          <Text style={styles.tertiaryButtonText}>🏠 Go to Home</Text>
+          <Text style={styles.tertiaryText}>🏠 Go Home</Text>
         </TouchableOpacity>
-        
         <TouchableOpacity style={styles.phonePeButton} onPress={openPhonePeApp}>
-          <Text style={styles.phonePeButtonText}>📱 Open PhonePe App</Text>
+          <Text style={styles.phonePeText}>📱 Open in PhonePe</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Additional Information */}
-      <View style={styles.infoSection}>
-        <Text style={styles.infoTitle}>ℹ️ What's Next?</Text>
-        
+      {/* ℹ️ Info */}
+      <View style={styles.infoCard}>
+        <Text style={styles.infoTitle}>What’s Next?</Text>
         {isSuccess ? (
           <>
-            <Text style={styles.infoText}>
-              • Your payment has been confirmed
-            </Text>
-            <Text style={styles.infoText}>
-              • You will receive a confirmation email
-            </Text>
-            <Text style={styles.infoText}>
-              • Your booking is now active
-            </Text>
-            <Text style={styles.infoText}>
-              • Check your email for session details
-            </Text>
+            <Text style={styles.infoText}>• Your booking is now confirmed</Text>
+            <Text style={styles.infoText}>• A confirmation email has been sent</Text>
+            <Text style={styles.infoText}>• You can now view your appointment</Text>
           </>
         ) : (
           <>
-            <Text style={styles.infoText}>
-              • Payment is being processed
-            </Text>
-            <Text style={styles.infoText}>
-              • You will receive updates via email
-            </Text>
-            <Text style={styles.infoText}>
-              • Check your PhonePe app for status
-            </Text>
-            <Text style={styles.infoText}>
-              • Contact support if you have questions
-            </Text>
+            <Text style={styles.infoText}>• Payment is being processed</Text>
+            <Text style={styles.infoText}>• Check PhonePe app for confirmation</Text>
+            <Text style={styles.infoText}>• Contact support if delayed</Text>
           </>
         )}
       </View>
@@ -290,266 +241,55 @@ const PaymentSuccessScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: colors.secondaryText,
-    marginTop: 16,
-  },
-  header: {
-    backgroundColor: colors.white,
-    padding: 24,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.lightGray,
-  },
-  headerIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.primaryText,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: colors.secondaryText,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  statusSection: {
-    padding: 20,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  loadingText: { marginTop: 12, fontSize: 15, color: colors.secondaryText },
+  header: { alignItems: 'center', padding: 28, borderBottomWidth: 1, borderColor: colors.border },
+  emoji: { fontSize: 48, marginBottom: 12 },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: colors.primaryText, marginBottom: 6 },
+  headerSubtitle: { fontSize: 15, color: colors.secondaryText, textAlign: 'center' },
   statusCard: {
-    backgroundColor: colors.white,
-    padding: 24,
-    borderRadius: 16,
-    alignItems: 'center',
-    borderWidth: 2,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  statusIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  statusText: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  amountText: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: colors.primaryGreen,
-  },
-  detailsSection: {
-    backgroundColor: colors.white,
     margin: 20,
-    borderRadius: 16,
+    backgroundColor: colors.white,
+    borderRadius: 14,
     padding: 20,
+    alignItems: 'center',
     shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.primaryText,
-    marginBottom: 16,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.lightGray,
-  },
-  detailLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.secondaryText,
-    flex: 1,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primaryText,
-    flex: 2,
-    textAlign: 'right',
-    fontFamily: 'monospace',
-  },
-  userSection: {
-    backgroundColor: colors.white,
-    margin: 20,
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  userCard: {
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: colors.lightGray,
-    borderRadius: 12,
-  },
-  userName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.primaryText,
-    marginBottom: 4,
-  },
-  userEmail: {
-    fontSize: 14,
-    color: colors.secondaryText,
-    marginBottom: 4,
-  },
-  userId: {
-    fontSize: 12,
-    color: colors.secondaryText,
-    fontFamily: 'monospace',
-  },
-  actionSection: {
-    padding: 20,
-    gap: 12,
-  },
-  primaryButton: {
-    backgroundColor: colors.primaryGreen,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    backgroundColor: colors.primaryBlue,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  secondaryButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  tertiaryButton: {
-    backgroundColor: colors.secondaryText,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  tertiaryButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  phonePeButton: {
-    backgroundColor: '#5F259F',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  phonePeButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  infoSection: {
-    backgroundColor: colors.white,
-    margin: 20,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 40,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.primaryText,
-    marginBottom: 12,
-  },
-  infoText: {
-    fontSize: 14,
-    color: colors.secondaryText,
-    marginBottom: 8,
-    lineHeight: 20,
-  },
-  errorSection: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  errorTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.primaryRed || '#F44336',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  errorMessage: {
-    fontSize: 16,
-    color: colors.secondaryText,
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
-  },
-  retryButton: {
-    backgroundColor: colors.primaryBlue,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  retryButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  supportButton: {
-    backgroundColor: colors.primaryRed || '#F44336',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  supportButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  statusIcon: { fontSize: 48 },
+  statusText: { fontSize: 20, fontWeight: '700', marginTop: 8 },
+  amountText: { fontSize: 26, fontWeight: '800', color: colors.primaryGreen, marginTop: 8 },
+  section: { marginHorizontal: 20, marginVertical: 10, backgroundColor: colors.white, borderRadius: 12, padding: 16, elevation: 2 },
+  sectionTitle: { fontSize: 18, fontWeight: '600', color: colors.primaryText, marginBottom: 12 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderColor: colors.border, paddingVertical: 8 },
+  detailLabel: { color: colors.secondaryText, fontSize: 14 },
+  detailValue: { color: colors.primaryText, fontSize: 14, fontWeight: '600', textAlign: 'right' },
+  userCard: { alignItems: 'center', padding: 14, backgroundColor: colors.lightGray, borderRadius: 10 },
+  userName: { fontSize: 18, fontWeight: '600' },
+  userEmail: { fontSize: 14, color: colors.secondaryText },
+  userId: { fontSize: 12, color: colors.secondaryText },
+  actionContainer: { padding: 20, gap: 10 },
+  primaryButton: { backgroundColor: colors.primaryGreen, borderRadius: 12, padding: 14, alignItems: 'center' },
+  primaryText: { color: colors.white, fontWeight: '600', fontSize: 16 },
+  secondaryButton: { backgroundColor: colors.primaryBlue, borderRadius: 12, padding: 14, alignItems: 'center' },
+  secondaryText: { color: colors.white, fontWeight: '600', fontSize: 16 },
+  tertiaryButton: { backgroundColor: colors.secondaryText, borderRadius: 12, padding: 14, alignItems: 'center' },
+  tertiaryText: { color: colors.white, fontWeight: '600', fontSize: 16 },
+  phonePeButton: { backgroundColor: '#5F259F', borderRadius: 12, padding: 14, alignItems: 'center' },
+  phonePeText: { color: colors.white, fontWeight: '600', fontSize: 16 },
+  infoCard: { backgroundColor: colors.white, margin: 20, borderRadius: 12, padding: 16 },
+  infoTitle: { fontWeight: '600', fontSize: 16, color: colors.primaryText, marginBottom: 10 },
+  infoText: { fontSize: 14, color: colors.secondaryText, marginBottom: 4 },
+  errorIcon: { fontSize: 64 },
+  errorTitle: { fontSize: 22, fontWeight: '700', marginBottom: 8, color: colors.error },
+  errorMessage: { textAlign: 'center', color: colors.secondaryText, marginBottom: 16 },
+  retryButton: { backgroundColor: colors.primaryBlue, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8, marginBottom: 10 },
+  retryText: { color: colors.white, fontWeight: '600' },
+  supportButton: { backgroundColor: colors.error, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
+  supportText: { color: colors.white, fontWeight: '600' },
 });
 
 export default PaymentSuccessScreen;

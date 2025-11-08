@@ -1,4 +1,3 @@
-// DateSelectionScreen.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -12,11 +11,16 @@ import {
   Alert,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation, useRoute, NavigationProp } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { colors } from '../theme/colors';
 import { ROUTES } from '../navigation/constants';
 import { professionalService } from '../services';
+import type { RootStackParamList } from '../navigation/constants';
+
+// ✅ Type-safe navigation
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 interface DateOption {
   id: string;
@@ -25,8 +29,17 @@ interface DateOption {
   isAvailable: boolean;
 }
 
+interface SlotAvailabilityResponse {
+  success: boolean;
+  data?: {
+    date: string;
+    slots: { time: string; isAvailable: boolean }[];
+  }[];
+  message?: string;
+}
+
 const DateSelectionScreen: React.FC = () => {
-  const navigation = useNavigation<NavigationProp<any>>();
+  const navigation = useNavigation<NavigationProp>();
   const route = useRoute();
   const { mode, location, professionalId } = route.params as {
     mode: 'online' | 'offline';
@@ -39,106 +52,97 @@ const DateSelectionScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /** 🧠 Utility: Format readable date labels */
+  const formatDateLabel = useCallback((date: Date): string => {
+    const today = new Date();
+    const tomorrow = new Date();
+    tomorrow.setDate(today.getDate() + 1);
+
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+  }, []);
+
+  /** 🧠 Fallback generator for mock data */
+  const generateDefaultDates = useCallback((): DateOption[] => {
+    const today = new Date();
+    return Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      return {
+        id: d.toISOString().split('T')[0],
+        label: formatDateLabel(d),
+        date: d,
+        isAvailable: i > 0,
+      };
+    });
+  }, [formatDateLabel]);
+
+  /** 🧠 Fetch date availability */
   const fetchAvailableDates = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
     if (!professionalId) {
-      generateDefaultDates();
+      setAvailableDates(generateDefaultDates());
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setError(null);
-    
     try {
-      // Fetch available slots from the real backend API
-      const response = await professionalService.checkSlotAvailability(professionalId);
-      
+      const response: SlotAvailabilityResponse = await professionalService.checkSlotAvailability(professionalId);
+
       if (response.success && response.data) {
-        // Transform API response to date options
-        const dateMap = new Map<string, DateOption>();
-        
-        response.data.forEach(({ date, slots }) => {
+        const dateOptions: DateOption[] = response.data.map(({ date, slots }) => {
           const dateObj = new Date(date);
-          const hasAvailableSlots = slots.some(slot => slot.isAvailable);
-          
-          dateMap.set(date, {
+          const hasAvailableSlots = slots.some((s) => s.isAvailable);
+          return {
             id: date,
             label: formatDateLabel(dateObj),
             date: dateObj,
-            isAvailable: hasAvailableSlots
-          });
+            isAvailable: hasAvailableSlots,
+          };
         });
-        
-        const dates = Array.from(dateMap.values());
-        setAvailableDates(dates);
-        
-        // If no dates with available slots, show a message
-        if (dates.length === 0 || !dates.some(d => d.isAvailable)) {
-          setError('No available time slots found for the selected professional.');
+
+        if (dateOptions.length === 0 || !dateOptions.some((d) => d.isAvailable)) {
+          setError('No available slots found for this professional.');
         }
+
+        setAvailableDates(dateOptions);
       } else {
-        // Fallback to generated dates if API call fails
-        console.warn('No data from API, falling back to default dates');
-        generateDefaultDates();
+        console.warn('API returned no data, using fallback.');
+        setAvailableDates(generateDefaultDates());
       }
-    } catch (error) {
-      console.error('Error fetching available dates:', error);
-      setError('Failed to load available dates. Please try again.');
-      generateDefaultDates();
+    } catch (err: any) {
+      console.error('Error fetching available dates:', err);
+      setError('Unable to fetch available dates. Please try again.');
+      setAvailableDates(generateDefaultDates());
     } finally {
       setLoading(false);
     }
-  }, [professionalId]);
-
-  const generateDefaultDates = () => {
-    const dates: DateOption[] = [];
-    const today = new Date();
-    
-    for (let i = 0; i < 14; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      
-      dates.push({
-        id: date.toISOString().split('T')[0],
-        label: formatDateLabel(date),
-        date: date,
-        isAvailable: i > 0, // Today is not available, future dates are
-      });
-    }
-    
-    setAvailableDates(dates);
-  };
-
-  const formatDateLabel = (date: Date): string => {
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-    
-    if (date.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (date.toDateString() === tomorrow.toDateString()) {
-      return 'Tomorrow';
-    } else {
-      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-      return `${dayNames[date.getDay()]}, ${monthNames[date.getMonth()]} ${date.getDate()}`;
-    }
-  };
+  }, [professionalId, formatDateLabel, generateDefaultDates]);
 
   useEffect(() => {
     fetchAvailableDates();
   }, [fetchAvailableDates]);
 
-  const handleDateSelect = (dateOption: DateOption) => {
-    if (!dateOption.isAvailable) {
-      Alert.alert('Date Not Available', 'This date is not available for booking.');
+  /** 🧠 Handlers */
+  const handleDateSelect = (item: DateOption) => {
+    if (!item.isAvailable) {
+      Alert.alert('Date Unavailable', 'Please choose another date.');
       return;
     }
-    setSelectedDate(dateOption);
+    setSelectedDate(item);
   };
 
   const handleContinue = () => {
     if (!selectedDate) {
-      Alert.alert('Select Date', 'Please select a date to continue.');
+      Alert.alert('Select a Date', 'Please choose a date to proceed.');
       return;
     }
 
@@ -150,46 +154,52 @@ const DateSelectionScreen: React.FC = () => {
     });
   };
 
-  const renderDateItem = ({ item }: { item: DateOption }) => (
-    <TouchableOpacity
-      style={[
-        styles.dateCard,
-        selectedDate?.id === item.id && styles.selectedDateCard,
-        !item.isAvailable && styles.unavailableDateCard,
-      ]}
-      onPress={() => handleDateSelect(item)}
-      disabled={!item.isAvailable}
-    >
-      <Text style={[
-        styles.dateLabel,
-        selectedDate?.id === item.id && styles.selectedDateLabel,
-        !item.isAvailable && styles.unavailableDateLabel,
-      ]}>
-        {item.label}
-      </Text>
-      {selectedDate?.id === item.id && (
-        <MaterialCommunityIcons name="check" size={20} color={colors.offWhite} />
-      )}
-    </TouchableOpacity>
-  );
+  /** 🧠 Render Date Item */
+  const renderDateItem = ({ item }: { item: DateOption }) => {
+    const isSelected = selectedDate?.id === item.id;
+    const isUnavailable = !item.isAvailable;
+    return (
+      <TouchableOpacity
+        style={[
+          styles.dateCard,
+          isSelected && styles.selectedCard,
+          isUnavailable && styles.unavailableCard,
+        ]}
+        onPress={() => handleDateSelect(item)}
+        disabled={isUnavailable}
+      >
+        <Text
+          style={[
+            styles.dateText,
+            isSelected && styles.selectedDateText,
+            isUnavailable && styles.unavailableDateText,
+          ]}
+        >
+          {item.label}
+        </Text>
+        {isSelected && (
+          <MaterialCommunityIcons name="check" size={20} color={colors.offWhite} />
+        )}
+      </TouchableOpacity>
+    );
+  };
 
+  /** 🧠 Loader & Error States */
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <MaterialCommunityIcons name="arrow-left" size={24} color={colors.primaryText} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Select Date</Text>
-          <View style={styles.placeholder} />
+          <View style={{ width: 40 }} />
         </View>
-        <View style={styles.loadingContainer}>
+
+        <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={colors.primaryGreen} />
-          <Text style={styles.loadingText}>Loading available dates...</Text>
+          <Text style={styles.loadingText}>Fetching available dates...</Text>
         </View>
       </SafeAreaView>
     );
@@ -198,30 +208,24 @@ const DateSelectionScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={colors.primaryText} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Select Date</Text>
-        <View style={styles.placeholder} />
+        <View style={{ width: 40 }} />
       </View>
 
       {/* Content */}
-      <View style={styles.content}>
+      <View style={styles.intro}>
         <MaterialCommunityIcons name="calendar" size={60} color={colors.primaryGreen} />
         <Text style={styles.title}>Choose Your Date</Text>
         <Text style={styles.subtitle}>
-          Select a date for your {mode} consultation
+          Select a date for your {mode.toUpperCase()} consultation
         </Text>
-        
-        {error && (
-          <Text style={styles.errorText}>{error}</Text>
-        )}
+        {error && <Text style={styles.errorText}>{error}</Text>}
       </View>
 
       {/* Date List */}
@@ -229,95 +233,50 @@ const DateSelectionScreen: React.FC = () => {
         data={availableDates}
         renderItem={renderDateItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.dateList}
+        contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
       />
 
-      {/* Action Button */}
-      <View style={styles.bottomAction}>
+      {/* Continue Button */}
+      <View style={styles.footer}>
         <TouchableOpacity
-          style={[
-            styles.button,
-            !selectedDate && styles.buttonDisabled,
-          ]}
+          style={[styles.continueButton, !selectedDate && styles.disabledButton]}
           onPress={handleContinue}
           disabled={!selectedDate}
         >
-          <Text style={styles.buttonText}>Continue to Time Selection</Text>
+          <Text style={styles.continueText}>Continue to Time Selection</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 };
 
+// 💅 Styles
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: colors.primaryText,
-  },
-  placeholder: {
-    width: 40,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: colors.secondaryText,
-  },
-  content: {
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700' as const,
-    color: colors.primaryText,
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: colors.secondaryText,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  errorText: {
-    fontSize: 14,
-    color: colors.error,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  dateList: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
+  backButton: { padding: 8 },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: colors.primaryText },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { marginTop: 10, fontSize: 15, color: colors.secondaryText },
+  intro: { alignItems: 'center', paddingHorizontal: 40, marginVertical: 20 },
+  title: { fontSize: 22, fontWeight: '700', color: colors.primaryText, marginTop: 12 },
+  subtitle: { fontSize: 15, color: colors.secondaryText, textAlign: 'center', marginTop: 6 },
+  errorText: { color: colors.error, fontSize: 14, marginTop: 10, textAlign: 'center' },
+  listContainer: { paddingHorizontal: 20, paddingBottom: 20 },
   dateCard: {
     backgroundColor: colors.offWhite,
     borderRadius: 12,
-    padding: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
@@ -325,45 +284,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  selectedDateCard: {
-    backgroundColor: colors.primaryGreen,
-    borderColor: colors.primaryGreen,
-  },
-  unavailableDateCard: {
-    backgroundColor: colors.background,
-    borderColor: colors.border,
-    opacity: 0.6,
-  },
-  dateLabel: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: colors.primaryText,
-  },
-  selectedDateLabel: {
-    color: colors.offWhite,
-  },
-  unavailableDateLabel: {
-    color: colors.secondaryText,
-  },
-  bottomAction: {
+  selectedCard: { backgroundColor: colors.primaryGreen, borderColor: colors.primaryGreen },
+  unavailableCard: { opacity: 0.6, backgroundColor: colors.background },
+  dateText: { fontSize: 16, fontWeight: '600', color: colors.primaryText },
+  selectedDateText: { color: colors.offWhite },
+  unavailableDateText: { color: colors.secondaryText },
+  footer: {
     padding: 20,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  button: {
+  continueButton: {
     backgroundColor: colors.primaryGreen,
     borderRadius: 12,
-    paddingVertical: 16,
     alignItems: 'center',
+    paddingVertical: 14,
   },
-  buttonDisabled: {
-    backgroundColor: colors.border,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: colors.offWhite,
-  },
+  continueText: { color: colors.offWhite, fontSize: 16, fontWeight: '600' },
+  disabledButton: { backgroundColor: colors.border },
 });
 
 export default DateSelectionScreen;

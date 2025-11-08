@@ -11,24 +11,53 @@ export type MainTabParamList = {
 };
 
 export type RootStackParamList = {
+  // ───────────────────────────────
   // Auth Flow
+  // ───────────────────────────────
   [ROUTES.SPLASH]: undefined;
   [ROUTES.AUTH]: undefined;
-  
+
+  // ───────────────────────────────
   // Main Tabs
+  // ───────────────────────────────
   [ROUTES.HOME]: undefined;
-  [ROUTES.MY_APPOINTMENTS]: undefined;
+  [ROUTES.MY_APPOINTMENTS]: {
+    refresh?: boolean;
+    tab?: 'upcoming' | 'past';
+  };
   [ROUTES.HEALTH_RECORDS]: undefined;
   [ROUTES.PROFILE]: undefined;
-  
-  // Professional Flow
-  // Main Stack Navigator
+
+  // ───────────────────────────────
+  // Navigators
+  // ───────────────────────────────
   Main: undefined;
   Auth: undefined;
-  
-  // Tab Navigator
   MainTabs: undefined;
-  
+
+  // ───────────────────────────────
+  // Booking Details
+  // ───────────────────────────────
+  [ROUTES.BOOKING_DETAILS]: {
+    bookingId: string;
+    professional: {
+      id: string;
+      name: string;
+      title: string;
+      avatar_url?: string;
+    };
+    date: string;
+    time: string;
+    duration: number;
+    mode: 'online' | 'offline' | 'home_visit';
+    amount: number;
+    status: 'confirmed' | 'cancelled' | 'completed' | 'pending';
+    paymentStatus: 'paid' | 'pending' | 'failed' | 'refunded';
+  };
+
+  // ───────────────────────────────
+  // Professional Profile Screen
+  // ───────────────────────────────
   [ROUTES.PROFESSIONAL_PROFILE]: {
     professionalId?: string;
     professional?: Professional;
@@ -42,41 +71,40 @@ export type RootStackParamList = {
     categoryName?: string;
     categoryIcon?: string;
     categoryColor?: string;
-  };
-  
-  // Booking Flow
-  [ROUTES.APPOINTMENT_CONFIRMATION]: {
-    bookingId: string;
-    professional: {
-      id: string;
-      name: string;
-      title: string;
+    bookingData?: {
+      date: string;
+      time: string;
+      duration: number;
     };
-    date: string;
-    time: string;
-    duration: number;
-    mode: 'online' | 'offline' | 'home_visit';
-    amount: number;
   };
 
+  // ───────────────────────────────
+  // Book Consultation Flow
+  // ───────────────────────────────
   [ROUTES.BOOK_CONSULTATION]: {
-    professional: {
-      id: string;
-      name: string;
-      title: string;
+    professional: Professional;
+    selectedTime?: string;
+    slot?: any;
+    mode?: 'online' | 'offline' | 'home_visit';
+    location?: {
+      city?: string;
+      latitude?: number;
+      longitude?: number;
+    };
+    bookingData?: {
+      startTime: string;
+      endTime: string;
+      mode: string;
+      location?: any;
+      professional: Professional;
+      serviceType: string;
       price: number;
     };
-    mode: 'online' | 'offline' | 'home_visit';
-    location?: {
-      city: string;
-      latitude: number;
-      longitude: number;
-    };
   };
-  
+
   [ROUTES.BOOKING_CONFIRMATION]: {
-    instructor?: any; // TODO: Replace with proper type
-    professional?: any; // TODO: Replace with proper type
+    instructor?: any;
+    professional?: any;
     selectedDate?: string;
     selectedTime?: string;
     mode: 'online' | 'offline' | 'home_visit';
@@ -92,7 +120,7 @@ export type RootStackParamList = {
       longitude: number;
     };
   };
-  
+
   [ROUTES.PAYMENT]: {
     amount: number;
     bookingDetails: {
@@ -116,14 +144,14 @@ export type RootStackParamList = {
     };
     paymentUrl?: string;
   };
-  
+
   [ROUTES.BOOKING_SUCCESS]: {
     category?: string;
     categoryName?: string;
     categoryIcon?: string;
     categoryColor?: string;
-    professional?: any; // TODO: Replace with proper type
-    instructor?: any; // TODO: Replace with proper type
+    professional?: any;
+    instructor?: any;
     bookingDetails?: {
       bookingId?: string;
       selectedDate?: string;
@@ -139,8 +167,24 @@ export type RootStackParamList = {
       transactionId: string;
     };
   };
-  
+
+  [ROUTES.APPOINTMENT_CONFIRMATION]: {
+    bookingId: string;
+    professional: {
+      id: string;
+      name: string;
+      title: string;
+    };
+    date: string;
+    time: string;
+    duration: number;
+    mode: 'online' | 'offline' | 'home_visit';
+    amount: number;
+  };
+
+  // ───────────────────────────────
   // Session Management
+  // ───────────────────────────────
   [ROUTES.JOIN_SESSION]: {
     sessionTime: string;
     mode: 'chat' | 'audio' | 'video';
@@ -154,41 +198,19 @@ export type RootStackParamList = {
     meetingLink?: string;
     chatRoomId?: string;
   };
-  
-  // Category Selection
+
+  // ───────────────────────────────
+  // Category Flow
+  // ───────────────────────────────
   [ROUTES.CATEGORY_SELECTION]: undefined;
-  
+
   [ROUTES.CATEGORY_MODE_SELECTION]: {
     category: string;
     categoryName: string;
     categoryIcon: string;
     categoryColor: string;
   };
-  
-  // Yoga Flow
-  [ROUTES.YOGA_SELECTION]: {
-    mode: 'online' | 'offline' | 'home_visit';
-    location?: {
-      city: string;
-      latitude: number;
-      longitude: number;
-    };
-  };
-  
-  [ROUTES.CONSULTATION_BOOKING]: {
-    professional: any; // TODO: Replace with proper type
-  };
-  
-  [ROUTES.DATE_SELECTION]: {
-    professional: any; // TODO: Replace with proper type
-  };
-  
-  [ROUTES.TIME_SELECTION]: {
-    professional: any; // TODO: Replace with proper type
-    selectedDate: string;
-  };
-  
-  // Professional Listing
+
   [ROUTES.PROFESSIONAL_LISTING]: {
     category: string;
     mode: 'online' | 'offline' | 'home_visit';
@@ -199,16 +221,48 @@ export type RootStackParamList = {
     };
     serviceType?: 'classes' | 'consultation';
   };
-  
+
+  // ───────────────────────────────
+  // Yoga Flow
+  // ───────────────────────────────
+  [ROUTES.YOGA_SELECTION]: {
+    mode: 'online' | 'offline' | 'home_visit';
+    location?: {
+      city: string;
+      latitude: number;
+      longitude: number;
+    };
+  };
+
+  // ───────────────────────────────
+  // Miscellaneous
+  // ───────────────────────────────
+  [ROUTES.CONSULTATION_BOOKING]: {
+    professional: any;
+  };
+
+  [ROUTES.DATE_SELECTION]: {
+    professional: any;
+  };
+
+  [ROUTES.TIME_SELECTION]: {
+    professional: any;
+    selectedDate: string;
+  };
+
+  // ───────────────────────────────
   // Support & Help
+  // ───────────────────────────────
   [ROUTES.FAQ_SCREEN]: undefined;
   [ROUTES.CUSTOMER_SUPPORT]: undefined;
   [ROUTES.FEEDBACK_SCREEN]: {
     appointmentId?: string;
     professionalId?: string;
   };
-  
+
+  // ───────────────────────────────
   // Articles
+  // ───────────────────────────────
   [ROUTES.ARTICLE]: undefined;
   [ROUTES.ARTICLE_DETAIL]: {
     articleId: number;
@@ -219,7 +273,9 @@ export type RootStackParamList = {
   };
 };
 
-// This allows us to use the navigation prop with proper type checking
+// ───────────────────────────────
+// Global Declaration for Navigation Types
+// ───────────────────────────────
 declare global {
   namespace ReactNavigation {
     interface RootParamList extends RootStackParamList {}

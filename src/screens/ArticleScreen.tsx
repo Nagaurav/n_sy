@@ -1,5 +1,4 @@
-// ArticleScreen.tsx
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,59 +7,49 @@ import {
   RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
-import { useNavigation, NavigationProp } from '@react-navigation/native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useTypedNavigation } from '../hooks/useTypedNavigation';
 
 import { ScreenContainer } from '../components/common/ScreenContainer';
 import ArticleCard from '../components/ArticleCard';
-import articleService, { Article, ArticleFilters } from '../services/articleService';
+import { articleService, Article, ArticleFilters } from '../services/articleService';
 import { ROUTES } from '../navigation/constants';
 import { colors } from '../theme/colors';
 
 const ArticleScreen: React.FC = () => {
-  const navigation = useNavigation<NavigationProp<any>>();
+  const navigation = useTypedNavigation();
+
   const [articles, setArticles] = useState<Article[]>([]);
-  const [allArticles, setAllArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /** ✅ Fetch all articles (API only, no mock data) */
   const fetchArticles = useCallback(async (isRefresh = false) => {
     try {
-      setLoading(true);
+      if (!isRefresh) setLoading(true);
       setError(null);
 
-      const filters: ArticleFilters = {
-        // Show all articles for now, including drafts
-        // status: 'published', // Only show published articles
-      };
-
+      const filters: ArticleFilters = { status: 'published' };
       const response = await articleService.getArticles(filters);
-      
-      if (isRefresh) {
-        setRefreshing(false);
+
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to load articles.');
       }
-      
-      setAllArticles(response.data);
+
       setArticles(response.data);
-      setLoading(false);
     } catch (err) {
       console.error('Error fetching articles:', err);
       setError('Failed to load articles. Please try again.');
+    } finally {
       setLoading(false);
-      if (isRefresh) {
-        setRefreshing(false);
-      }
+      setRefreshing(false);
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchArticles();
-    }, [fetchArticles])
-  );
+  useEffect(() => {
+    fetchArticles();
+  }, [fetchArticles]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -72,16 +61,13 @@ const ArticleScreen: React.FC = () => {
   };
 
   const renderArticle = ({ item }: { item: Article }) => (
-    <ArticleCard
-      article={item}
-      onPress={() => handleArticlePress(item)}
-    />
+    <ArticleCard article={item} onPress={() => handleArticlePress(item)} />
   );
 
   if (loading && !refreshing) {
     return (
       <ScreenContainer>
-        <View style={styles.loadingContainer}>
+        <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={colors.primaryGreen} />
           <Text style={styles.loadingText}>Loading articles...</Text>
         </View>
@@ -92,7 +78,7 @@ const ArticleScreen: React.FC = () => {
   if (error && !loading) {
     return (
       <ScreenContainer>
-        <View style={styles.errorContainer}>
+        <View style={styles.centerContainer}>
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => fetchArticles()}>
             <Text style={styles.retryButtonText}>Retry</Text>
@@ -106,24 +92,22 @@ const ArticleScreen: React.FC = () => {
     <ScreenContainer>
       <View style={styles.header}>
         <Text style={styles.title}>Articles</Text>
-        <Text style={styles.subtitle}>Discover articles and insights</Text>
+        <Text style={styles.subtitle}>Discover the latest wellness insights</Text>
       </View>
 
       <FlatList
         data={articles}
         renderItem={renderArticle}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           !loading && !error ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyTitle}>No Articles Found</Text>
               <Text style={styles.emptySubtitle}>
-                Check back later for new articles and insights.
+                Check back later for new health and wellness articles.
               </Text>
             </View>
           ) : null
@@ -154,7 +138,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 24,
   },
-  loadingContainer: {
+  centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -165,19 +149,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.secondaryText,
   },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-    backgroundColor: colors.background,
-  },
   errorText: {
     fontSize: 16,
     color: colors.error,
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 24,
+    marginBottom: 20,
   },
   retryButton: {
     backgroundColor: colors.primaryGreen,

@@ -1,4 +1,3 @@
-// HealthRecordsScreen.tsx
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
@@ -14,27 +13,26 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../theme/colors';
-import { typography } from '../theme/typography';
-import { useNavigation } from '@react-navigation/native';
+import { useTypedNavigation } from '../hooks/useTypedNavigation';
 import { bookingService } from '../services';
 
 type Prescription = {
   id: string;
-  date: string; // ISO
+  date: string;
   doctorName: string;
-  fileUrl?: string; // downloadable PDF or image
+  fileUrl?: string;
 };
 
 type DietChart = {
   id: string;
-  date: string; // ISO
+  date: string;
   nutritionistName: string;
   fileUrl?: string;
 };
 
 type SessionHistoryItem = {
   id: string;
-  date: string;   // ISO
+  date: string;
   professionalName: string;
   serviceName: string;
   mode: string;
@@ -51,121 +49,62 @@ type SectionData = {
 };
 
 const HealthRecordsScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useTypedNavigation();
 
   const [records, setRecords] = useState<SectionData[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /** Fetch Health Records */
   const fetchHealthRecords = useCallback(async () => {
     setLoading(true);
     setError(null);
+
     try {
-      // Mock data for prescriptions and diet charts since no specific APIs exist
-      const mockPrescriptions = [
-        {
-          id: '1',
-          date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-          doctorName: 'Dr. Ananya Sharma',
-          fileUrl: 'https://example.com/prescription1.pdf',
-        },
-        {
-          id: '2',
-          date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-          doctorName: 'Dr. Rajesh Kumar',
-          fileUrl: 'https://example.com/prescription2.pdf',
-        },
-      ];
-
-      const mockDietCharts = [
-        {
-          id: '1',
-          date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-          nutritionistName: 'Priya Patel',
-          fileUrl: 'https://example.com/dietchart1.pdf',
-        },
-      ];
-
-      // Fetch real session history from booking API
+      const userId = 'user_123'; // TODO: Replace with actual user context or auth
       let sessionHistory: SessionHistoryItem[] = [];
-      try {
-        const userId = 'user_123'; // Replace with actual user ID from context
-        const bookingsResponse = await bookingService.getUserBookings(userId);
-        
-        if (bookingsResponse.success && bookingsResponse.data) {
-          // Transform bookings to session history format
-          sessionHistory = bookingsResponse.data.map((booking: any) => ({
-            id: booking.booking_id || booking.id,
-            date: booking.date || booking.booking_date,
-            professionalName: booking.professional_name || 'Professional',
-            serviceName: booking.service_name || 'Consultation',
-            mode: booking.mode || 'Online',
-            duration: booking.duration || 60,
-            notes: booking.notes || 'Session completed successfully',
-            status: booking.booking_status?.toLowerCase() || 'completed',
-            amount: booking.amount || 0,
-          }));
-        }
-      } catch (bookingError) {
-        console.error('Error fetching session history:', bookingError);
-        // Fallback to mock session data
-        sessionHistory = [
-          {
-            id: '1',
-            date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-            professionalName: 'Dr. Kavita',
-            serviceName: 'Yoga Therapy',
-            mode: 'Video Call',
-            duration: 60,
-            notes: 'Focus on stress management and breathing techniques',
-            status: 'completed',
-            amount: 800,
-          },
-          {
-            id: '2',
-            date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-            professionalName: 'Anil Kumar',
-            serviceName: 'Meditation Session',
-            mode: 'Video Call',
-            duration: 45,
-            notes: 'Guided meditation for anxiety relief',
-            status: 'completed',
-            amount: 600,
-          },
-          {
-            id: '3',
-            date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-            professionalName: 'Dr. Priya',
-            serviceName: 'Ayurveda Consultation',
-            mode: 'Clinic Visit',
-            duration: 90,
-            notes: 'Initial consultation and health assessment',
-            status: 'completed',
-            amount: 1200,
-          },
-        ];
+
+      /** 🩺 Fetch session history */
+      const bookingResponse = await bookingService.getUserBookings(userId);
+      if (bookingResponse.success && bookingResponse.data) {
+        sessionHistory = bookingResponse.data.map((b: any) => ({
+          id: b.booking_id || b.id,
+          date: b.date || b.booking_date,
+          professionalName: b.professional_name || 'Professional',
+          serviceName: b.service_name || 'Consultation',
+          mode: b.mode || 'Online',
+          duration: b.duration || 60,
+          notes: b.notes || 'Session completed successfully',
+          status: b.booking_status?.toLowerCase() || 'completed',
+          amount: b.amount || 0,
+        }));
       }
 
+      /** 🧾 Fetch prescriptions & diet charts (if APIs exist) */
+      const [prescriptionsResponse, dietResponse] = await Promise.allSettled([
+        // Replace with actual API calls when available
+        Promise.resolve([]),
+        Promise.resolve([]),
+      ]);
+
+      const prescriptions: Prescription[] =
+        prescriptionsResponse.status === 'fulfilled'
+          ? (prescriptionsResponse.value as Prescription[])
+          : [];
+
+      const dietCharts: DietChart[] =
+        dietResponse.status === 'fulfilled'
+          ? (dietResponse.value as DietChart[])
+          : [];
+
       setRecords([
-        {
-          title: 'Session History',
-          data: sessionHistory,
-          key: 'sessions',
-        },
-        {
-          title: 'Prescriptions',
-          data: mockPrescriptions,
-          key: 'prescriptions',
-        },
-        {
-          title: 'Diet Charts',
-          data: mockDietCharts,
-          key: 'dietCharts',
-        },
+        { title: 'Session History', data: sessionHistory, key: 'sessions' },
+        { title: 'Prescriptions', data: prescriptions, key: 'prescriptions' },
+        { title: 'Diet Charts', data: dietCharts, key: 'dietCharts' },
       ]);
     } catch (e: any) {
-      setError(e.message || 'Failed to load health records');
-      console.error('Error fetching health records:', e);
+      console.error('Error fetching records:', e);
+      setError(e.message || 'Failed to load health records.');
     } finally {
       setLoading(false);
     }
@@ -175,75 +114,63 @@ const HealthRecordsScreen: React.FC = () => {
     fetchHealthRecords();
   }, [fetchHealthRecords]);
 
+  /** Open file URL */
   const handleOpenFile = async (url?: string) => {
-    if (!url) {
-      Alert.alert('No File', 'No file available for this record.');
-      return;
-    }
-
+    if (!url) return Alert.alert('No File', 'No file available for this record.');
     try {
       const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      } else {
-        Alert.alert('Error', 'Cannot open this file type.');
-      }
-    } catch (error) {
+      supported ? await Linking.openURL(url) : Alert.alert('Error', 'Unsupported file type.');
+    } catch {
       Alert.alert('Error', 'Failed to open file.');
     }
   };
 
+  /** Show Session Details */
+  const showSessionDetails = (session: SessionHistoryItem) => {
+    Alert.alert(
+      'Session Details',
+      `Professional: ${session.professionalName}\nService: ${session.serviceName}\nMode: ${session.mode}\nDuration: ${session.duration} min\nStatus: ${session.status}\nNotes: ${session.notes || 'N/A'}`,
+      [{ text: 'OK' }]
+    );
+  };
+
+  /** Get Status Color */
+  const getStatusColor = (status: string) => {
+    const s = status?.toLowerCase();
+    if (s === 'completed') return colors.success;
+    if (s === 'cancelled') return colors.error;
+    if (s === 'pending') return colors.accentYellow;
+    return colors.secondaryText;
+  };
+
+  /** Render Each Record Item */
   const renderItem = ({ item, section }: { item: any; section: SectionData }) => {
     const isSession = section.key === 'sessions';
     const isPrescription = section.key === 'prescriptions';
     const isDietChart = section.key === 'dietCharts';
 
-    const getIcon = () => {
-      if (isSession) return 'calendar-check';
-      if (isPrescription) return 'file-document';
-      if (isDietChart) return 'food-apple';
-      return 'file';
-    };
-
-    const getStatusColor = (status: string) => {
-      switch (status?.toLowerCase()) {
-        case 'completed':
-          return colors.success;
-        case 'cancelled':
-          return colors.error;
-        case 'pending':
-          return colors.accentYellow;
-        default:
-          return colors.secondaryText;
-      }
-    };
+    const iconName = isSession
+      ? 'calendar-check'
+      : isPrescription
+      ? 'file-document'
+      : 'food-apple';
 
     return (
       <TouchableOpacity
-        style={styles.recordCard}
-        onPress={() => {
-          if (isPrescription || isDietChart) {
-            handleOpenFile(item.fileUrl);
-          } else {
-            // For sessions, show details
-            Alert.alert(
-              'Session Details',
-              `Professional: ${item.professionalName}\nService: ${item.serviceName}\nDuration: ${item.duration} min\nNotes: ${item.notes || 'No notes available'}`,
-              [{ text: 'OK' }]
-            );
-          }
-        }}
+        style={styles.card}
+        onPress={() =>
+          isSession ? showSessionDetails(item) : handleOpenFile(item.fileUrl)
+        }
       >
-        <View style={styles.recordHeader}>
-          <View style={styles.recordInfo}>
-            <View style={styles.recordTitleRow}>
+        <View style={styles.cardHeader}>
+          <View style={{ flex: 1 }}>
+            <View style={styles.titleRow}>
               <MaterialCommunityIcons
-                name={getIcon() as any}
+                name={iconName}
                 size={20}
                 color={colors.primaryGreen}
-                style={styles.recordIcon}
               />
-              <Text style={styles.recordTitle}>
+              <Text style={styles.cardTitle}>
                 {isSession
                   ? item.serviceName
                   : isPrescription
@@ -251,30 +178,26 @@ const HealthRecordsScreen: React.FC = () => {
                   : `Diet Chart by ${item.nutritionistName}`}
               </Text>
             </View>
-            <Text style={styles.recordDate}>
+
+            <Text style={styles.cardDate}>
               {new Date(item.date).toLocaleDateString('en-US', {
-                year: 'numeric',
                 month: 'short',
                 day: 'numeric',
+                year: 'numeric',
               })}
             </Text>
+
             {isSession && (
-              <View style={styles.sessionDetails}>
+              <View style={styles.sessionRow}>
                 <Text style={styles.sessionInfo}>
                   {item.professionalName} • {item.mode} • {item.duration} min
                 </Text>
-                <View style={styles.statusContainer}>
+                <View style={styles.statusRow}>
                   <View
-                    style={[
-                      styles.statusDot,
-                      { backgroundColor: getStatusColor(item.status) },
-                    ]}
+                    style={[styles.statusDot, { backgroundColor: getStatusColor(item.status) }]}
                   />
                   <Text
-                    style={[
-                      styles.statusText,
-                      { color: getStatusColor(item.status) },
-                    ]}
+                    style={[styles.statusText, { color: getStatusColor(item.status) }]}
                   >
                     {item.status}
                   </Text>
@@ -282,16 +205,10 @@ const HealthRecordsScreen: React.FC = () => {
               </View>
             )}
           </View>
+
           {(isPrescription || isDietChart) && item.fileUrl && (
-            <TouchableOpacity
-              style={styles.downloadButton}
-              onPress={() => handleOpenFile(item.fileUrl)}
-            >
-              <MaterialCommunityIcons
-                name="download"
-                size={20}
-                color={colors.primaryGreen}
-              />
+            <TouchableOpacity onPress={() => handleOpenFile(item.fileUrl)}>
+              <MaterialCommunityIcons name="download" size={22} color={colors.primaryGreen} />
             </TouchableOpacity>
           )}
         </View>
@@ -299,245 +216,128 @@ const HealthRecordsScreen: React.FC = () => {
     );
   };
 
+  /** Loading State */
   if (loading) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
-        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <SafeAreaView style={styles.centered}>
         <ActivityIndicator size="large" color={colors.primaryGreen} />
-        <Text style={styles.loadingText}>Loading health records...</Text>
+        <Text style={styles.subText}>Loading health records...</Text>
       </SafeAreaView>
     );
   }
 
+  /** Error State */
   if (error) {
     return (
-      <SafeAreaView style={styles.errorContainer}>
-        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-        <MaterialCommunityIcons
-          name="alert-circle"
-          size={64}
-          color={colors.error}
-        />
-        <Text style={styles.errorTitle}>Error Loading Records</Text>
-        <Text style={styles.errorMessage}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={fetchHealthRecords}>
-          <Text style={styles.retryButtonText}>Retry</Text>
+      <SafeAreaView style={styles.centered}>
+        <MaterialCommunityIcons name="alert-circle" size={60} color={colors.error} />
+        <Text style={styles.errorTitle}>Error</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={fetchHealthRecords}>
+          <Text style={styles.retryText}>Retry</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
+  /** Empty State */
+  if (!records.some((r) => r.data.length)) {
+    return (
+      <SafeAreaView style={styles.centered}>
+        <MaterialCommunityIcons
+          name="file-document-outline"
+          size={70}
+          color={colors.secondaryText}
+        />
+        <Text style={styles.emptyTitle}>No Health Records</Text>
+        <Text style={styles.subText}>
+          Your prescriptions and consultation records will appear here.
+        </Text>
+      </SafeAreaView>
+    );
+  }
+
+  /** Main Render */
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      
-      {/* Header */}
+
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={colors.primaryText} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Health Records</Text>
-        <View style={styles.placeholder} />
+        <View style={{ width: 40 }} />
       </View>
 
-      {/* Content */}
-      {records.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <MaterialCommunityIcons 
-            name="file-document-outline" 
-            size={80} 
-            color={colors.secondaryText} 
-          />
-          <Text style={styles.emptyTitle}>No Health Records Available</Text>
-          <Text style={styles.emptySubtitle}>
-            Your health records, prescriptions, and session history will appear here after your first consultation.
-          </Text>
-        </View>
-      ) : (
-        <SectionList
-          sections={records}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          renderSectionHeader={({ section: { title } }) => (
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{title}</Text>
-            </View>
-          )}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-          stickySectionHeadersEnabled={false}
-        />
-      )}
+      <SectionList
+        sections={records}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        renderSectionHeader={({ section }) => (
+          <Text style={styles.sectionTitle}>{section.title}</Text>
+        )}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        stickySectionHeadersEnabled={false}
+        showsVerticalScrollIndicator={false}
+      />
     </SafeAreaView>
   );
 };
 
+/** 💅 Styles */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    borderBottomColor: colors.offWhite,
   },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    color: colors.primaryGreen,
-    textAlign: 'center',
-    fontSize: 20,
-    fontWeight: '700' as const,
-  },
-  placeholder: { width: 40 }, // Placeholder for the right side of the header
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: colors.background,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: colors.secondaryText,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: colors.background,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.primaryText,
-    marginTop: 16,
-  },
-  errorMessage: {
-    fontSize: 16,
-    color: colors.secondaryText,
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 24,
-  },
-  retryButton: {
-    backgroundColor: colors.primaryGreen,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 24,
-  },
-  retryButtonText: {
-    color: colors.offWhite,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 40,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: colors.primaryText,
-    textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 16,
-    color: colors.secondaryText,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  sectionHeader: {
-    backgroundColor: colors.lightSage,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
+  backBtn: { padding: 6 },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: colors.primaryGreen },
   sectionTitle: {
-    fontWeight: '700',
     fontSize: 18,
+    fontWeight: '600',
     color: colors.primaryGreen,
+    backgroundColor: colors.lightGreen,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
   },
-  recordCard: {
+  card: {
     backgroundColor: colors.offWhite,
     marginHorizontal: 16,
     marginVertical: 8,
-    borderRadius: 16,
+    borderRadius: 12,
     padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.lightGreen,
   },
-  recordHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: colors.primaryText, marginLeft: 8 },
+  cardDate: { fontSize: 13, color: colors.secondaryText, marginBottom: 4 },
+  sessionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sessionInfo: { fontSize: 13, color: colors.secondaryText },
+  statusRow: { flexDirection: 'row', alignItems: 'center' },
+  statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 4 },
+  statusText: { fontSize: 12, fontWeight: '600' },
+  errorTitle: { fontSize: 18, fontWeight: '700', color: colors.primaryText, marginTop: 12 },
+  errorText: { fontSize: 14, color: colors.secondaryText, marginTop: 6, textAlign: 'center' },
+  retryBtn: {
+    backgroundColor: colors.primaryGreen,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 20,
   },
-  recordInfo: {
-    flex: 1,
-    marginRight: 10,
-  },
-  recordTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  recordIcon: {
-    marginRight: 8,
-  },
-  recordTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.primaryText,
-  },
-  recordDate: {
-    fontSize: 13,
-    color: colors.secondaryText,
-    marginTop: 2,
-  },
-  sessionDetails: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  sessionInfo: {
-    fontSize: 13,
-    color: colors.secondaryText,
-    marginRight: 8,
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  downloadButton: {
-    padding: 8,
-  },
-  listContainer: {
-    paddingBottom: 24,
-  },
+  retryText: { color: colors.offWhite, fontWeight: '600', fontSize: 15 },
+  emptyTitle: { fontSize: 18, fontWeight: '600', color: colors.primaryText, marginTop: 14 },
+  subText: { fontSize: 14, color: colors.secondaryText, textAlign: 'center', marginTop: 6 },
 });
 
-export default HealthRecordsScreen; 
+export default HealthRecordsScreen;

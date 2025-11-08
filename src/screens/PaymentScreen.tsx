@@ -1,7 +1,6 @@
-// PaymentScreen.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Alert as RNAlert,
+  Alert,
   SafeAreaView,
   StatusBar,
   Linking,
@@ -15,317 +14,227 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useRoute } from '@react-navigation/native';
+import { useTypedNavigation } from '../hooks/useTypedNavigation';
 import { ROUTES } from '../navigation/constants';
 import { useAuth } from '../utils/AuthContext';
-import { 
-  checkPaymentStatus, 
-  type PhonePeStatusResponse
-} from '../services/phonepeService';
+import { checkPaymentStatus } from '../services/phonepeService';
 import { PaymentStatus } from '../types/payment';
 
-type NavigationParams = {
-  [ROUTES.BOOKING_SUCCESS]: {
-    category: string;
-    categoryName: string;
-    categoryIcon: string;
-    categoryColor: string;
-    professional: any; // Consider replacing 'any' with a proper Professional type
-    bookingDetails: {
-      bookingId: string;
-      [key: string]: any;
-    };
-    paymentDetails: {
-      amount: number;
-      method: string | null;
-      transactionId: string;
-    };
-  };
-  [ROUTES.APPOINTMENT_CONFIRMATION]: {
-    category: string;
-    categoryName: string;
-    categoryIcon: string;
-    categoryColor: string;
-    professional: any; // Consider replacing 'any' with a proper Professional type
-    bookingDetails: {
-      bookingId: string;
-      [key: string]: any;
-    };
-    paymentDetails: {
-      amount: number;
-      method: string | null;
-      transactionId: string;
-    };
-  };
-};
+type PaymentMethodKey = 'upi' | 'card' | 'wallet' | 'netbanking';
 
-type NavigationProp = NativeStackNavigationProp<NavigationParams>;
-
-// Using PaymentStatus, PaymentInitiateResponse, and PaymentStatusResponse from types/payment.ts
+interface RouteParams {
+  amount: number;
+  bookingDetails?: {
+    bookingId?: string;
+    service?: string;
+    selectedDate?: string;
+    selectedTime?: string;
+    selectedDuration?: number;
+    selectedClassType?: 'one_on_one' | 'group';
+    mode?: 'online' | 'offline' | 'home_visit';
+    category?: string;
+    categoryName?: string;
+    categoryIcon?: string;
+    categoryColor?: string;
+    instructor?: any;
+    location?: string;
+  };
+  professional?: {
+    id: string;
+    name: string;
+  };
+  paymentUrl?: string;
+}
 
 const PAYMENT_METHODS = [
-  { 
-    key: 'upi', 
-    label: 'UPI', 
-    icon: 'qrcode', 
-    description: 'Pay using UPI apps like Google Pay, PhonePe',
-    popular: true 
-  },
-  { 
-    key: 'card', 
-    label: 'Credit / Debit Card', 
-    icon: 'credit-card', 
-    description: 'Visa, Mastercard, RuPay cards',
-    popular: false 
-  },
-  { 
-    key: 'wallet', 
-    label: 'Digital Wallet', 
-    icon: 'wallet', 
-    description: 'Paytm, Amazon Pay, other wallets',
-    popular: false 
-  },
-  { 
-    key: 'netbanking', 
-    label: 'Net Banking', 
-    icon: 'bank', 
-    description: 'Direct bank transfer',
-    popular: false 
-  },
+  { key: 'upi', label: 'UPI', icon: 'qrcode', description: 'Pay via Google Pay, PhonePe, etc.', popular: true },
+  { key: 'card', label: 'Credit / Debit Card', icon: 'credit-card', description: 'Visa, Mastercard, RuPay' },
+  { key: 'wallet', label: 'Wallet', icon: 'wallet', description: 'Paytm, Amazon Pay' },
+  { key: 'netbanking', label: 'Net Banking', icon: 'bank', description: 'Direct bank transfer' },
 ];
 
 const PaymentScreen: React.FC = () => {
-  const navigation = useNavigation<NavigationProp>();
+  const navigation = useTypedNavigation();
   const route = useRoute();
   const { user } = useAuth();
-  // Add type for route params
-  interface RouteParams {
-    amount: number;
-    bookingDetails?: {
-      bookingId?: string;
-      service?: string;
-      selectedDate?: string;
-      selectedTime?: string;
-      selectedDuration?: number;
-      selectedClassType?: string;
-      mode?: string;
-      location?: string;
-      category?: string;
-      categoryName?: string;
-      categoryIcon?: string;
-      categoryColor?: string;
-      instructor?: any;
-    };
-    professional?: {
-      id: string;
-      name: string;
-    };
-    paymentUrl?: string; // Add paymentUrl to RouteParams
-  }
-  const { amount, bookingDetails, professional, paymentUrl: initialPaymentUrl } = route.params as RouteParams;
+  const {
+    amount,
+    bookingDetails,
+    professional,
+    paymentUrl: initialPaymentUrl,
+  } = route.params as RouteParams;
 
-  const [selectedMethod, setSelectedMethod] = useState<string | null>(initialPaymentUrl ? 'upi' : null);
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethodKey | null>(
+    initialPaymentUrl ? 'upi' : null
+  );
   const [loading, setLoading] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(initialPaymentUrl || null);
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Determine if this is a yoga booking
   const isYogaBooking = bookingDetails?.category === 'yoga';
 
-  const handleSelectMethod = (method: string) => setSelectedMethod(method);
+  /** ✅ Centralized alert wrapper */
+  const showAlert = (title: string, msg: string) => Alert.alert(title, msg);
 
-  // Function to start polling payment status
-  const startPaymentStatusPolling = (bookingId: string) => {
-    // Clear any existing interval
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
+  /** 🧾 Clear interval safely */
+  const clearPolling = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
     }
+  };
 
-    // Start a new polling interval
-    const interval = setInterval(async () => {
-      try {
-        console.log('Polling payment status for booking:', bookingId);
-        const statusResponse = await checkPaymentStatus(bookingId);
-        
-        if (statusResponse.success) {
-          const { status } = statusResponse.data;
-          
+  /** 🕒 Start polling for payment confirmation */
+  const startPaymentPolling = useCallback(
+    (bookingId: string) => {
+      clearPolling();
+      pollingRef.current = setInterval(async () => {
+        try {
+          const res = await checkPaymentStatus(bookingId);
+          if (!res.success) return;
+          const { status } = res.data;
+
           if (status === PaymentStatus.SUCCESS) {
-            // Payment successful, stop polling and navigate to success
-            clearInterval(interval);
-            navigateToSuccessScreen(bookingId);
+            clearPolling();
+            navigateToSuccess(bookingId);
           } else if (status === PaymentStatus.FAILED) {
-            // Payment failed, stop polling and show error
-            clearInterval(interval);
-            RNAlert.alert(
-              'Payment Failed',
-              'Your payment was not successful. Please try again.'
-            );
+            clearPolling();
+            showAlert('Payment Failed', 'Your payment could not be processed.');
             setLoading(false);
           }
-          // If status is PENDING, continue polling
+        } catch (err) {
+          console.warn('Polling error:', err);
         }
-      } catch (error) {
-        console.error('Error checking payment status:', error);
-        // Don't stop polling on error, just log it and continue
-      }
-    }, 3000); // Poll every 3 seconds
-
-    setPollingInterval(interval);
-    return interval;
-  };
-
-  // Function to navigate to success screen
-  const navigateToSuccessScreen = (transactionId: string) => {
-    const successParams = {
-      category: bookingDetails?.category || 'consultation',
-      categoryName: bookingDetails?.categoryName || 'Consultation',
-      categoryIcon: bookingDetails?.categoryIcon || 'account-tie',
-      categoryColor: bookingDetails?.categoryColor || colors.primaryGreen,
-      professional: professional || {},
-      bookingDetails: {
-        ...(bookingDetails || {}),
-        bookingId: bookingDetails?.bookingId || transactionId,
-      },
-      paymentDetails: {
-        amount: amount,
-        method: selectedMethod || 'online',
-        transactionId: transactionId,
-      },
-    };
-    
-    // Determine the appropriate success screen based on booking type
-    const successScreen = isYogaBooking 
-      ? ROUTES.BOOKING_SUCCESS 
-      : ROUTES.APPOINTMENT_CONFIRMATION;
-    
-    // Navigate to the success screen
-    navigation.navigate(successScreen, successParams);
-  };
-
-  // Clean up interval on unmount
-  React.useEffect(() => {
-    return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
-    };
-  }, [pollingInterval]);
-
-  const handlePayment = async () => {
-    const bookingId = bookingDetails?.bookingId;
-    if (!bookingId) {
-      RNAlert.alert('Error', 'No booking ID found. Please try again.');
-      return;
-    }
-
-    if (!selectedMethod) {
-      RNAlert.alert('Select Payment Method', 'Please select a payment method to proceed.');
-      return;
-    }
-    
-    if (!user) {
-      RNAlert.alert('Not Logged In', 'You must be logged in to make a payment.');
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      // Use the paymentUrl passed from the previous screen
-      if (paymentUrl) { 
-        // 1. Open the PhonePe URL
-        const canOpen = await Linking.canOpenURL(paymentUrl);
-        if (!canOpen) {
-          throw new Error('Could not open payment URL. Please make sure you have a browser or PhonePe app installed.');
-        }
-
-        await Linking.openURL(paymentUrl);
-
-        // 2. Start polling for status
-        RNAlert.alert(
-          'Payment in Progress',
-          'Please complete the payment in the opened window. We will verify your status.'
-        );
-        startPaymentStatusPolling(bookingId);
-      } else {
-        // This case should not happen if API 4 always returns a paymentUrl
-        throw new Error("No payment URL was provided.");
-      }
-    } catch (error: unknown) {
-      console.error('PaymentScreen - Payment error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
-      RNAlert.alert('Payment Error', errorMessage);
-      setLoading(false);
-    }
-    // Do not set loading to false here, the poller will handle it.
-  };
-
-  const handleBack = () => {
-    navigation.goBack();
-  };
-
-  const renderPaymentMethod = (method: any) => (
-    <TouchableOpacity
-      key={method.key}
-      style={[
-        styles.paymentMethodRow,
-        selectedMethod === method.key && styles.selectedPaymentMethod,
-      ]}
-      onPress={() => handleSelectMethod(method.key)}
-      activeOpacity={0.7}
-    >
-      {/* Icon */}
-      <View style={styles.methodIconContainer}>
-        <MaterialCommunityIcons 
-          name={method.icon as any} 
-          size={24} 
-          color={selectedMethod === method.key ? colors.offWhite : colors.secondaryText} 
-        />
-      </View>
-
-      {/* Method Info */}
-      <View style={styles.methodInfo}>
-        <View style={styles.methodHeader}>
-          <Text style={[
-            styles.methodLabel,
-            selectedMethod === method.key && styles.selectedMethodText,
-          ]}>
-            {method.label}
-          </Text>
-          {method.popular && (
-            <View style={styles.popularBadge}>
-              <Text style={styles.popularText}>Popular</Text>
-            </View>
-          )}
-        </View>
-        <Text style={[
-          styles.methodDescription,
-          selectedMethod === method.key && styles.selectedMethodDescription,
-        ]}>
-          {method.description}
-        </Text>
-      </View>
-
-      {/* Radio Button */}
-      <View style={[
-        styles.radioButton,
-        selectedMethod === method.key && styles.radioButtonSelected,
-      ]}>
-        {selectedMethod === method.key && (
-          <View style={styles.radioButtonInner} />
-        )}
-      </View>
-    </TouchableOpacity>
+      }, 3000);
+    },
+    []
   );
 
+  /** 🧭 Navigate to booking success screen */
+  const navigateToSuccess = useCallback(
+    (transactionId: string) => {
+      const details = bookingDetails || {};
+      const paymentData = {
+        amount,
+        method: selectedMethod || 'upi',
+        transactionId,
+      };
+
+      if (isYogaBooking) {
+        navigation.navigate(ROUTES.BOOKING_SUCCESS, {
+          category: details.category || 'yoga',
+          categoryName: details.categoryName || 'Yoga',
+          categoryIcon: details.categoryIcon || 'yoga',
+          categoryColor: details.categoryColor || colors.primaryGreen,
+          instructor: details.instructor || professional || {},
+          bookingDetails: {
+            bookingId: transactionId,
+            selectedDate: details.selectedDate || new Date().toISOString().split('T')[0],
+            selectedTime: details.selectedTime || '12:00',
+            selectedDuration: details.selectedDuration || 60,
+            selectedClassType: details.selectedClassType || 'one_on_one',
+            mode: details.mode || 'online',
+            location: details.location,
+          },
+          paymentDetails: paymentData,
+        });
+      } else {
+        navigation.navigate(ROUTES.APPOINTMENT_CONFIRMATION, {
+          bookingId: transactionId,
+          professional: professional || details.instructor || {},
+          bookingDetails: { ...details, bookingId: transactionId },
+          paymentDetails: paymentData,
+        });
+      }
+    },
+    [navigation, selectedMethod, amount, bookingDetails]
+  );
+
+  /** 🧹 Cleanup polling on unmount */
+  useEffect(() => clearPolling, []);
+
+  /** 💰 Handle Payment */
+  const handlePayment = async () => {
+    if (!user) return showAlert('Login Required', 'Please log in to make a payment.');
+    if (!bookingDetails?.bookingId) return showAlert('Error', 'Booking ID missing.');
+    if (!selectedMethod) return showAlert('Select Method', 'Choose a payment method first.');
+
+    try {
+      setLoading(true);
+      if (!paymentUrl) throw new Error('Payment URL missing.');
+
+      const canOpen = await Linking.canOpenURL(paymentUrl);
+      if (!canOpen) throw new Error('Could not open payment app or browser.');
+
+      await Linking.openURL(paymentUrl);
+      showAlert('Payment in Progress', 'Please complete your payment. Checking status...');
+      startPaymentPolling(bookingDetails.bookingId);
+    } catch (err: any) {
+      console.error('Payment error:', err);
+      showAlert('Payment Error', err.message || 'Please try again later.');
+      setLoading(false);
+    }
+  };
+
+  /** 💳 Payment Method Card */
+  const renderMethod = (m: typeof PAYMENT_METHODS[number]) => {
+    const selected = selectedMethod === m.key;
+    return (
+      <TouchableOpacity
+        key={m.key}
+        style={[styles.methodRow, selected && styles.methodSelected]}
+        onPress={() => setSelectedMethod(m.key)}
+        activeOpacity={0.8}
+      >
+        <MaterialCommunityIcons
+          name={m.icon as any}
+          size={28}
+          color={selected ? colors.offWhite : colors.primaryGreen}
+        />
+        <View style={styles.methodInfo}>
+          <Text style={[styles.methodLabel, selected && styles.selectedText]}>{m.label}</Text>
+          <Text style={[styles.methodDesc, selected && styles.selectedText]}>{m.description}</Text>
+        </View>
+        <View style={[styles.radio, selected && styles.radioSelected]}>
+          {selected && <View style={styles.radioInner} />}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  /** 🧾 Booking Summary Card */
+  const renderSummary = () => {
+    if (!bookingDetails) return null;
+    const { service, categoryName, selectedDate, selectedTime, selectedDuration } = bookingDetails;
+
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Booking Summary</Text>
+        <View style={styles.summaryCard}>
+          {[
+            { label: 'Professional', value: professional?.name || 'Expert' },
+            { label: 'Service', value: service || categoryName || 'Consultation' },
+            { label: 'Date', value: selectedDate || 'TBD' },
+            { label: 'Time', value: selectedTime || 'TBD' },
+            { label: 'Duration', value: `${selectedDuration || 60} min` },
+          ].map(({ label, value }) => (
+            <View key={label} style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>{label}</Text>
+              <Text style={styles.summaryValue}>{value}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
+  /** 🖼️ UI */
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.offWhite} />
-      
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={colors.primaryText} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Payment</Text>
@@ -333,75 +242,29 @@ const PaymentScreen: React.FC = () => {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Amount Display */}
         <View style={styles.amountContainer}>
           <Text style={styles.amountLabel}>Amount to Pay</Text>
           <Text style={styles.amount}>₹{amount.toLocaleString()}</Text>
         </View>
 
-        {/* Payment Methods */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Select Payment Method</Text>
-          <View style={styles.paymentMethodsList}>
-            {PAYMENT_METHODS.map(renderPaymentMethod)}
-          </View>
+          {PAYMENT_METHODS.map(renderMethod)}
         </View>
 
-        {/* Booking Summary */}
-        {bookingDetails && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Booking Summary</Text>
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Professional:</Text>
-                <Text style={styles.summaryValue}>{professional?.name || bookingDetails?.instructor?.name || 'Expert'}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Service:</Text>
-                <Text style={styles.summaryValue}>{bookingDetails.service || bookingDetails.categoryName || 'Consultation'}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Date:</Text>
-                <Text style={styles.summaryValue}>{bookingDetails.selectedDate || 'TBD'}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Time:</Text>
-                <Text style={styles.summaryValue}>{bookingDetails.selectedTime || 'TBD'}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Duration:</Text>
-                <Text style={styles.summaryValue}>{bookingDetails?.selectedDuration || 60} min</Text>
-              </View>
-              {bookingDetails.selectedClassType && (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Type:</Text>
-                  <Text style={styles.summaryValue}>
-                    {bookingDetails.selectedClassType === 'one_on_one' ? 'One-on-One' : 'Group Class'}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        )}
+        {renderSummary()}
       </ScrollView>
 
-      {/* Payment Button */}
       <View style={styles.bottomAction}>
         <TouchableOpacity
-          style={[
-            styles.payButton,
-            (!selectedMethod || loading) && styles.payButtonDisabled,
-          ]}
-          onPress={handlePayment}
+          style={[styles.payButton, (!selectedMethod || loading) && styles.disabled]}
           disabled={!selectedMethod || loading}
-          activeOpacity={0.8}
+          onPress={handlePayment}
         >
           {loading ? (
-            <ActivityIndicator size="small" color={colors.offWhite} />
+            <ActivityIndicator color={colors.offWhite} />
           ) : (
-            <Text style={styles.payButtonText}>
-              Pay ₹{amount.toLocaleString()}
-            </Text>
+            <Text style={styles.payButtonText}>Pay ₹{amount.toLocaleString()}</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -409,205 +272,59 @@ const PaymentScreen: React.FC = () => {
   );
 };
 
+/** 💅 Styles */
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.offWhite,
-  },
+  container: { flex: 1, backgroundColor: colors.offWhite },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    backgroundColor: colors.offWhite,
   },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: colors.primaryText,
-  },
-  placeholder: {
-    width: 40,
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  amountContainer: {
-    alignItems: 'center',
-    marginBottom: 32,
-    paddingVertical: 20,
-  },
-  amountLabel: {
-    color: colors.secondaryText,
-    fontSize: 16,
-    marginBottom: 8,
-    fontWeight: '500',
-  },
-  amount: {
-    color: colors.primaryGreen,
-    fontSize: 36,
-    fontWeight: '700',
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    marginBottom: 16,
-    color: colors.primaryText,
-    fontWeight: '600',
-  },
-  paymentMethodsList: {
-    width: '100%',
-  },
-  paymentMethodRow: {
+  backBtn: { padding: 6 },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 20, fontWeight: '700', color: colors.primaryText },
+  placeholder: { width: 40 },
+  content: { flex: 1, padding: 20 },
+  amountContainer: { alignItems: 'center', marginBottom: 24 },
+  amountLabel: { fontSize: 15, color: colors.secondaryText },
+  amount: { fontSize: 36, color: colors.primaryGreen, fontWeight: '800', marginTop: 6 },
+  section: { marginBottom: 24 },
+  sectionTitle: { fontSize: 18, fontWeight: '600', marginBottom: 12, color: colors.primaryText },
+  methodRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    backgroundColor: colors.offWhite,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  selectedPaymentMethod: {
-    backgroundColor: colors.primaryGreen,
-    borderColor: colors.primaryGreen,
-    shadowColor: colors.primaryGreen,
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  methodIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: colors.lightSage,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  methodInfo: {
-    flex: 1,
-  },
-  methodHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  methodLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.primaryText,
-  },
-  selectedMethodText: {
-    color: colors.offWhite,
-  },
-  popularBadge: {
-    backgroundColor: colors.accentOrange,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginLeft: 8,
-  },
-  popularText: {
-    color: colors.offWhite,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  methodDescription: {
-    fontSize: 14,
-    color: colors.secondaryText,
-    lineHeight: 18,
-  },
-  selectedMethodDescription: {
-    color: colors.offWhite,
-    opacity: 0.9,
-  },
-  radioButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: colors.secondaryText,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 16,
-  },
-  radioButtonSelected: {
-    borderColor: colors.offWhite,
     backgroundColor: colors.offWhite,
-  },
-  radioButtonInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.primaryGreen,
-  },
-  summaryCard: {
-    backgroundColor: colors.offWhite,
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    padding: 14,
     marginBottom: 12,
+    elevation: 1,
   },
-  summaryLabel: {
-    color: colors.secondaryText,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  summaryValue: {
-    color: colors.primaryText,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  bottomAction: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-  },
+  methodSelected: { backgroundColor: colors.primaryGreen, borderColor: colors.primaryGreen, elevation: 4 },
+  methodInfo: { flex: 1, marginLeft: 12 },
+  methodLabel: { fontSize: 16, fontWeight: '600', color: colors.primaryText },
+  methodDesc: { fontSize: 13, color: colors.secondaryText },
+  selectedText: { color: colors.offWhite },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.secondaryText, alignItems: 'center', justifyContent: 'center' },
+  radioSelected: { borderColor: colors.offWhite, backgroundColor: colors.offWhite },
+  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primaryGreen },
+  summaryCard: { borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 16, backgroundColor: colors.offWhite },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  summaryLabel: { color: colors.secondaryText, fontSize: 14 },
+  summaryValue: { color: colors.primaryText, fontSize: 14, fontWeight: '600' },
+  bottomAction: { position: 'absolute', bottom: 20, left: 20, right: 20 },
   payButton: {
     backgroundColor: colors.primaryGreen,
-    paddingVertical: 18,
-    paddingHorizontal: 32,
+    paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
     elevation: 4,
-    shadowColor: colors.primaryGreen,
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
   },
-  payButtonDisabled: {
-    backgroundColor: colors.secondaryText,
-    shadowOpacity: 0.1,
-  },
-  payButtonText: {
-    color: colors.offWhite,
-    fontSize: 18,
-    fontWeight: '700',
-  },
+  disabled: { backgroundColor: colors.secondaryText, opacity: 0.6 },
+  payButtonText: { color: colors.offWhite, fontSize: 18, fontWeight: '700' },
 });
 
-export default PaymentScreen; 
+export default PaymentScreen;
