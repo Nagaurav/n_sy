@@ -15,7 +15,8 @@ import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { ROUTES } from '../navigation/constants';
-import { professionalSlotService } from '../services/professionalSlotService';
+import { consultationBookingService } from '../services/consultationBookingService';
+import { useAuth } from '../utils/AuthContext';
 
 const CONSULTATION_MODES = [
   { key: 'chat', label: 'Chat', icon: 'chat', description: 'Text-based consultation' },
@@ -23,52 +24,98 @@ const CONSULTATION_MODES = [
   { key: 'video', label: 'Video Call', icon: 'video', description: 'Face-to-face consultation' },
 ];
 
+interface RouteParams {
+  professional: {
+    id: string;
+    userId: string;
+    firstName: string;
+    lastName: string;
+    profilePicture?: string;
+    specializations?: string[];
+    rating?: number;
+    totalRatings?: number;
+  };
+  selectedTime?: string;
+  slot?: {
+    id: string;
+    time: string;
+    date: string;
+    professionalId: string;
+  };
+  mode?: 'online' | 'offline';
+  location?: {
+    city?: string;
+    latitude?: number;
+    longitude?: number;
+  };
+}
+
 const BookConsultationScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { professional, selectedTime, slot } = route.params as { 
-    professional: any; 
-    selectedTime?: string; 
-    slot?: any;
-  };
+  const { user } = useAuth();
+  const { professional, selectedTime, slot, mode = 'online', location } = route.params as RouteParams;
 
   const [selectedMode, setSelectedMode] = useState<'chat' | 'audio' | 'video'>('chat');
   const [loading, setLoading] = useState(false);
 
   const onConfirm = async () => {
+    if (!user) {
+      Alert.alert('Authentication Required', 'Please sign in to book a consultation.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const consultationTime = selectedTime || slot?.time || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      // Use the slot time if available, otherwise use the selected time or default to now + 24h
+      const consultationTime = slot?.time 
+        ? new Date(`${slot.date}T${slot.time}`)
+        : selectedTime 
+          ? new Date(selectedTime) 
+          : new Date(Date.now() + 24 * 60 * 60 * 1000);
       
-      // Calculate price first
-      const priceResponse = await professionalSlotService.calculatePrice({
-        professionalId: professional.id,
-        serviceId: 'default_service',
+      const consultationDate = consultationTime.toISOString().split('T')[0];
+      const consultationTimeStr = consultationTime.toTimeString().slice(0, 5);
+      
+      // Prepare booking data according to API requirements
+      const bookingData = {
+        user_id: user.id || user.userId, // Use the correct user ID field
+        professional_id: professional.id,
+        slot_id: slot?.id,
+        consultation_type: mode as 'online' | 'offline' | 'home_visit',
+        consultation_date: consultationDate,
+        consultation_time: consultationTimeStr,
         duration: 60, // Default 60 minutes
-      });
+        total_amount: '0', // Will be calculated by the backend
+        payment_method: 'online' as const,
+        special_instructions: `Consultation via ${selectedMode}`,
+        is_urgent: false,
+        location: location?.city || 'Online',
+        latitude: location?.latitude,
+        longitude: location?.longitude,
+      };
 
-      // Create booking
-      const bookingResponse = await professionalSlotService.createBooking({
-        professionalId: professional.id,
-        serviceId: 'default_service',
-        userId: 'user_123', // Replace with actual user ID from context
-        date: new Date(consultationTime).toISOString().split('T')[0],
-        time: new Date(consultationTime).toTimeString().slice(0, 5),
-        duration: 60,
-        amount: priceResponse.totalPrice,
-      });
+      // Create the booking
+      const response = await consultationBookingService.createConsultationBooking(bookingData);
       
-      // Navigate to payment screen
-      (navigation as any).navigate(ROUTES.PAYMENT, { 
-        amount: priceResponse.totalPrice,
-        bookingDetails: {
-          professional,
-          selectedTime: consultationTime,
-          consultationMode: selectedMode,
-          bookingId: bookingResponse.bookingId,
-        },
-        professional 
-      });
+      if (response.success && response.data) {
+        // Navigate to booking confirmation
+        navigation.navigate(ROUTES.BOOKING_CONFIRMATION, {
+          bookingId: response.data.booking_id || response.data.id,
+          professional: {
+            id: professional.id,
+            name: `${professional.firstName} ${professional.lastName}`,
+            speciality: professional.specializations?.[0] || 'Professional',
+            avatar: professional.profilePicture,
+          },
+          mode: selectedMode,
+          date: consultationDate,
+          time: consultationTimeStr,
+          duration: 60,
+        });
+      } else {
+        throw new Error(response.message || 'Failed to book consultation');
+      }
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Could not book consultation.');
     } finally {

@@ -16,7 +16,7 @@ import { useNavigation, useRoute, NavigationProp } from '@react-navigation/nativ
 
 import { colors } from '../theme/colors';
 import { ROUTES } from '../navigation/constants';
-import { professionalSlotService } from '../services/professionalSlotService';
+import { professionalService } from '../services';
 
 interface DateOption {
   id: string;
@@ -40,42 +40,49 @@ const DateSelectionScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchAvailableDates = useCallback(async () => {
+    if (!professionalId) {
+      generateDefaultDates();
+      return;
+    }
+
     setLoading(true);
     setError(null);
+    
     try {
-      if (professionalId) {
-        // Fetch available slots for the professional
-        const response = await professionalSlotService.getAvailableSlots(professionalId);
-        if (response && response.slots) {
-          // Transform slots to date options
-          const dateMap = new Map<string, DateOption>();
+      // Fetch available slots from the real backend API
+      const response = await professionalService.checkSlotAvailability(professionalId);
+      
+      if (response.success && response.data) {
+        // Transform API response to date options
+        const dateMap = new Map<string, DateOption>();
+        
+        response.data.forEach(({ date, slots }) => {
+          const dateObj = new Date(date);
+          const hasAvailableSlots = slots.some(slot => slot.isAvailable);
           
-          response.slots.forEach((slot: any) => {
-            const dateKey = slot.date;
-            const date = new Date(slot.date);
-            
-            if (!dateMap.has(dateKey)) {
-              dateMap.set(dateKey, {
-                id: dateKey,
-                label: formatDateLabel(date),
-                date: date,
-                isAvailable: slot.status !== 'booked'
-              });
-            }
+          dateMap.set(date, {
+            id: date,
+            label: formatDateLabel(dateObj),
+            date: dateObj,
+            isAvailable: hasAvailableSlots
           });
-          
-          const dates = Array.from(dateMap.values());
-          setAvailableDates(dates);
-        } else {
-          // Fallback to generated dates if no slots available
-          generateDefaultDates();
+        });
+        
+        const dates = Array.from(dateMap.values());
+        setAvailableDates(dates);
+        
+        // If no dates with available slots, show a message
+        if (dates.length === 0 || !dates.some(d => d.isAvailable)) {
+          setError('No available time slots found for the selected professional.');
         }
       } else {
-        // Generate default available dates if no professional ID
+        // Fallback to generated dates if API call fails
+        console.warn('No data from API, falling back to default dates');
         generateDefaultDates();
       }
     } catch (error) {
       console.error('Error fetching available dates:', error);
+      setError('Failed to load available dates. Please try again.');
       generateDefaultDates();
     } finally {
       setLoading(false);

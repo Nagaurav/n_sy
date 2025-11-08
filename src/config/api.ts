@@ -308,7 +308,7 @@ export const removeAuthToken = async (): Promise<void> => {
 // Enhanced API request function with better error handling
 export const makeApiRequest = async (
   endpoint: string,
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET',
   body?: any,
   queryParams?: Record<string, any>,
   headers?: Record<string, string>

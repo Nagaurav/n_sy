@@ -6,8 +6,9 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../utils/AuthContext';
+import { AuthService } from '../services/auth/AuthService';
+import { getAuthToken } from '../config/api';
 
 interface SplashScreenProps {
   onNavigateToAuth: () => void;
@@ -15,9 +16,10 @@ interface SplashScreenProps {
 }
 
 const SplashScreen: React.FC<SplashScreenProps> = ({ onNavigateToAuth, onNavigateToHome }) => {
-  const { setIsLoggedIn, setIsAuthenticated, setAuthStep } = useAuth();
+  const { setIsLoggedIn, setIsAuthenticated, setAuthStep, setUser } = useAuth();
   const [isInitialized, setIsInitialized] = useState(false);
   const fadeAnim = useSharedValue(0);
+  const authService = AuthService.getInstance();
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -26,19 +28,36 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onNavigateToAuth, onNavigat
         fadeAnim.value = withTiming(1, { duration: 500 });
 
         // Check for existing user session
-        const token = await AsyncStorage.getItem('token');
+        const token = await getAuthToken();
         
-        // Wait for minimum splash duration (2.5 seconds total)
-        await new Promise(resolve => setTimeout(resolve, 2500));
+        // Wait for minimum splash duration (1.5 seconds)
+        await new Promise(resolve => setTimeout(resolve, 1500));
         
         if (token) {
-          // User is authenticated, navigate to home
-          setIsLoggedIn(true);
-          setIsAuthenticated(true);
-          setAuthStep('main');
-          onNavigateToHome();
+          // Token found, now get the user's profile
+          try {
+            const profileResponse = await authService.getCurrentUser();
+            if (profileResponse.success && profileResponse.data) {
+              // SUCCESS: We have a token AND a user
+              setUser(profileResponse.data);
+              setIsLoggedIn(true);
+              setIsAuthenticated(true);
+              setAuthStep('main');
+              onNavigateToHome();
+            } else {
+              // Token was invalid, force login
+              throw new Error('Invalid session token');
+            }
+          } catch (e) {
+            // Failed to get profile, token is bad. Log out and go to Auth.
+            await authService.logout(); // Clear bad token
+            setIsLoggedIn(false);
+            setIsAuthenticated(false);
+            setAuthStep('login');
+            onNavigateToAuth();
+          }
         } else {
-          // No valid session, navigate to auth
+          // No token, navigate to auth
           setIsLoggedIn(false);
           setIsAuthenticated(false);
           setAuthStep('login');
@@ -54,7 +73,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onNavigateToAuth, onNavigat
     };
 
     initializeApp();
-  }, [fadeAnim, onNavigateToAuth, onNavigateToHome, setIsLoggedIn, setIsAuthenticated, setAuthStep]);
+  }, [fadeAnim, onNavigateToAuth, onNavigateToHome, setIsLoggedIn, setIsAuthenticated, setAuthStep, setUser]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: fadeAnim.value,

@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { bookingService } from '../services/bookingService';
+import { consultationBookingService } from '../services/consultationBookingService';
 import { colors } from '../theme/colors';
 import { fonts } from '../constants/fonts';
 
@@ -20,19 +20,22 @@ interface BookingDetailsScreenProps {
   route: {
     params: {
       bookingId: string;
+      appointmentData?: any; // Optional pre-fetched data
     };
   };
 }
 
 const BookingDetailsScreen: React.FC<BookingDetailsScreenProps> = ({ route }) => {
-  const { bookingId } = route.params;
+  const { bookingId, appointmentData } = route.params;
   const navigation = useNavigation();
-  const [bookingDetails, setBookingDetails] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [bookingDetails, setBookingDetails] = useState<any>(appointmentData || null);
+  const [loading, setLoading] = useState(!appointmentData);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchBookingDetails();
+    if (!appointmentData) {
+      fetchBookingDetails();
+    }
   }, [bookingId]);
 
   const fetchBookingDetails = async () => {
@@ -40,60 +43,175 @@ const BookingDetailsScreen: React.FC<BookingDetailsScreenProps> = ({ route }) =>
       setLoading(true);
       setError(null);
       
-      const response = await bookingService.getBookingDetails(bookingId);
+      const response = await consultationBookingService.getConsultationBookingDetails(bookingId);
       
-      // The service returns BookingDetails directly, not a response wrapper
-      setBookingDetails(response);
+      if (response) {
+        setBookingDetails(response);
+      } else {
+        setError('Booking details not found');
+      }
     } catch (err: any) {
+      console.error('Error fetching booking details:', err);
       setError(err.message || 'An error occurred while fetching booking details');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCancelBooking = () => {
-    Alert.alert(
-      'Cancel Booking',
-      'Are you sure you want to cancel this booking?',
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes, Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const response = await bookingService.cancelBooking(bookingId);
+  const handleCancelBooking = async () => {
+    try {
+      Alert.alert(
+        'Cancel Booking',
+        'Are you sure you want to cancel this booking?',
+        [
+          {
+            text: 'No',
+            style: 'cancel',
+          },
+          {
+            text: 'Yes, Cancel',
+            style: 'destructive',
+            onPress: async () => {
+              const response = await consultationBookingService.cancelConsultationBooking(
+                bookingId,
+                'Cancelled by user'
+              );
+              
               if (response.success) {
-                // Show basic cancellation success message
-                Alert.alert('✅ Cancellation Successful', 'Your booking has been cancelled successfully!', [
-                  { text: 'OK', onPress: () => fetchBookingDetails() }
-                ]);
+                Alert.alert('Success', 'Your booking has been cancelled successfully.');
+                // Update local state to reflect cancellation
+                setBookingDetails({
+                  ...bookingDetails,
+                  status: 'CANCELLED',
+                  booking_status: 'CANCELLED'
+                });
               } else {
-                Alert.alert('Error', response.message || 'Failed to cancel booking');
+                Alert.alert('Error', response.message || 'Failed to cancel booking. Please try again.');
               }
-            } catch (err: any) {
-              // Handle specific cancellation policy errors
-              if (err.message?.includes('24 hours') || 
-                  err.message?.includes('12 hours') || 
-                  err.message?.includes('within 1 hour')) {
-                Alert.alert(
-                  '⚠️ Cancellation Not Allowed', 
-                  err.message + '\n\nPlease contact support for urgent cancellations.',
-                  [
-                    { text: 'Contact Support', onPress: () => {
-                      // TODO: Navigate to support or open contact
-                      Alert.alert('Support', 'Support feature coming soon!');
-                    }},
-                    { text: 'OK', style: 'cancel' }
-                  ]
-                );
-              } else {
-                Alert.alert('Error', err.message || 'Failed to cancel booking');
-              }
-            }
-          }
-        }
-      ]
+            },
+          },
+        ],
+        { cancelable: true }
+      );
+    } catch (error) {
+      console.error('Error cancelling booking:', error);
+      Alert.alert('Error', 'An error occurred while cancelling your booking.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderActionButtons = () => {
+    const status = bookingDetails.booking_status || bookingDetails.status;
+    const isUpcoming = status === 'CONFIRMED' || status === 'PENDING';
+    const isCompleted = status === 'COMPLETED';
+    const isCancelled = status === 'CANCELLED';
+    
+    return (
+      <View style={styles.actionButtons}>
+        {isUpcoming && (
+          <>
+            <TouchableOpacity
+              style={[styles.button, styles.primaryButton]}
+              onPress={() => {
+                // Handle join session for online consultations
+                if (bookingDetails.consultation_type === 'online' && bookingDetails.meeting_link) {
+                  Linking.openURL(bookingDetails.meeting_link);
+                } else {
+                  // Open chat or call interface
+                  Alert.alert('Contact', 'Would you like to message or call the professional?', [
+                    { text: 'Message', onPress: () => console.log('Open chat') },
+                    { text: 'Call', onPress: () => console.log('Initiate call') },
+                    { text: 'Cancel', style: 'cancel' },
+                  ]);
+                }
+              }}
+            >
+              <Ionicons 
+                name={bookingDetails.consultation_type === 'online' ? 'videocam-outline' : 'chatbubble-ellipses-outline'} 
+                size={20} 
+                color="#fff" 
+              />
+              <Text style={styles.buttonText}>
+                {bookingDetails.consultation_type === 'online' ? 'Join Session' : 'Message'}
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.button, styles.dangerButton]}
+              onPress={handleCancelBooking}
+            >
+              <Ionicons name="close-circle-outline" size={20} color="#fff" />
+              <Text style={styles.buttonText}>Cancel Booking</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        
+        {isCompleted && (
+          <TouchableOpacity
+            style={[styles.button, styles.primaryButton]}
+            onPress={() => {
+              // Navigate to feedback screen
+              navigation.navigate('Feedback', { bookingId });
+            }}
+          >
+            <Ionicons name="star-outline" size={20} color="#fff" />
+            <Text style={styles.buttonText}>Leave Feedback</Text>
+          </TouchableOpacity>
+        )}
+        
+        {isCancelled && (
+          <TouchableOpacity
+            style={[styles.button, styles.primaryButton]}
+            onPress={() => {
+              // Navigate to rebook screen
+              navigation.navigate('BookConsultation', {
+                professional: bookingDetails.professional_details || {
+                  id: bookingDetails.professional_id,
+                  name: bookingDetails.professional_name
+                }
+              });
+            }}
+          >
+            <Ionicons name="refresh-outline" size={20} color="#fff" />
+            <Text style={styles.buttonText}>Book Again</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
+  const renderProfessionalInfo = () => {
+    const professional = bookingDetails.professional_details || bookingDetails.professional;
+    const consultationDate = bookingDetails.consultation_date || bookingDetails.date;
+    const consultationTime = bookingDetails.consultation_time || bookingDetails.time;
+    const mode = bookingDetails.consultation_type || bookingDetails.mode || 'online';
+    
+    return (
+      <View style={styles.profileContainer}>
+        <Image
+          source={{ uri: professional?.avatar_url || 'https://via.placeholder.com/80' }}
+          style={styles.profileImage}
+          defaultSource={require('../assets/images/avatar-placeholder.png')}
+        />
+        <View style={styles.profileInfo}>
+          <Text style={styles.professionalName}>
+            {professional?.name || 'Professional'}
+          </Text>
+          <Text style={styles.professionalTitle}>
+            {professional?.speciality || 'Therapist'}
+          </Text>
+          {professional?.rating && (
+            <View style={styles.ratingContainer}>
+              <Ionicons name="star" size={16} color="#FFD700" />
+              <Text style={styles.ratingText}>
+                {professional.rating.toFixed(1)} 
+                {professional.total_ratings ? `(${professional.total_ratings} reviews)` : ''}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
     );
   };
 
@@ -110,69 +228,61 @@ const BookingDetailsScreen: React.FC<BookingDetailsScreenProps> = ({ route }) =>
     Alert.alert('Receipt', 'Receipt feature coming soon!');
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'confirmed':
-        return colors.success;
-      case 'pending':
-        return colors.warning;
-      case 'cancelled':
-        return colors.error;
-      case 'completed':
-        return colors.primaryBlue;
-      case 'no_show':
-        return colors.error;
+  const getStatusBadgeStyle = (status: string) => {
+    switch (status?.toUpperCase()) {
+      case 'CONFIRMED':
+        return styles.statusConfirmed;
+      case 'COMPLETED':
+        return styles.statusCompleted;
+      case 'CANCELLED':
+        return styles.statusCancelled;
+      case 'PENDING':
       default:
-        return colors.gray;
+        return styles.statusPending;
     }
   };
-
-  const getPaymentStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'completed':
-        return colors.success;
-      case 'pending':
-        return colors.warning;
-      case 'failed':
-        return colors.error;
-      case 'refunded':
-        return colors.info;
-      default:
-        return colors.gray;
-    }
+  
+  const getStatusLabel = (status: string) => {
+    if (!status) return 'Unknown';
+    return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
   };
+  
+  const renderDetailRow = (icon: string, label: string, value: string) => (
+    <View style={styles.detailRow}>
+      <Ionicons name={icon} size={20} color={colors.gray} />
+      <Text style={styles.detailLabel}>{label}:</Text>
+      <Text style={styles.detailValue}>{value}</Text>
+    </View>
+  );
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primaryBlue} />
-        <Text style={styles.loadingText}>Loading booking details...</Text>
+        <ActivityIndicator size="large" color={colors.primaryGreen} />
       </View>
     );
   }
-
+  
   if (error) {
     return (
       <View style={styles.errorContainer}>
-        <Ionicons name="alert-circle" size={64} color={colors.error} />
-        <Text style={styles.errorTitle}>Oops! Something went wrong</Text>
-        <Text style={styles.errorMessage}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={fetchBookingDetails}>
+        <Ionicons name="warning" size={50} color={colors.error} />
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity 
+          style={styles.retryButton}
+          onPress={fetchBookingDetails}
+        >
           <Text style={styles.retryButtonText}>Try Again</Text>
         </TouchableOpacity>
       </View>
     );
   }
-
+  
   if (!bookingDetails) {
     return (
       <View style={styles.errorContainer}>
-        <Ionicons name="document-text" size={64} color={colors.gray} />
-        <Text style={styles.errorTitle}>Booking Not Found</Text>
-        <Text style={styles.errorMessage}>The requested booking could not be found.</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.retryButtonText}>Go Back</Text>
-        </TouchableOpacity>
+        <Ionicons name="document-text-outline" size={50} color={colors.secondaryText} />
+        <Text style={styles.errorText}>No booking details available</Text>
       </View>
     );
   }
@@ -194,86 +304,80 @@ const BookingDetailsScreen: React.FC<BookingDetailsScreenProps> = ({ route }) =>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Booking Status Card */}
-        <View style={styles.statusCard}>
-          <View style={styles.statusRow}>
-            <Text style={styles.statusLabel}>Booking Status:</Text>
-            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(bookingDetails.booking_status) }]}>
-              <Text style={styles.statusText}>{bookingDetails.booking_status?.toUpperCase()}</Text>
-            </View>
+        <View style={styles.statusContainer}>
+          <View style={[styles.statusBadge, getStatusBadgeStyle(bookingDetails.booking_status || bookingDetails.status)]}>
+            <Text style={styles.statusText}>{getStatusLabel(bookingDetails.booking_status || bookingDetails.status)}</Text>
           </View>
-          <View style={styles.statusRow}>
-            <Text style={styles.statusLabel}>Payment Status:</Text>
-            <View style={[styles.statusBadge, { backgroundColor: getPaymentStatusColor(bookingDetails.payment_status) }]}>
-              <Text style={styles.statusText}>{bookingDetails.payment_status?.toUpperCase()}</Text>
-            </View>
-          </View>
+          <Text style={styles.statusSubtext}>
+            {bookingDetails.booking_status === 'CONFIRMED' 
+              ? 'Your booking is confirmed' 
+              : bookingDetails.booking_status === 'COMPLETED'
+                ? 'This booking has been completed'
+                : bookingDetails.booking_status === 'CANCELLED'
+                  ? 'This booking has been cancelled'
+                  : 'Your booking is being processed'}
+          </Text>
         </View>
 
         {/* Professional Details Card */}
         {bookingDetails.professional_details && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Professional Details</Text>
-            <View style={styles.professionalInfo}>
-              {bookingDetails.professional_details.avatar && (
-                <Image 
-                  source={{ uri: bookingDetails.professional_details.avatar }} 
-                  style={styles.professionalAvatar}
-                />
-              )}
-              <View style={styles.professionalText}>
-                <Text style={styles.professionalName}>{bookingDetails.professional_details.name}</Text>
-                <Text style={styles.professionalSpeciality}>{bookingDetails.professional_details.speciality}</Text>
-                <View style={styles.ratingRow}>
-                  <Ionicons name="star" size={16} color={colors.warning} />
-                  <Text style={styles.ratingText}>{bookingDetails.professional_details.rating}</Text>
-                  <Text style={styles.experienceText}>
-                    {bookingDetails.professional_details.experience_years} years experience
-                  </Text>
-                </View>
-              </View>
-            </View>
-            {bookingDetails.professional_details.bio && (
-              <Text style={styles.bioText}>{bookingDetails.professional_details.bio}</Text>
-            )}
-            <TouchableOpacity style={styles.contactButton} onPress={handleContactProfessional}>
-              <Ionicons name="call" size={16} color={colors.primaryBlue} />
-              <Text style={styles.contactButtonText}>Contact Professional</Text>
-            </TouchableOpacity>
+            {renderProfessionalInfo()}
           </View>
         )}
 
         {/* Session Details Card */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Session Details</Text>
-          <View style={styles.detailRow}>
-            <Ionicons name="calendar" size={20} color={colors.gray} />
-            <Text style={styles.detailLabel}>Date:</Text>
-            <Text style={styles.detailValue}>{bookingDetails.booking_date}</Text>
+          <View style={styles.detailsContainer}>
+            {bookingDetails.consultation_date && (
+              renderDetailRow(
+                'calendar-outline', 
+                'Date', 
+                new Date(bookingDetails.consultation_date).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  weekday: 'long'
+                })
+              )
+            )}
+            {bookingDetails.consultation_time && (
+              renderDetailRow(
+                'time-outline', 
+                'Time', 
+                new Date(`2000-01-01T${bookingDetails.consultation_time}`).toLocaleTimeString('en-US', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: true
+                })
+              )
+            )}
+            {renderDetailRow(
+              bookingDetails.consultation_type === 'online' ? 'laptop-outline' : 'location-outline', 
+              bookingDetails.consultation_type === 'online' ? 'Mode' : 'Location',
+              bookingDetails.consultation_type === 'online' 
+                ? 'Online Session' 
+                : bookingDetails.consultation_type === 'home_visit'
+                  ? 'Home Visit'
+                  : bookingDetails.address || 'Location not specified'
+            )}
+            {bookingDetails.payment_status && (
+              renderDetailRow(
+                'card-outline', 
+                'Payment', 
+                `${bookingDetails.payment_status.charAt(0).toUpperCase()}${bookingDetails.payment_status.slice(1).toLowerCase()}`
+              )
+            )}
+            {bookingDetails.total_amount && (
+              renderDetailRow(
+                'cash-outline',
+                'Amount',
+                `₹${parseFloat(bookingDetails.total_amount).toFixed(2)}`
+              )
+            )}
           </View>
-          <View style={styles.detailRow}>
-            <Ionicons name="time" size={20} color={colors.gray} />
-            <Text style={styles.detailLabel}>Time:</Text>
-            <Text style={styles.detailValue}>{bookingDetails.booking_time}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Ionicons name="hourglass" size={20} color={colors.gray} />
-            <Text style={styles.detailLabel}>Duration:</Text>
-            <Text style={styles.detailValue}>{bookingDetails.duration} minutes</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Ionicons name="location" size={20} color={colors.gray} />
-            <Text style={styles.detailLabel}>Type:</Text>
-            <Text style={styles.detailValue}>
-              {bookingDetails.booking_type?.replace('_', ' ').toUpperCase()}
-            </Text>
-          </View>
-          {bookingDetails.slot_details && (
-            <View style={styles.detailRow}>
-              <Ionicons name="map" size={20} color={colors.gray} />
-              <Text style={styles.detailLabel}>Location:</Text>
-              <Text style={styles.detailValue}>{bookingDetails.slot_details.location}</Text>
-            </View>
-          )}
         </View>
 
         {/* Consultation Specific Details */}
@@ -342,17 +446,7 @@ const BookingDetailsScreen: React.FC<BookingDetailsScreenProps> = ({ route }) =>
         )}
 
         {/* Action Buttons */}
-        <View style={styles.actionButtons}>
-          {bookingDetails.booking_status === 'confirmed' && (
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancelBooking}>
-              <Ionicons name="close-circle" size={20} color={colors.offWhite} />
-              <Text style={styles.cancelButtonText}>Cancel Booking</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.primaryButtonText}>Back to Bookings</Text>
-          </TouchableOpacity>
-        </View>
+        {renderActionButtons()}
       </ScrollView>
     </View>
   );
@@ -364,7 +458,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    backgroundColor: colors.primaryBlue,
+    backgroundColor: colors.primaryGreen,
     paddingTop: 50,
     paddingBottom: 20,
     paddingHorizontal: 20,
@@ -399,22 +493,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.background,
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: colors.gray,
-    fontFamily: fonts.medium,
-  },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.background,
     padding: 20,
   },
-  errorTitle: {
-    fontSize: 20,
-    fontFamily: fonts.bold,
+  errorText: {
     color: colors.text,
     marginTop: 16,
     textAlign: 'center',

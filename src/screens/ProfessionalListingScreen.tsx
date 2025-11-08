@@ -14,8 +14,8 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { colors } from '../theme/colors';
-import { professionalFilterService } from '../services/professionalFilterService';
-import { Professional } from '../services/professionalFilterService';
+import { professionalService } from '../services';
+import type { Professional } from '../services/professional/ProfessionalService';
 import { ROUTES } from '../navigation/constants';
 
 // Category configuration for icons and colors
@@ -79,6 +79,7 @@ const ProfessionalListingScreen: React.FC = () => {
   const categoryConfig = CATEGORY_CONFIG[category];
 
   const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const professionalService = ProfessionalService.getInstance();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,36 +101,42 @@ const ProfessionalListingScreen: React.FC = () => {
     setError(null);
     
     try {
-      const queryParams = {
+      // Build query parameters
+      const queryParams: Record<string, any> = {
+        category,
+        is_online: mode === 'online',
         page: isRefresh ? 1 : pagination.page,
         limit: pagination.limit,
-        category,
-        is_online: mode === 'online', // This is now required
-        city: location?.city,
-        latitude: location?.latitude,
-        longitude: location?.longitude,
-        sort_by: 'rating' as const,
-        ...(serviceType && { service_type: (serviceType === 'classes' ? 'class' : 'consultation') as 'consultation' | 'class' | 'therapy' | 'workshop' }), // Map service type to API format
+        service_type: serviceType === 'classes' ? 'class' : 'consultation'
       };
 
-      const response = await professionalFilterService.getFilteredProfessionals(queryParams);
+      // Add location filters if available
+      if (location?.city) queryParams.city = location.city;
+      if (location?.latitude && location?.longitude) {
+        queryParams.latitude = location.latitude;
+        queryParams.longitude = location.longitude;
+      }
+
+      const response = await professionalService.getProfessionals(queryParams);
       
       if (response.success && response.data) {
+        const professionalsData = Array.isArray(response.data) ? response.data : [];
+        
         if (isRefresh) {
-          setProfessionals(response.data);
+          setProfessionals(professionalsData);
         } else {
-          setProfessionals(prev => [...prev, ...response.data]);
+          setProfessionals(prev => [...prev, ...professionalsData]);
         }
         
-        setPagination({
-          page: response.pagination.page,
-          limit: response.pagination.limit,
-          total: response.pagination.total,
-          pages: response.pagination.pages,
-        });
-      } else {
-        setError(response.message || 'Failed to load professionals');
-      }
+        // Handle pagination if available in response
+        if (response.pagination) {
+          setPagination({
+            page: response.pagination.currentPage || 1,
+            limit: response.pagination.itemsPerPage || 10,
+            total: response.pagination.totalItems || professionalsData.length,
+            pages: response.pagination.totalPages || 1,
+          });
+        }
     } catch (err: any) {
       setError(err.message || 'Failed to load professionals');
       console.error('Error fetching professionals:', err);
@@ -165,42 +172,42 @@ const ProfessionalListingScreen: React.FC = () => {
     >
       <View style={styles.cardHeader}>
         <View style={styles.avatarContainer}>
-          {item.avatar ? (
-            <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+          {item.profilePicture ? (
+            <Text style={styles.avatarText}>{item.firstName?.charAt(0)}{item.lastName?.charAt(0)}</Text>
           ) : (
             <MaterialCommunityIcons name="account" size={24} color={colors.primaryGreen} />
           )}
         </View>
         <View style={styles.professionalInfo}>
-          <Text style={styles.professionalName}>{item.name}</Text>
-          <Text style={styles.professionalExpertise}>{item.expertise.join(', ')}</Text>
+          <Text style={styles.professionalName}>{item.firstName} {item.lastName}</Text>
+          <Text style={styles.professionalExpertise}>{item.specializations?.join(', ')}</Text>
           <View style={styles.ratingContainer}>
             <MaterialCommunityIcons name="star" size={16} color={colors.accentYellow} />
-            <Text style={styles.rating}>{item.rating} ({item.total_reviews} reviews)</Text>
+            <Text style={styles.rating}>{item.rating} ({item.totalRatings} reviews)</Text>
           </View>
         </View>
         <View style={styles.priceContainer}>
-          <Text style={styles.price}>₹{item.consultation_fee}</Text>
-          <Text style={styles.duration}>{item.duration} min</Text>
+          <Text style={styles.price}>₹{item.serviceTypes?.[0]?.price || 'N/A'}</Text>
+          <Text style={styles.duration}>{item.serviceTypes?.[0]?.duration} min</Text>
         </View>
       </View>
       
       <View style={styles.cardBody}>
-        <Text style={styles.bio} numberOfLines={2}>{item.bio}</Text>
+        <Text style={styles.bio} numberOfLines={2}>{item.bio || 'No bio available'}</Text>
         <View style={styles.tags}>
-          {item.is_online && (
+          {item.isOnline && (
             <View style={styles.tag}>
               <MaterialCommunityIcons name="video" size={12} color={colors.primaryGreen} />
               <Text style={styles.tagText}>Online</Text>
             </View>
           )}
-          {item.is_offline && (
+          {item.serviceTypes?.some(st => st.type === 'in_person') && (
             <View style={styles.tag}>
               <MaterialCommunityIcons name="map-marker" size={12} color={colors.primaryGreen} />
               <Text style={styles.tagText}>In-person</Text>
             </View>
           )}
-          {item.is_home_visit && (
+          {item.serviceTypes?.some(st => st.type === 'home_visit') && (
             <View style={styles.tag}>
               <MaterialCommunityIcons name="home" size={12} color={colors.primaryGreen} />
               <Text style={styles.tagText}>Home Visit</Text>

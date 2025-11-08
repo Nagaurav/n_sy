@@ -1,8 +1,13 @@
 // AppNavigator.tsx
 import React, { useState } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useNavigation } from '@react-navigation/native';
+import { NavigationContainer, RouteProp } from '@react-navigation/native';
+import { 
+  createStackNavigator, 
+  StackNavigationProp,
+  StackScreenProps 
+} from '@react-navigation/stack';
+import { createBottomTabNavigator, BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import { useAuth } from '../utils/AuthContext';
@@ -38,13 +43,28 @@ import FAQScreen from '../screens/FAQScreen';
 import CustomerSupportScreen from '../screens/CustomerSupportScreen';
 import FeedbackScreen from '../screens/FeedbackScreen';
 
-const Stack = createStackNavigator();
-const Tab = createBottomTabNavigator();
+// Import the RootStackParamList from our types
+import { RootStackParamList, MainTabParamList } from '../types/navigation';
 
+// Create typed navigators
+type RootStackNavigationProp = StackNavigationProp<RootStackParamList>;
+type RootStackScreenProps<T extends keyof RootStackParamList> = StackScreenProps<RootStackParamList, T>;
+type MainTabScreenProps<T extends keyof MainTabParamList> = BottomTabScreenProps<MainTabParamList, T>;
+
+const Stack = createStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<MainTabParamList>();
+
+// Define screen props for SplashScreen
+interface SplashScreenProps {
+  onNavigateToAuth: () => void;
+  onNavigateToHome: () => void;
+}
+
+// Define props for BottomTabNavigator
 function BottomTabNavigator() {
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
+      screenOptions={{
         tabBarActiveTintColor: colors.primaryGreen,
         tabBarInactiveTintColor: colors.secondaryText,
         tabBarStyle: {
@@ -60,37 +80,54 @@ function BottomTabNavigator() {
           fontWeight: '500',
         },
         headerShown: false,
-        tabBarIcon: ({ color, size }) => {
-          let iconName = '';
-          switch (route.name) {
-            case 'Home':
-              iconName = 'home-variant';
-              break;
-            case 'Appointments':
-              iconName = 'calendar-check';
-              break;
-            case 'Health':
-              iconName = 'heart-pulse';
-              break;
-            case 'Profile':
-              iconName = 'account';
-              break;
-            default:
-              iconName = 'circle';
-          }
-          return <MaterialCommunityIcons name={iconName as any} color={color} size={size} />;
-        },
-      })}
+      }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Appointments" component={MyAppointmentsScreen} />
-      <Tab.Screen name="Health" component={HealthRecordsScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen 
+        name={ROUTES.HOME} 
+        component={HomeScreen}
+        options={{
+          tabBarLabel: 'Home',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="home-variant" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name={ROUTES.MY_APPOINTMENTS} 
+        component={MyAppointmentsScreen} 
+        options={{
+          tabBarLabel: 'Appointments',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="calendar-check" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name={ROUTES.HEALTH_RECORDS} 
+        component={HealthRecordsScreen} 
+        options={{
+          tabBarLabel: 'Health',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="heart-pulse" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name={ROUTES.PROFILE} 
+        component={ProfileScreen}
+        options={{
+          tabBarLabel: 'Profile',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="account" color={color} size={size} />
+          ),
+        }}
+      />
     </Tab.Navigator>
   );
 }
 
 function MainStackNavigator() {
+  const stackNavigation = useNavigation<RootStackNavigationProp>();
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="MainTabs" component={BottomTabNavigator} />
@@ -136,7 +173,12 @@ function AppNavigator() {
 
   if (isLoading) {
     console.log('AppNavigator - Showing SplashScreen (loading)');
-    return <SplashScreen />;
+    return (
+      <SplashScreen 
+        onNavigateToAuth={() => {}}
+        onNavigateToHome={() => {}}
+      />
+    );
   }
 
   console.log('AppNavigator - Rendering navigation, isAuthenticated:', isAuthenticated);
@@ -145,7 +187,7 @@ function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
-          <Stack.Screen name="Main" component={MainStackNavigator} />
+          <Stack.Screen name="MainTabs" component={MainStackNavigator} />
         ) : (
           <Stack.Screen name="Auth" component={AuthScreen} />
         )}

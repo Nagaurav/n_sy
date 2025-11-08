@@ -14,14 +14,15 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute } from '@react-navigation/native';
 import { ROUTES } from '../navigation/constants';
-import { professionalFilterService, Professional } from '../services/professionalFilterService';
-import { professionalSlotService } from '../services/professionalSlotService';
+import { professionalService } from '../services';
+import { useTypedNavigation } from '../hooks/useTypedNavigation';
+import type { Professional } from '../services/professional/ProfessionalService';
 
 const ExpertProfileScreen: React.FC = () => {
   const route = useRoute();
-  const navigation = useNavigation();
+  const navigation = useTypedNavigation();
   const { professionalId, professional } = route.params as { professionalId?: string; professional?: Professional };
 
   const [expert, setExpert] = useState<Professional | null>(null);
@@ -38,60 +39,33 @@ const ExpertProfileScreen: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      // If professional data is passed directly, use it
-      if (professional) {
-        setExpert(professional);
+      if (professional) { // If data is passed via props, use it
+        setExpert(professional as Professional);
         await fetchTimeSlots(professional.id);
-        // For now, use mock reviews since there's no dedicated reviews API
-        setReviews([
-          {
-            id: '1',
-            userName: 'Sarah M.',
-            rating: 5,
-            comment: 'Excellent session! Dr. Anya helped me with my stress management techniques.',
-          },
-          {
-            id: '2',
-            userName: 'Mike R.',
-            rating: 4,
-            comment: 'Very knowledgeable and patient. Highly recommend!',
-          },
-        ]);
-      } else if (professionalId) {
-        // Fetch from API if only ID is provided
-        // Since there's no direct professional_id filter, we'll use a broader search
-        const response = await professionalFilterService.getFilteredProfessionals({
-          limit: 50, // Get more results to find the specific professional
-          is_online: true // Required parameter - default to online
-        });
-        
-        if (response.success && response.data) {
-          const prof = response.data.find(p => p.id === professionalId);
-          if (prof) {
-            setExpert(prof);
-            await fetchTimeSlots(prof.id);
-            // For now, use mock reviews since there's no dedicated reviews API
-            setReviews([
-              {
-                id: '1',
-                userName: 'Sarah M.',
-                rating: 5,
-                comment: 'Excellent session! Dr. Anya helped me with my stress management techniques.',
-              },
-              {
-                id: '2',
-                userName: 'Mike R.',
-                rating: 4,
-                comment: 'Very knowledgeable and patient. Highly recommend!',
-              },
-            ]);
-          } else {
-            setError('Professional not found');
-          }
+      } else if (professionalId) { // Otherwise, fetch from API
+        const profileResponse = await professionalService.getProfessionalById(professionalId);
+        if (profileResponse.success && profileResponse.data) {
+          setExpert(profileResponse.data as Professional);
+          await fetchTimeSlots(professionalId);
         } else {
-          setError('Failed to load professional data');
+          throw new Error(profileResponse.message || 'Failed to load profile.');
         }
       }
+      // Keep mock reviews for now
+      setReviews([
+        {
+          id: '1',
+          userName: 'Sarah M.',
+          rating: 5,
+          comment: 'Excellent session! Dr. Anya helped me with my stress management techniques.',
+        },
+        {
+          id: '2',
+          userName: 'Mike R.',
+          rating: 4,
+          comment: 'Very knowledgeable and patient. Highly recommend!',
+        },
+      ]);
     } catch (e: any) {
       console.error('Error fetching profile:', e);
       setError(e.message || 'Failed to load profile.');
@@ -102,42 +76,39 @@ const ExpertProfileScreen: React.FC = () => {
 
   const fetchTimeSlots = async (profId: string) => {
     try {
-      const response = await professionalSlotService.getAvailableSlots(profId);
-      if (response && response.slots) {
-        // Transform slots to the format expected by the UI
-        const transformedSlots = response.slots.map((slot: any, index: number) => ({
-          id: slot.id || `slot_${index}`,
-          time: slot.time,
-          isAvailable: slot.status !== 'booked'
-        }));
-        setTimeSlots(transformedSlots);
+      const slotsResponse = await professionalService.checkSlotAvailability(profId);
+      if (slotsResponse.success && slotsResponse.data) {
+        // Flatten the slots from all dates into one list
+        const allSlots = slotsResponse.data.flatMap((dateEntry: any) => 
+          dateEntry.slots
+            .filter((slot: any) => slot.isAvailable)
+            .map((slot: any) => ({
+              id: `${dateEntry.date}-${slot.startTime}`,
+              date: dateEntry.date,
+              time: slot.startTime.substring(0, 5),
+              isAvailable: slot.isAvailable,
+              fullSlotData: { ...slot, date: dateEntry.date } 
+            }))
+        );
+        setTimeSlots(allSlots);
       } else {
-        // Fallback to mock slots if API doesn't return data
-        setTimeSlots([
-          { id: '1', time: '9:00 AM', isAvailable: true },
-          { id: '2', time: '10:00 AM', isAvailable: true },
-          { id: '3', time: '2:00 PM', isAvailable: false },
-          { id: '4', time: '3:00 PM', isAvailable: true },
-          { id: '5', time: '4:00 PM', isAvailable: true },
-        ]);
+        throw new Error(slotsResponse.message || 'Failed to load slots.');
       }
     } catch (error) {
       console.error('Error fetching time slots:', error);
-      // Fallback to mock slots
-      setTimeSlots([
-        { id: '1', time: '9:00 AM', isAvailable: true },
-        { id: '2', time: '10:00 AM', isAvailable: true },
-        { id: '3', time: '2:00 PM', isAvailable: false },
-        { id: '4', time: '3:00 PM', isAvailable: true },
-        { id: '5', time: '4:00 PM', isAvailable: true },
-      ]);
+      // Fallback to empty array instead of mock data
+      setTimeSlots([]);
     }
   };
 
   // Book a slot
   const handleBookSlot = (slot: any) => {
+    if (!expert) return;
+    
     // Check if this is a yoga instructor (from yoga flow)
-    const isYogaInstructor = expert?.category === 'yoga' || expert?.specializations?.includes('Yoga');
+    const isYogaInstructor = expert.specializations?.some(spec => 
+      spec.toLowerCase().includes('yoga')
+    );
     
     if (isYogaInstructor) {
       // For yoga instructors, navigate to the yoga booking flow
@@ -241,10 +212,12 @@ const ExpertProfileScreen: React.FC = () => {
               color={colors.primaryGreen} 
             />
           </View>
-          <Text style={styles.name}>{expert.name}</Text>
-          <Text style={styles.specialty}>{expert.expertise?.join(', ') || expert.category}</Text>
+          <Text style={styles.name}>{`${expert.firstName} ${expert.lastName}`}</Text>
+          <Text style={styles.specialty}>
+            {expert.specializations?.join(', ')}
+          </Text>
           <Text style={styles.experience}>
-            {expert.experience_years || '5+'} years experience
+            {expert.experience}+ Years Experience
           </Text>
           
           {/* Rating */}
@@ -260,7 +233,7 @@ const ExpertProfileScreen: React.FC = () => {
                 />
               ))}
             <Text style={styles.ratingText}>
-              {expert.rating?.toFixed(1) || '4.0'} ({expert.total_reviews || 24} reviews)
+              {expert.rating?.toFixed(1) || '4.0'} ({expert.totalRatings || 24} reviews)
             </Text>
           </View>
         </View>
@@ -306,19 +279,19 @@ const ExpertProfileScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Services</Text>
           <View style={styles.servicesContainer}>
-            {expert.is_online && (
+            {expert.serviceTypes?.some(st => st.type === 'online') && (
               <View style={styles.serviceItem}>
                 <MaterialCommunityIcons name="video" size={20} color={colors.accentGreen} />
                 <Text style={styles.serviceText}>Online Consultation</Text>
               </View>
             )}
-            {expert.is_offline && (
+            {expert.serviceTypes?.some(st => st.type === 'in_person') && (
               <View style={styles.serviceItem}>
                 <MaterialCommunityIcons name="map-marker" size={20} color={colors.accentBlue} />
                 <Text style={styles.serviceText}>Clinic Visit</Text>
               </View>
             )}
-            {expert.is_home_visit && (
+            {expert.serviceTypes?.some(st => st.type === 'home_visit') && (
               <View style={styles.serviceItem}>
                 <MaterialCommunityIcons name="home" size={20} color={colors.accentPurple} />
                 <Text style={styles.serviceText}>Home Visit</Text>

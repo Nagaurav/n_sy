@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authService } from '../services/authService';
+import { AuthService, User } from '../services/auth/AuthService';
+const authService = AuthService.getInstance();
 
 // Types
 export type AuthContextType = {
@@ -11,6 +12,7 @@ export type AuthContextType = {
   isNewUser: boolean;
   phoneNumber: string;
   authStep: 'onboarding' | 'login' | 'otp' | 'signup' | 'success' | 'main';
+  user: User | null;
   setHasCompletedOnboarding: (v: boolean) => void;
   setIsLoggedIn: (v: boolean) => void;
   setIsAuthenticated: (v: boolean) => void;
@@ -18,6 +20,7 @@ export type AuthContextType = {
   setIsNewUser: (v: boolean) => void;
   setPhoneNumber: (v: string) => void;
   setAuthStep: (v: 'onboarding' | 'login' | 'otp' | 'signup' | 'success' | 'main') => void;
+  setUser: (user: User | null) => void;
   logout: () => Promise<void>;
 };
 
@@ -31,6 +34,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isNewUser, setIsNewUser] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [authStep, setAuthStep] = useState<'onboarding' | 'login' | 'otp' | 'signup' | 'success' | 'main'>('onboarding');
+  const [user, setUser] = useState<User | null>(null);
 
   // Check authentication status on app start
   useEffect(() => {
@@ -49,6 +53,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const loggedIn = await AsyncStorage.getItem('isLoggedIn');
       const phone = await AsyncStorage.getItem('phoneNumber');
       const step = await AsyncStorage.getItem('authStep');
+      const userData = await AsyncStorage.getItem('user');
       
       setPhoneNumber(phone || '');
       setAuthStep((step as any) || 'onboarding');
@@ -57,8 +62,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Verify if the stored token is still valid
         const isTokenValid = await authService.isAuthenticated();
         if (isTokenValid) {
-          setIsLoggedIn(true);
-          setIsAuthenticated(true);
+          try {
+            // If we have user data in AsyncStorage, use it
+            if (userData) {
+              setUser(JSON.parse(userData));
+            } else {
+              // Otherwise, fetch the current user
+              const userResponse = await authService.getCurrentUser();
+              if (userResponse.success && userResponse.data) {
+                setUser(userResponse.data);
+                await AsyncStorage.setItem('user', JSON.stringify(userResponse.data));
+              }
+            }
+            setIsLoggedIn(true);
+            setIsAuthenticated(true);
+          } catch (error) {
+            console.error('Error fetching user data:', error);
+            await logout();
+          }
         } else {
           // Token is invalid, clear stored data
           await logout();
@@ -66,6 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setIsLoggedIn(false);
         setIsAuthenticated(false);
+        setUser(null);
       }
     } catch (error) {
       console.error('Error checking auth status:', error);
@@ -85,9 +107,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoggedIn(false);
       setIsAuthenticated(false);
+      setUser(null);
       setPhoneNumber('');
       setAuthStep('onboarding');
-      await AsyncStorage.multiRemove(['isLoggedIn', 'phoneNumber', 'authStep']);
+      await AsyncStorage.multiRemove(['isLoggedIn', 'phoneNumber', 'authStep', 'user', 'token', 'refreshToken']);
     }
   };
 
@@ -112,6 +135,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     AsyncStorage.setItem('authStep', authStep);
   }, [authStep]);
 
+  useEffect(() => {
+    AsyncStorage.setItem('user', JSON.stringify(user));
+  }, [user]);
+
   return (
     <AuthContext.Provider value={{
       hasCompletedOnboarding,
@@ -121,6 +148,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isNewUser,
       phoneNumber,
       authStep,
+      user,
       setHasCompletedOnboarding,
       setIsLoggedIn,
       setIsAuthenticated,
@@ -128,6 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsNewUser,
       setPhoneNumber,
       setAuthStep,
+      setUser,
       logout,
     }}>
       {children}

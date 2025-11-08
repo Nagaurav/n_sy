@@ -12,17 +12,39 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
-  Modal,
-  ScrollView,
   TextInput,
+  ScrollView,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Animated, { FadeInUp } from 'react-native-reanimated';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { colors } from '../theme/colors';
 import { ROUTES } from '../navigation/constants';
 import { YogaCard } from '../components/yoga';
-import { dataTransform, calculatePrice, timeUtils } from '../utils/yogaUtils';
+import { yogaClassService, type YogaClass } from '../services/yogaClassService';
+
+// Define navigation types
+type RootStackParamList = {
+  ProfessionalProfile: {
+    professionalId: string;
+    yogaClass: YogaClass;
+    mode: 'online' | 'offline';
+    location?: {
+      city: string;
+      latitude: number;
+      longitude: number;
+    };
+    category: string;
+    categoryName: string;
+    categoryIcon: string;
+    categoryColor: string;
+  };
+  // Add other screens as needed
+};
+
+type YogaSelectionScreenRouteProp = RouteProp<{ params: RouteParams }, 'params'>;
+type YogaSelectionScreenNavigationProp = StackNavigationProp<RootStackParamList, 'ProfessionalProfile'>;
 
 const { width } = Dimensions.get('window');
 const CARD_MARGIN = 16;
@@ -34,6 +56,7 @@ interface RouteParams {
     latitude: number;
     longitude: number;
   };
+  [key: string]: any; // For any additional params
 }
 
 // Simplified data structure for yoga instructors only
@@ -73,232 +96,130 @@ interface YogaInstructor {
 }
 
 const YogaSelectionScreen: React.FC = () => {
-  const navigation = useNavigation();
-  const route = useRoute();
-  const { mode, location } = route.params as RouteParams;
+  const navigation = useNavigation<YogaSelectionScreenNavigationProp>();
+  const route = useRoute<YogaSelectionScreenRouteProp>();
+  const { mode, location } = route.params;
 
-  const [instructors, setInstructors] = useState<YogaInstructor[]>([]);
+  const [yogaClasses, setYogaClasses] = useState<YogaClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedSort, setSelectedSort] = useState<'popular' | 'price_low' | 'price_high' | 'rating'>('popular');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Mock data for yoga instructors
-  const mockInstructors: YogaInstructor[] = [
-    {
-      id: 'inst_1',
-      name: 'Priya Sharma',
-      title: 'Senior Yoga Instructor',
-      description: 'Certified yoga instructor with 8+ years of experience in Hatha, Vinyasa, and Ashtanga yoga. Specializes in therapeutic yoga and stress relief.',
-      price: 800,
-      originalPrice: 1000,
-      icon: 'yoga',
-      badge: { type: 'popular', text: 'Most Popular' },
-      stats: [
-        { icon: 'star', value: '4.8', label: 'Rating' },
-        { icon: 'account-group', value: '500+', label: 'Students' },
-        { icon: 'calendar-check', value: '2000+', label: 'Classes' },
-      ],
-      features: ['Hatha Yoga', 'Vinyasa Flow', 'Stress Relief', 'Therapeutic'],
-      rating: 4.8,
-      experience: 8,
-      totalStudents: 500,
-      totalClasses: 2000,
-      specialization: ['Hatha Yoga', 'Vinyasa Flow', 'Therapeutic Yoga'],
-      languages: ['English', 'Hindi'],
-      bio: 'Dedicated yoga instructor helping students achieve physical and mental wellness through traditional and modern yoga practices.',
-      hourlyRate: 800,
-      groupClasses: true,
-      oneOnOneClasses: true,
-      homeVisit: mode === 'offline',
-      onlineClasses: mode === 'online',
-      isAvailable: true,
-    },
-    {
-      id: 'inst_2',
-      name: 'Rajesh Kumar',
-      title: 'Yoga & Meditation Expert',
-      description: 'Experienced instructor specializing in meditation, pranayama, and gentle yoga. Perfect for beginners and those seeking inner peace.',
-      price: 600,
-      originalPrice: 750,
-      icon: 'meditation',
-      badge: { type: 'recommended', text: 'Recommended' },
-      stats: [
-        { icon: 'star', value: '4.9', label: 'Rating' },
-        { icon: 'account-group', value: '300+', label: 'Students' },
-        { icon: 'calendar-check', value: '1500+', label: 'Classes' },
-      ],
-      features: ['Meditation', 'Pranayama', 'Gentle Yoga', 'Mindfulness'],
-      rating: 4.9,
-      experience: 6,
-      totalStudents: 300,
-      totalClasses: 1500,
-      specialization: ['Meditation', 'Pranayama', 'Gentle Yoga'],
-      languages: ['English', 'Hindi', 'Sanskrit'],
-      bio: 'Passionate about helping others find inner peace and balance through meditation and gentle yoga practices.',
-      hourlyRate: 600,
-      groupClasses: true,
-      oneOnOneClasses: true,
-      homeVisit: mode === 'offline',
-      onlineClasses: mode === 'online',
-      isAvailable: true,
-    },
-    {
-      id: 'inst_3',
-      name: 'Anjali Patel',
-      title: 'Power Yoga Specialist',
-      description: 'Dynamic power yoga instructor focusing on strength, flexibility, and weight loss. High-energy sessions for fitness enthusiasts.',
-      price: 900,
-      originalPrice: 1200,
-      icon: 'fire',
-      badge: { type: 'new', text: 'New' },
-      stats: [
-        { icon: 'star', value: '4.7', label: 'Rating' },
-        { icon: 'account-group', value: '200+', label: 'Students' },
-        { icon: 'calendar-check', value: '800+', label: 'Classes' },
-      ],
-      features: ['Power Yoga', 'Strength Training', 'Weight Loss', 'High Energy'],
-      rating: 4.7,
-      experience: 4,
-      totalStudents: 200,
-      totalClasses: 800,
-      specialization: ['Power Yoga', 'Strength Training', 'Weight Loss'],
-      languages: ['English', 'Gujarati'],
-      bio: 'Energetic instructor helping students build strength, flexibility, and confidence through dynamic power yoga sessions.',
-      hourlyRate: 900,
-      groupClasses: true,
-      oneOnOneClasses: true,
-      homeVisit: mode === 'offline',
-      onlineClasses: mode === 'online',
-      isAvailable: true,
-    },
-    {
-      id: 'inst_4',
-      name: 'Dr. Meera Singh',
-      title: 'Therapeutic Yoga Expert',
-      description: 'Medical professional and yoga therapist specializing in injury recovery, chronic pain management, and rehabilitation.',
-      price: 1200,
-      originalPrice: 1500,
-      icon: 'heart-pulse',
-      badge: { type: 'recommended', text: 'Expert' },
-      stats: [
-        { icon: 'star', value: '4.9', label: 'Rating' },
-        { icon: 'account-group', value: '150+', label: 'Students' },
-        { icon: 'calendar-check', value: '1000+', label: 'Classes' },
-      ],
-      features: ['Therapeutic Yoga', 'Injury Recovery', 'Pain Management', 'Rehabilitation'],
-      rating: 4.9,
-      experience: 12,
-      totalStudents: 150,
-      totalClasses: 1000,
-      specialization: ['Therapeutic Yoga', 'Injury Recovery', 'Pain Management'],
-      languages: ['English', 'Hindi', 'Punjabi'],
-      bio: 'Medical professional combining traditional yoga with modern therapeutic techniques for healing and wellness.',
-      hourlyRate: 1200,
-      groupClasses: false,
-      oneOnOneClasses: true,
-      homeVisit: mode === 'offline',
-      onlineClasses: mode === 'online',
-      isAvailable: true,
-    },
-  ];
-
-  useEffect(() => {
-    loadInstructors();
-  }, [mode, location]);
-
   const loadInstructors = useCallback(async () => {
     setLoading(true);
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Filter instructors based on mode
-      const filteredInstructors = mockInstructors.filter(instructor => {
-        if (mode === 'online') {
-          return instructor.onlineClasses;
-        } else {
-          return instructor.homeVisit || instructor.groupClasses;
-        }
-      });
-      
-      setInstructors(filteredInstructors);
-    } catch (error) {
-      console.error('Error loading instructors:', error);
-      Alert.alert('Error', 'Failed to load yoga instructors');
+      const filters = {
+        page: 1,
+        limit: 20,
+        city: location?.city,
+        group_online: mode === 'online',
+        one_to_one_online: mode === 'online',
+        group_offline: mode === 'offline',
+        one_to_one_offline: mode === 'offline',
+        home_visit: mode === 'offline',
+      };
+
+      console.log("Fetching yoga classes with filters:", filters);
+      const response = await yogaClassService.getYogaClasses(filters);
+
+      if (response && response.data) {
+        setYogaClasses(response.data);
+      } else {
+        Alert.alert('Error', 'Failed to load yoga classes');
+      }
+    } catch (error: any) {
+      console.error('Error loading yoga classes:', error);
+      Alert.alert('Error', error.message || 'Failed to load yoga classes');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [mode, location]);
+
+  useEffect(() => {
+    loadInstructors();
+  }, [loadInstructors]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadInstructors();
-    setRefreshing(false);
   }, [loadInstructors]);
 
-  const handleInstructorPress = (instructor: YogaInstructor) => {
-    console.log('Selected instructor:', instructor.name);
-    
-    // Navigate directly to booking confirmation with instructor details
-    navigation.navigate(ROUTES.BOOKING_CONFIRMATION as never, {
-      instructor,
+  const handleClassPress = (yogaClass: YogaClass) => {
+    console.log('Selected yoga class:', yogaClass.title);
+    navigation.navigate('ProfessionalProfile', {
+      professionalId: yogaClass.professional_id.toString(),
+      yogaClass: yogaClass,
       mode,
       location,
       category: 'yoga',
       categoryName: 'Yoga Classes',
       categoryIcon: 'yoga',
       categoryColor: colors.primaryGreen,
-    } as never);
+    });
   };
 
-  const sortInstructors = (instructors: YogaInstructor[]) => {
+  const sortClasses = (classes: YogaClass[]) => {
     switch (selectedSort) {
       case 'popular':
-        return [...instructors].sort((a, b) => (b.totalStudents || 0) - (a.totalStudents || 0));
+        return [...classes].sort((a, b) => 
+          (a.effective_price || a.price_group_online || 0) - 
+          (b.effective_price || b.price_group_online || 0)
+        );
       case 'price_low':
-        return [...instructors].sort((a, b) => a.price - b.price);
+        return [...classes].sort((a, b) => 
+          (a.effective_price || a.price_group_online || 0) - 
+          (b.effective_price || b.price_group_online || 0)
+        );
       case 'price_high':
-        return [...instructors].sort((a, b) => b.price - a.price);
+        return [...classes].sort((a, b) => 
+          (b.effective_price || b.price_group_online || 0) - 
+          (a.effective_price || a.price_group_online || 0)
+        );
       case 'rating':
-        return [...instructors].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+        return [...classes].sort((a, b) => 
+          (a.effective_price || a.price_group_online || 0) - 
+          (b.effective_price || b.price_group_online || 0)
+        );
       default:
-        return instructors;
+        return classes;
     }
   };
 
-  const filterInstructors = (instructors: YogaInstructor[]) => {
-    if (!searchQuery.trim()) return instructors;
-    
+  const filterClasses = (classes: YogaClass[]) => {
+    if (!searchQuery.trim()) return classes;
     const query = searchQuery.toLowerCase();
-    return instructors.filter(instructor =>
-      instructor.name.toLowerCase().includes(query) ||
-      instructor.title.toLowerCase().includes(query) ||
-      instructor.description.toLowerCase().includes(query) ||
-      instructor.specialization?.some(spec => spec.toLowerCase().includes(query))
+    return classes.filter(cls =>
+      cls.title.toLowerCase().includes(query) ||
+      cls.description.toLowerCase().includes(query) ||
+      (cls.disease?.toLowerCase() || '').includes(query)
     );
   };
 
-  const renderItem = ({ item, index }: { item: YogaInstructor; index: number }) => (
+  const renderItem = ({ item, index }: { item: YogaClass; index: number }) => (
     <Animated.View entering={FadeInUp.delay(index * 100)}>
       <YogaCard
-        title={item.name}
-        subtitle={item.title}
+        title={item.title}
         description={item.description}
-        price={item.price}
-        originalPrice={item.originalPrice}
-        icon={item.icon}
-        badge={item.badge}
-        stats={item.stats}
-        features={item.features}
-        variant="instructor"
-        onPress={() => handleInstructorPress(item)}
+        price={item.effective_price || item.price_group_online || 0}
+        originalPrice={item.price_one_to_one_online || undefined}
+        icon="yoga"
+        badge={item.is_disease_specific ? { type: 'recommended', text: item.disease || '' } : { type: 'popular', text: 'Popular' }}
+        stats={[
+          { icon: 'calendar', value: yogaClassService.formatDuration(item.duration), label: 'Duration' },
+          { icon: 'account-group', value: `${item.max_participants_online || 'N/A'}`, label: 'Slots' },
+        ]}
+        features={yogaClassService.getSessionTypesAvailable(item)}
+        variant="package"
+        onPress={() => handleClassPress(item)}
       />
     </Animated.View>
   );
 
   const renderSortButton = (sort: typeof selectedSort, label: string, icon: string) => (
     <TouchableOpacity
+      key={sort}
       style={[
         styles.sortButton,
         selectedSort === sort && styles.sortButtonActive
@@ -322,14 +243,23 @@ const YogaSelectionScreen: React.FC = () => {
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <MaterialCommunityIcons name="yoga" size={64} color={colors.secondaryText} />
-      <Text style={styles.emptyStateTitle}>No Instructors Found</Text>
+      <Text style={styles.emptyStateTitle}>No Classes Found</Text>
       <Text style={styles.emptyStateSubtitle}>
         Try adjusting your search or filters
       </Text>
     </View>
   );
 
-  const filteredAndSortedInstructors = sortInstructors(filterInstructors(instructors));
+  if (loading && yogaClasses.length === 0) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primaryGreen} />
+        <Text style={styles.loadingText}>Loading yoga classes...</Text>
+      </View>
+    );
+  }
+
+  const filteredAndSortedClasses = sortClasses(filterClasses(yogaClasses));
 
   return (
     <SafeAreaView style={styles.container}>
@@ -344,10 +274,9 @@ const YogaSelectionScreen: React.FC = () => {
           <MaterialCommunityIcons name="arrow-left" size={24} color={colors.primaryText} />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Yoga Classes</Text>
+          <Text style={styles.headerTitle}>Available Yoga Classes</Text>
           <Text style={styles.headerSubtitle}>
-            {mode === 'online' ? 'Online Classes' : 'In-Person Classes'}
-            {location?.city && ` • ${location.city}`}
+            {mode === 'online' ? 'Online' : 'In-person'} classes in {location?.city || 'your area'}
           </Text>
         </View>
       </View>
@@ -358,7 +287,7 @@ const YogaSelectionScreen: React.FC = () => {
           <MaterialCommunityIcons name="magnify" size={20} color={colors.secondaryText} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search instructors..."
+            placeholder="Search classes..."
             placeholderTextColor={colors.secondaryText}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -371,9 +300,13 @@ const YogaSelectionScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Sort Options */}
+{/* Sort Options */}
       <View style={styles.sortContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.sortScrollContainer}
+        >
           {renderSortButton('popular', 'Popular', 'fire')}
           {renderSortButton('rating', 'Top Rated', 'star')}
           {renderSortButton('price_low', 'Price Low', 'trending-down')}
@@ -381,25 +314,25 @@ const YogaSelectionScreen: React.FC = () => {
         </ScrollView>
       </View>
 
-      {/* Instructors List */}
+      {/* Classes List */}
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primaryGreen} />
-          <Text style={styles.loadingText}>Loading instructors...</Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading yoga classes...</Text>
         </View>
       ) : (
         <FlatList
-          data={filteredAndSortedInstructors}
+          data={filteredAndSortedClasses}
           renderItem={renderItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={[colors.primaryGreen]}
-              tintColor={colors.primaryGreen}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
             />
           }
           ListEmptyComponent={renderEmptyState}
@@ -461,6 +394,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
   },
+  sortScrollContainer: {
+    paddingRight: 20,
+    gap: 8,
+  },
   sortButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -502,7 +439,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    padding: 32,
   },
   emptyStateTitle: {
     fontSize: 18,
@@ -510,12 +447,14 @@ const styles = StyleSheet.create({
     color: colors.primaryText,
     marginTop: 16,
     marginBottom: 8,
+    textAlign: 'center',
   },
   emptyStateSubtitle: {
     fontSize: 14,
     color: colors.secondaryText,
     textAlign: 'center',
     lineHeight: 20,
+    paddingHorizontal: 20,
   },
 });
 

@@ -16,7 +16,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { useNavigation } from '@react-navigation/native';
-import { professionalSlotService } from '../services/professionalSlotService';
+import { bookingService } from '../services';
 
 type Prescription = {
   id: string;
@@ -90,20 +90,22 @@ const HealthRecordsScreen: React.FC = () => {
       let sessionHistory: SessionHistoryItem[] = [];
       try {
         const userId = 'user_123'; // Replace with actual user ID from context
-        const bookings = await professionalSlotService.getUserBookings(userId);
+        const bookingsResponse = await bookingService.getUserBookings(userId);
         
-        // Transform bookings to session history format
-        sessionHistory = bookings.map((booking: any) => ({
-          id: booking.bookingId,
-          date: booking.date,
-          professionalName: booking.professionalName || 'Professional',
-          serviceName: booking.serviceName || 'Consultation',
-          mode: booking.mode || 'Online',
-          duration: booking.duration || 60,
-          notes: booking.notes || 'Session completed successfully',
-          status: booking.status || 'completed',
-          amount: booking.amount || 0,
-        }));
+        if (bookingsResponse.success && bookingsResponse.data) {
+          // Transform bookings to session history format
+          sessionHistory = bookingsResponse.data.map((booking: any) => ({
+            id: booking.booking_id || booking.id,
+            date: booking.date || booking.booking_date,
+            professionalName: booking.professional_name || 'Professional',
+            serviceName: booking.service_name || 'Consultation',
+            mode: booking.mode || 'Online',
+            duration: booking.duration || 60,
+            notes: booking.notes || 'Session completed successfully',
+            status: booking.booking_status?.toLowerCase() || 'completed',
+            amount: booking.amount || 0,
+          }));
+        }
       } catch (bookingError) {
         console.error('Error fetching session history:', bookingError);
         // Fallback to mock session data

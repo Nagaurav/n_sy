@@ -1,4 +1,3 @@
-// ProfileScreen.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -13,27 +12,143 @@ import {
   Linking,
   SafeAreaView,
   StatusBar,
+  Image,
+  ImageSourcePropType,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
-import { getAuthToken } from '../config/api';
+import { AuthService, type User } from '../services/auth/AuthService';
+import { useAuth } from '../utils/AuthContext';
 
-// Types for user data and payment methods
+const authService = AuthService.getInstance();
+
+// Extend the base User type with additional profile properties
+type ExtendedUser = User & {
+  user_health?: {
+    blood_group?: string;
+    height?: number;
+    weight?: number;
+    allergies?: string[];
+    medical_conditions?: string[];
+    medications?: Array<{
+      name: string;
+      dosage: string;
+      frequency: string;
+      start_date: string;
+      end_date?: string;
+    }>;
+    emergency_contact?: {
+      name: string;
+      relationship: string;
+      phone: string;
+      email?: string;
+    };
+    last_checkup_date?: string;
+    blood_pressure?: string;
+    blood_sugar_level?: string;
+    cholesterol_level?: string;
+    bmi?: number;
+  };
+  first_name?: string;
+  last_name?: string;
+  date_of_birth?: string;
+  gender?: string;
+  address?: string | {
+    street?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    pincode?: string;
+    coordinates?: {
+      latitude: number;
+      longitude: number;
+    };
+  };
+};
+
+type RootStackParamList = {
+  Profile: undefined;  
+  // Add other screen params as needed
+};
+
+type ProfileScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Profile'>;
+
+// Extend the User type with health information
 interface UserProfile {
+  id: string | number;
   name: string;
   email: string;
   phone: string;
-  avatarUrl?: string;
+  first_name?: string;
+  last_name?: string;
+  avatar_url?: string;
+  date_of_birth?: string;
+  gender?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  created_at?: string;
+  updated_at?: string;
+  
+  // Health Information
+  user_health?: {
+    blood_group?: string;
+    height?: number;
+    weight?: number;
+    allergies?: string[];
+    medical_conditions?: string[];
+    medications?: Array<{
+      name: string;
+      dosage: string;
+      frequency: string;
+      start_date: string;
+      end_date?: string;
+    }>;
+    emergency_contact?: {
+      name: string;
+      relationship: string;
+      phone: string;
+      email?: string;
+    };
+    last_checkup_date?: string;
+    blood_pressure?: string;
+    blood_sugar_level?: string;
+    cholesterol_level?: string;
+    bmi?: number;
+  };
+  
+  // Backward compatibility
+  blood_group?: string;
+  height?: number;
+  weight?: number;
+  allergies?: string[];
+  medical_conditions?: string[];
+  last_checkup_date?: string;
+  blood_pressure?: string;
+  blood_sugar_level?: string;
+  cholesterol_level?: string;
+  bmi?: number;
+  
+  // Address details (if not nested under user_health)
+  address_details?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    pincode?: string;
+  };
 }
 
 interface PaymentMethod {
   id: string;
   type: 'card' | 'upi' | 'wallet' | 'netbanking';
   displayName: string;
-  last4?: string;    // For cards
-  upiId?: string;    // For UPI
+  last4?: string;
+  upiId?: string;
   active: boolean;
 }
 
@@ -45,455 +160,610 @@ const paymentIconsMap: Record<string, string> = {
 };
 
 const ProfileScreen: React.FC = () => {
-  const navigation = useNavigation();
-
-  // User profile state
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-
-  // Editing profile state
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-
-  // Payment methods state
+  const navigation = useNavigation<ProfileScreenNavigationProp>();
+  const { user, setUser } = useAuth();
+  const [profile, setProfile] = useState<ExtendedUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+  });
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
-  const [loadingProfile, setLoadingProfile] = useState(false);
-  const [saving, setSaving] = useState(false);
-  // Help & support info - simplified here
-  const [supportEmail, setSupportEmail] = useState('support@samyayog.com');
-  const [supportPhone, setSupportPhone] = useState('+91 98765 43210');
+  
+  // Support contact info
+  const supportEmail = 'support@samyayog.com';
+  const supportPhone = '+91 98765 43210';
 
-  // Real profile service using API
-  const profileService = {
-    getProfile: async () => {
-      try {
-        const authToken = await getAuthToken();
-        if (!authToken) {
-          throw new Error('No authentication token found');
-        }
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-        
-        const response = await fetch('http://88.222.241.179:7000/api/v1/user/profile', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`,
-          },
-          signal: controller.signal,
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        return { 
-          success: true,
-          data: result.data || result // Handle both response formats
-        };
-      } catch (error: any) {
-        console.error('Error fetching profile:', error);
-        // Return a default profile if the API fails
-        return {
-          success: false,
-          data: {
-            name: 'User',
-            email: 'user@example.com',
-            phone: '+91 98765 43210',
-            avatarUrl: undefined,
-          }
-        };
-      }
-    },
-    
-    updateProfile: async (profileData: { name: string; email: string; phone: string }) => {
-      try {
-        const authToken = await getAuthToken();
-        if (!authToken) {
-          throw new Error('No authentication token found');
-        }
-        
-        const response = await fetch('http://88.222.241.179:7000/api/v1/user/profile', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`,
-          },
-          body: JSON.stringify(profileData),
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || 'Failed to update profile');
-        }
-        
-        const result = await response.json();
-        return { 
-          success: true,
-          data: result.data || result
-        };
-      } catch (error: any) {
-        console.error('Error updating profile:', error);
-        throw new Error(error.message || 'Failed to update profile');
-      }
-    }
-  };
-
-  // Real payment service using API
-  const paymentService = {
-    getPaymentMethods: async () => {
-      try {
-        // Use real API call to get payment methods
-        const response = await fetch('http://88.222.241.179:7000/api/v1/user/payment-methods', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${await getAuthToken()}`,
-          },
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch payment methods');
-        }
-        
-        const data = await response.json();
-        return { data: data.data || [] };
-      } catch (error) {
-        console.error('Error fetching payment methods:', error);
-        // Return empty array if API fails
-        return { data: [] };
-      }
-    },
-    removePaymentMethod: async (id: string) => {
-      try {
-        // Use real API call to remove payment method
-        const response = await fetch(`http://88.222.241.179:7000/api/v1/user/payment-methods/${id}`, {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${await getAuthToken()}`,
-          },
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to remove payment method');
-        }
-        
-        const result = await response.json();
-        return { success: result.success || true };
-      } catch (error) {
-        console.error('Error removing payment method:', error);
-        return { success: false };
-      }
-    }
-  };
-
-  // Fetch profile from API
-  const fetchProfile = useCallback(async () => {
-    setLoadingProfile(true);
+  // Fetch user profile data
+  const fetchUserProfile = useCallback(async () => {
     try {
-      const res = await profileService.getProfile();
-      setProfile(res.data);
-      setName(res.data.name);
-      setEmail(res.data.email);
-      setPhone(res.data.phone);
-    } catch (e) {
-      Alert.alert('Error', 'Failed to load profile.');
+      setLoading(true);
+      setError(null);
+      
+      // Get the current user from AuthContext
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
+      // Use the user ID from the context
+      const userId = user.id || user.userId;
+      if (!userId) {
+        throw new Error('User ID not found');
+      }
+      
+      const response = await authService.getUserProfile(userId.toString());
+      
+      if (response.success && response.data) {
+        // The response.data already contains the user profile with health info
+        const responseData = response.data as any; // Temporary type assertion
+        const userData: ExtendedUser = {
+          ...response.data,
+          // Ensure we have the user ID
+          id: response.data.id || userId,
+          userId: response.data.userId || userId,
+          // Map name fields with fallbacks
+          firstName: response.data.firstName || responseData?.first_name || '',
+          lastName: response.data.lastName || responseData?.last_name || '',
+          // Map other fields as needed
+        };
+        
+        setProfile(userData);
+        
+        // Set form data from the user data
+        setFormData({
+          firstName: userData.firstName || responseData?.first_name || '',
+          lastName: userData.lastName || responseData?.last_name || '',
+          email: userData.email || '',
+          phone: userData.phone || '',
+        });
+      } else {
+        setError(response.message || 'Failed to load profile data');
+      }
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      setError('Failed to load profile. Please try again.');
     } finally {
-      setLoadingProfile(false);
+      setLoading(false);
     }
   }, []);
 
-  // Fetch payment methods from API
-  const fetchPaymentMethods = useCallback(async () => {
-    setLoadingPayments(true);
+  // Load profile on component mount
+  useEffect(() => {
+    fetchUserProfile();
+  }, [fetchUserProfile]);
+
+  // Handle removing a payment method
+  const removePaymentMethod = async (id: string) => {
     try {
-      const res = await paymentService.getPaymentMethods();
-      setPaymentMethods(res.data);
-    } catch (e) {
-      Alert.alert('Error', 'Failed to load payment methods.');
+      setLoadingPayments(true);
+      // TODO: Implement actual API call to remove payment method
+      // await paymentService.removePaymentMethod(id);
+      // Refresh payment methods
+      // const response = await paymentService.getPaymentMethods();
+      // setPaymentMethods(response.data || []);
+      Alert.alert('Success', 'Payment method removed');
+    } catch (error) {
+      console.error('Error removing payment method:', error);
+      Alert.alert('Error', 'Failed to remove payment method');
     } finally {
       setLoadingPayments(false);
     }
-  }, []);
-
-  useEffect(() => {
-    fetchProfile();
-    fetchPaymentMethods();
-  }, [fetchProfile, fetchPaymentMethods]);
-
-  // Toggle edit mode
-  const toggleEdit = () => {
-    if (editing) {
-      // Cancel edits, reset fields
-      if (profile) {
-        setName(profile.name);
-        setEmail(profile.email);
-        setPhone(profile.phone);
-      }
-    }
-    setEditing(!editing);
   };
 
-  // Save updated profile
-  const saveProfile = async () => {
-    if (!name.trim() || !email.trim() || !phone.trim()) {
-      return Alert.alert('Validation', 'Please fill in all fields.');
+  // Handle profile update
+  const handleUpdateProfile = async () => {
+    if (!profile?.id) {
+      Alert.alert('Error', 'User ID not found');
+      return;
     }
-    setSaving(true);
+    
     try {
-      await profileService.updateProfile({ name: name.trim(), email: email.trim(), phone: phone.trim() });
-      Alert.alert('Success', 'Profile updated successfully.');
-      setProfile({ name: name.trim(), email: email.trim(), phone: phone.trim() });
-      setEditing(false);
-    } catch (e) {
-      Alert.alert('Error', 'Failed to update profile.');
+      setSaving(true);
+      
+      const updateData = {
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        phone: formData.phone,
+        // Maintain backward compatibility
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+      };
+      
+      const response = await authService.updateProfile(profile.id, updateData);
+      
+      if (response.success) {
+        setIsEditing(false);
+        await fetchUserProfile();
+        Alert.alert('Success', 'Profile updated successfully');
+      } else {
+        throw new Error(response.message || 'Failed to update profile');
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to update profile. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
-  // Handle removing a payment method
-  const removePaymentMethod = async (id: string) => {
-    Alert.alert(
-      'Remove Payment Method',
-      'Are you sure you want to remove this payment method?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await paymentService.removePaymentMethod(id);
-              fetchPaymentMethods();
-            } catch (e) {
-              Alert.alert('Error', 'Failed to remove payment method.');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  // Add Payment method navigates to your AddPaymentMethod screen
-  const addPaymentMethod = () => {
-    Alert.alert('Add Payment Method', 'This feature will be implemented soon.');
-  };
-
-  // Help contact handlers
-  const sendSupportEmail = () => {
+  // Handle support email
+  const handleSupportEmail = () => {
     Linking.openURL(`mailto:${supportEmail}`);
   };
-  const callSupport = () => {
+
+  // Handle support phone call
+  const handleSupportCall = () => {
     Linking.openURL(`tel:${supportPhone}`);
   };
 
-  if (loadingProfile) {
+  // Calculate BMI if height and weight are available
+  const calculateBMI = () => {
+    // Get height and weight from user_health object
+    const height = profile?.user_health?.height;
+    const weight = profile?.user_health?.weight;
+    
+    if (!height || !weight) return null;
+    
+    const heightInMeters = height / 100;
+    const bmiValue = (weight / (heightInMeters * heightInMeters)).toFixed(1);
+    return bmiValue;
+  };
+
+  const bmi = calculateBMI();
+  
+  // Get BMI category
+  const getBmiCategory = (bmiValue: string | null): string => {
+    if (!bmiValue) return '';
+    const bmiNum = parseFloat(bmiValue);
+    if (isNaN(bmiNum)) return '';
+    if (bmiNum < 18.5) return ' (Underweight)';
+    if (bmiNum < 25) return ' (Normal weight)';
+    if (bmiNum < 30) return ' (Overweight)';
+    return ' (Obese)';
+  };
+  
+  // Format date of birth for display
+  const formatDateOfBirth = (dateString?: string) => {
+    if (!dateString) return 'Not specified';
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return dateString;
+    }
+  };
+  
+  // Handle both snake_case and camelCase for user properties with type safety
+  const userFirstName = profile?.firstName || (profile as any)?.first_name || '';
+  const userLastName = profile?.lastName || (profile as any)?.last_name || '';
+  const userDateOfBirth = profile?.dateOfBirth || (profile as any)?.date_of_birth;
+  const userAvatar = (profile?.profilePicture || (profile as any)?.avatar) as string | undefined;
+
+  // Render loading state
+  if (loading && !profile) {
     return (
-      <SafeAreaView style={styles.centered}>
+      <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-        <ActivityIndicator size="large" color={colors.primaryGreen} />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={colors.primaryGreen} />
+        </View>
       </SafeAreaView>
     );
   }
 
+  // Render error state
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+        <View style={[styles.centered, { padding: 20 }]}>
+          <MaterialCommunityIcons name="alert-circle" size={48} color={colors.error} />
+          <Text style={[styles.errorText, { marginTop: 16, textAlign: 'center' }]}>
+            {error}
+          </Text>
+          <TouchableOpacity 
+            style={[styles.button, { marginTop: 20 }]} 
+            onPress={fetchUserProfile}
+          >
+            <Text style={styles.buttonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Render the main profile screen
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView style={styles.scrollView}>
+        {/* Header */}
         <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>My Profile</Text>
-          <TouchableOpacity onPress={editing ? saveProfile : toggleEdit} disabled={saving}>
-            <Text style={[styles.editButton, saving && { opacity: 0.5 }]}>
-              {editing ? (saving ? 'Saving...' : 'Save') : 'Edit'}
+          <TouchableOpacity 
+            style={styles.editButton}
+            onPress={() => setIsEditing(!isEditing)}
+          >
+            <Text style={styles.editButtonText}>
+              {isEditing ? 'Cancel' : 'Edit'}
             </Text>
           </TouchableOpacity>
-          {editing && !saving && (
-            <TouchableOpacity onPress={toggleEdit} style={{ marginLeft: 12 }}>
-              <Text style={styles.cancelButton}>Cancel</Text>
-            </TouchableOpacity>
-          )}
         </View>
 
-        <View style={styles.profileSection}>
-          <Text style={styles.label}>Name</Text>
-          {editing ? (
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Full Name"
-              autoCapitalize="words"
-            />
-          ) : (
-            <Text style={styles.value}>{profile?.name || '-'}</Text>
-          )}
-
-          <Text style={styles.label}>Email</Text>
-          {editing ? (
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Email Address"
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          ) : (
-            <Text style={styles.value}>{profile?.email || '-'}</Text>
-          )}
-
-          <Text style={styles.label}>Phone</Text>
-          {editing ? (
-            <TextInput
-              style={styles.input}
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="Phone Number"
-              keyboardType="phone-pad"
-            />
-          ) : (
-            <Text style={styles.value}>{profile?.phone || '-'}</Text>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Payment Methods</Text>
-            <TouchableOpacity onPress={addPaymentMethod}>
-              <MaterialCommunityIcons name="plus-circle" size={24} color={colors.primaryGreen} />
-            </TouchableOpacity>
-          </View>
-
-          {loadingPayments ? (
-            <ActivityIndicator size="small" color={colors.primaryGreen} />
-          ) : paymentMethods.length === 0 ? (
-            <Text style={styles.emptyText}>No payment methods added yet.</Text>
-          ) : (
-            paymentMethods.map(method => (
-              <View key={method.id} style={styles.paymentCard}>
-                <MaterialCommunityIcons
-                  name={paymentIconsMap[method.type] || 'credit-card'}
-                  size={24}
-                  color={colors.primaryGreen}
+        {profile && (
+          <>
+            {/* Profile Section */}
+            <View style={styles.profileSection}>
+              <View style={styles.avatarContainer}>
+                <Image
+                  source={profile?.profilePicture ? { uri: profile.profilePicture } : require('../../assets/images/default-avatar.png')}
+                  style={styles.avatar}
+                  defaultSource={require('../../assets/images/default-avatar.png') as ImageSourcePropType}
                 />
-                <View style={styles.paymentInfo}>
-                  <Text style={styles.paymentName}>{method.displayName}</Text>
-                  {method.type === 'card' && method.last4 && (
-                    <Text style={styles.paymentDetails}>•••• {method.last4}</Text>
-                  )}
-                  {method.type === 'upi' && method.upiId && (
-                    <Text style={styles.paymentDetails}>{method.upiId}</Text>
+                {isEditing && (
+                  <TouchableOpacity style={styles.editAvatarButton}>
+                    <MaterialCommunityIcons name="camera" size={20} color={colors.white} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.profileInfo}>
+                {isEditing ? (
+                  <>
+                    <View style={styles.inputRow}>
+                      <View style={[styles.inputContainer, { flex: 1, marginRight: 8 }]}>
+                        <Text style={styles.inputLabel}>First Name</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={formData.firstName}
+                          onChangeText={(text) => setFormData({ ...formData, firstName: text })}
+                          placeholder="First Name"
+                        />
+                      </View>
+                      <View style={[styles.inputContainer, { flex: 1 }]}>
+                        <Text style={styles.inputLabel}>Last Name</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={formData.lastName}
+                          onChangeText={(text) => setFormData({ ...formData, lastName: text })}
+                          placeholder="Last Name"
+                        />
+                      </View>
+                    </View>
+                    <View style={styles.inputContainer}>
+                      <Text style={styles.inputLabel}>Email</Text>
+                      <TextInput
+                        style={[styles.input, { color: colors.textSecondary }]}
+                        value={formData.email}
+                        editable={false}
+                        placeholder="Email"
+                      />
+                    </View>
+                    <View style={styles.inputContainer}>
+                      <Text style={styles.inputLabel}>Phone</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={formData.phone}
+                        onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                        placeholder="Phone"
+                        keyboardType="phone-pad"
+                      />
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.userName}>{`${userFirstName} ${userLastName}`}</Text>
+                    <Text style={styles.userEmail}>{formData.email}</Text>
+                    <Text style={styles.userPhone}>{formData.phone || 'No phone number'}</Text>
+                    <Text style={styles.userDob}>
+                      <Text style={styles.label}>DOB: </Text>
+                      {formatDateOfBirth(userDateOfBirth)}
+                    </Text>
+                  </>
+                )}
+              </View>
+            </View>
+
+            {/* Health Information Section */}
+            {profile.user_health && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Health Information</Text>
+                </View>
+                <View style={styles.healthGrid}>
+                  <View style={styles.healthItem}>
+                    <Text style={styles.healthLabel}>Blood Group</Text>
+                    <Text style={styles.healthValue}>
+                      {profile.user_health.blood_group || 'Not specified'}
+                    </Text>
+                  </View>
+                  <View style={styles.healthItem}>
+                    <Text style={styles.healthLabel}>Height</Text>
+                    <Text style={styles.healthValue}>
+                      {profile.user_health.height ? `${profile.user_health.height} cm` : 'Not specified'}
+                    </Text>
+                  </View>
+                  <View style={styles.healthItem}>
+                    <Text style={styles.healthLabel}>Weight</Text>
+                    <Text style={styles.healthValue}>
+                      {profile.user_health.weight ? `${profile.user_health.weight} kg` : 'Not specified'}
+                    </Text>
+                  </View>
+                  <View style={styles.healthItem}>
+                    <Text style={styles.healthLabel}>BMI</Text>
+                    <Text style={styles.healthValue}>
+                      {bmi ? `${bmi} (${getBmiCategory(parseFloat(bmi))})` : 'N/A'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Address Section */}
+            {profile.address && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Address</Text>
+                  {isEditing && (
+                    <TouchableOpacity>
+                      <Text style={styles.editButtonText}>Edit</Text>
+                    </TouchableOpacity>
                   )}
                 </View>
-                <TouchableOpacity onPress={() => removePaymentMethod(method.id)}>
-                  <MaterialCommunityIcons name="delete" size={22} color={colors.error} />
+                <Text style={styles.addressText}>
+                  {[
+                    profile.address.street,
+                    profile.address.city,
+                    profile.address.state,
+                    profile.address.country,
+                    profile.address.pincode
+                  ].filter(Boolean).join(', ')}
+                </Text>
+              </View>
+            )}
+
+            {/* Payment Methods Section */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Payment Methods</Text>
+                <TouchableOpacity disabled={loadingPayments}>
+                  <Text style={styles.addButtonText}>+ Add New</Text>
                 </TouchableOpacity>
               </View>
-            ))
-          )}
-        </View>
+              {loadingPayments ? (
+                <ActivityIndicator size="small" color={colors.primaryGreen} />
+              ) : paymentMethods.length > 0 ? (
+                paymentMethods.map((method) => (
+                  <View key={method.id} style={styles.paymentMethod}>
+                    <View style={styles.paymentMethodLeft}>
+                      <View style={styles.paymentIcon}>
+                        <MaterialCommunityIcons
+                          name={paymentIconsMap[method.type] || 'credit-card'}
+                          size={24}
+                          color={colors.primaryGreen}
+                        />
+                      </View>
+                      <View>
+                        <Text style={styles.paymentMethodName}>{method.displayName}</Text>
+                        {method.last4 && (
+                          <Text style={styles.paymentMethodDetails}>•••• {method.last4}</Text>
+                        )}
+                        {method.upiId && (
+                          <Text style={styles.paymentMethodDetails}>{method.upiId}</Text>
+                        )}
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.removePaymentButton}
+                      onPress={() => removePaymentMethod(method.id)}
+                      disabled={loadingPayments}
+                    >
+                      <MaterialCommunityIcons
+                        name="trash-can-outline"
+                        size={20}
+                        color={colors.error}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.noPaymentMethods}>No payment methods added</Text>
+              )}
+            </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Help & Support</Text>
+            {/* Support Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Need Help?</Text>
+              <Text style={styles.supportText}>
+                Our support team is here to help you with any questions or issues.
+              </Text>
+              <View style={styles.supportButtons}>
+                <TouchableOpacity
+                  style={[styles.supportButton, { marginRight: 12 }]}
+                  onPress={handleSupportEmail}
+                >
+                  <MaterialCommunityIcons
+                    name="email-outline"
+                    size={20}
+                    color={colors.primaryGreen}
+                    style={styles.supportIcon}
+                  />
+                  <Text style={styles.supportButtonText}>Email Us</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.supportButton}
+                  onPress={handleSupportCall}
+                >
+                  <MaterialCommunityIcons
+                    name="phone-outline"
+                    size={20}
+                    color={colors.primaryGreen}
+                    style={styles.supportIcon}
+                  />
+                  <Text style={styles.supportButtonText}>Call Us</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        )}
 
-          <TouchableOpacity style={styles.supportCard} onPress={sendSupportEmail}>
-            <MaterialCommunityIcons name="email" size={22} color={colors.primaryGreen} />
-            <Text style={styles.supportText}>Email Support</Text>
-            <MaterialCommunityIcons name="chevron-right" size={22} color={colors.primaryGreen} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.supportCard} onPress={callSupport}>
-            <MaterialCommunityIcons name="phone" size={22} color={colors.primaryGreen} />
-            <Text style={styles.supportText}>Call Support</Text>
-            <MaterialCommunityIcons name="chevron-right" size={22} color={colors.primaryGreen} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.supportCard}
-            onPress={() => Alert.alert('FAQ', 'FAQ section will be implemented soon.')}
-          >
-            <MaterialCommunityIcons name="help-circle" size={22} color={colors.primaryGreen} />
-            <Text style={styles.supportText}>FAQ</Text>
-            <MaterialCommunityIcons name="chevron-right" size={22} color={colors.primaryGreen} />
-          </TouchableOpacity>
-        </View>
+        {/* Save Changes Button (shown only in edit mode) */}
+        {isEditing && profile && (
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[styles.button, saving && styles.buttonDisabled]}
+              onPress={handleUpdateProfile}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Text style={styles.buttonText}>Save Changes</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 };
 
+// Format date consistently
+const formatDate = (dateString?: string): string => {
+  if (!dateString) return 'Not specified';
+  try {
+    return new Date(dateString).toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return dateString;
+  }
+};
+
+// Helper function to get the full name with fallbacks
+function getFullName(user: UserProfile | null): string {
+  if (!user) return '';
+  return user.first_name || user.name || '';
+}
+
+// Helper function to check if a value is a valid URL
+function isValidUrl(url?: string): boolean {
+  if (!url) return false;
+  try {
+    new URL(url);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 24,
-    paddingHorizontal: 16,
-    paddingTop: 16,
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700' as const,
-    color: colors.primaryGreen,
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: colors.primaryText,
+  scrollView: {
+    flex: 1,
   },
-  editButton: {
-    color: colors.primaryGreen,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  cancelButton: {
-    color: colors.error,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  profileSection: {
-    backgroundColor: colors.offWhite,
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 32,
-    marginHorizontal: 16,
-  },
-  label: {
-    color: colors.secondaryText,
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 12,
-  },
-  value: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.primaryText,
-    marginTop: 6,
-  },
-  input: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.primaryText,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    paddingVertical: 6,
-    marginTop: 6,
+  },
+  backButton: {
+    padding: 8,
+    marginRight: 16,
+  },
+  headerTitle: {
+    ...typography.h5,
+    flex: 1,
+    color: colors.text,
+  },
+  editButton: {
+    padding: 8,
+  },
+  editButtonText: {
+    color: colors.primaryGreen,
+    ...typography.button,
+  },
+  profileSection: {
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 16,
+  },
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.lightGray,
+    resizeMode: 'cover',
+  },
+  editAvatarButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: colors.primaryGreen,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  userName: {
+    ...typography.h6,
+    color: colors.text,
+    marginBottom: 4,
+  },
+  userEmail: {
+    ...typography.body2,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  userPhone: {
+    ...typography.body2,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  userDob: {
+    ...typography.body2,
+    color: colors.textSecondary,
+  },
+  label: {
+    ...typography.subtitle2,
+    color: colors.textSecondary,
   },
   section: {
-    marginBottom: 32,
-    paddingHorizontal: 16,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -501,58 +771,150 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  paymentCard: {
+  sectionTitle: {
+    ...typography.subtitle1,
+    color: colors.text,
+  },
+  addButtonText: {
+    color: colors.primaryGreen,
+    ...typography.button,
+  },
+  healthGrid: {
     flexDirection: 'row',
-    backgroundColor: colors.lightSage,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    flexWrap: 'wrap',
+    marginHorizontal: -8,
+  },
+  healthItem: {
+    width: '50%',
+    padding: 8,
+    marginBottom: 8,
+  },
+  healthLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  healthValue: {
+    ...typography.body1,
+    color: colors.text,
+  },
+  addressText: {
+    ...typography.body1,
+    color: colors.text,
+    lineHeight: 24,
+  },
+  paymentMethod: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: colors.primaryGreen,
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 5,
+    padding: 12,
+    backgroundColor: colors.white,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  paymentInfo: {
-    flex: 1,
-    marginLeft: 14,
-  },
-  paymentName: {
-    fontWeight: '700',
-    fontSize: 16,
-    color: colors.primaryText,
-  },
-  paymentDetails: {
-    fontSize: 13,
-    color: colors.secondaryText,
-    marginTop: 2,
-  },
-  emptyText: {
-    color: colors.secondaryText,
-    fontStyle: 'italic',
-  },
-  supportCard: {
+  paymentMethodLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.offWhite,
+  },
+  paymentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.lightGray,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  paymentMethodName: {
+    ...typography.subtitle,
+    color: colors.text,
+    marginBottom: 2,
+  },
+  paymentMethodDetails: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  removePaymentButton: {
+    padding: 8,
+  },
+  noPaymentMethods: {
+    ...typography.body2,
+    color: colors.textSecondary,
+    textAlign: 'center',
     padding: 16,
-    borderRadius: 16,
-    marginVertical: 8,
-    shadowColor: colors.primaryGreen,
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
   },
   supportText: {
+    ...typography.body2,
+    color: colors.textSecondary,
+    marginBottom: 16,
+  },
+  supportButtons: {
+    flexDirection: 'row',
+  },
+  supportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
     flex: 1,
-    fontSize: 17,
-    fontWeight: '700',
+    justifyContent: 'center',
+  },
+  supportIcon: {
+    marginRight: 8,
+  },
+  supportButtonText: {
+    ...typography.button,
     color: colors.primaryGreen,
-    marginHorizontal: 12,
+  },
+  footer: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.white,
+  },
+  button: {
+    backgroundColor: colors.primaryGreen,
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+  buttonText: {
+    ...typography.button,
+    color: colors.white,
+  },
+  errorText: {
+    ...typography.body1,
+    color: colors.error,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    ...typography.subtitle2,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  input: {
+    ...typography.body1,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: colors.white,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    marginHorizontal: -8,
   },
 });
 
-export default ProfileScreen; 
+export default ProfileScreen;

@@ -18,10 +18,10 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { useAuth } from '../utils/AuthContext';
-import { authService } from '../services/authService';
+import { makeApiRequest, API_CONFIG, setAuthToken } from '../config/api';
 
 const AuthScreen: React.FC = () => {
-  const { setIsLoggedIn, setAuthStep, setPhoneNumber, setIsAuthenticated } = useAuth();
+  const { setIsLoggedIn, setAuthStep, setPhoneNumber, setIsAuthenticated, setUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [otpSent, setOTPSent] = useState(false);
 
@@ -53,38 +53,28 @@ const AuthScreen: React.FC = () => {
   // --- Handlers ---
 
   const onSendOTP = async () => {
-    if (!phone.trim()) {
-      setError('Please enter your phone number');
-      return;
-    }
-    
-    // Validate phone number format (10 digits only)
-    const phoneRegex = /^\d{10}$/;
-    if (!phoneRegex.test(phone.trim())) {
+    if (!phone.trim() || !/^\d{10}$/.test(phone.trim())) {
       setError('Please enter a valid 10-digit mobile number');
       return;
     }
-    
+
     setError('');
     setLoading(true);
     try {
-      // Use real API call
-      const response = await authService.sendOTP({ phone: phone.trim() });
-      
+      const response = await makeApiRequest(
+        API_CONFIG.ENDPOINTS.AUTH.SEND_OTP, 
+        'POST', 
+        { phone: phone.trim() }
+      );
+
       if (response.success) {
-        if (response.userExists === false) {
-          // User doesn't exist, show error message
-          setError('This phone number is not registered. Please sign up first.');
-          // You can add navigation to signup screen here if needed
-          // navigation.navigate('Signup', { phone: phone.trim() });
-          return;
-        }
         setOTPSent(true);
       } else {
+        // The API doc doesn't show userExists, so we just show the message
         setError(response.message || 'Failed to send OTP');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to send OTP');
+      setError(err.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -95,37 +85,44 @@ const AuthScreen: React.FC = () => {
       setError('Please enter a valid 6-digit OTP');
       return;
     }
-    
+
     setError('');
     setLoading(true);
     try {
-      // Use real API call - send phone number as-is (10 digits without country code)
-      const response = await authService.verifyOTP({ 
-        phone: phone.trim(), 
-        otp: otp.trim() 
-      });
-      
+      const response = await makeApiRequest(
+        API_CONFIG.ENDPOINTS.AUTH.VERIFY_OTP, 
+        'POST', 
+        { 
+          phone: phone.trim(), 
+          code: otp.trim() // Your API doc specified 'code', not 'otp'
+        }
+      );
+
       console.log('AuthScreen - OTP verification response:', response);
-      
-      if (response.success && response.data?.token) {
-        // Token is already stored by the authService.verifyOTP method
+
+      // Check for the token in the response (it might be in response.data.token or response.token)
+      const token = response.data?.token || response.token;
+      const user = response.data?.user || response.user; // Get the user object
+
+      if (response.success && token && user) {
+        // 1. Save the token to AsyncStorage
+        await setAuthToken(token); 
+
+        // 2. Save the user object to your global context
+        setUser(user); 
+
+        // 3. Set all the other auth flags
         setPhoneNumber(phone);
         setIsLoggedIn(true);
         setIsAuthenticated(true);
         setAuthStep('main');
-        
+
         console.log('AuthScreen - Authentication successful, redirecting to home...');
-        
-        // Debug: Check authentication state after setting
-        setTimeout(() => {
-          console.log('AuthScreen - Debug: Checking auth state after 1 second...');
-          // You can add additional debugging here if needed
-        }, 1000);
       } else {
-        setError(response.message || 'OTP verification failed');
+        setError(response.message || 'OTP verification failed. Please check the code and try again.');
       }
     } catch (err: any) {
-      setError(err.message || 'OTP verification failed');
+      setError(err.message || 'An error occurred during verification.');
     } finally {
       setLoading(false);
     }

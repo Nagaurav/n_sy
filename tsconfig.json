@@ -3,13 +3,18 @@
     "target": "esnext",
     "module": "esnext",
     "strict": true,
-    "jsx": "react",
+    "jsx": "react-native",
     "moduleResolution": "node",
     "allowJs": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "typeRoots": [
+      "./node_modules/@types"
+    ]
   },
-  "include": ["src", "App.tsx", "index.js"]
+  "include": ["src", "App.tsx", "index.js"],
+  "exclude": ["node_modules"]
 }

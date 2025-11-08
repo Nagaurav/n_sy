@@ -17,7 +17,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { colors } from '../theme/colors';
 import { ROUTES } from '../navigation/constants';
 import { PaymentMethodSelector } from '../components/yoga';
-import { professionalSlotService } from '../services/professionalSlotService';
+import { makeApiRequest, API_CONFIG } from '../config/api';
+import { useAuth } from '../utils/AuthContext';
 
 interface RouteParams {
   instructor?: any;
@@ -38,6 +39,7 @@ const BookingConfirmationScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const params = route.params as RouteParams;
+  const { user } = useAuth();
   
   // Handle both instructor and professional params
   const professional = params.instructor || params.professional;
@@ -94,68 +96,65 @@ const BookingConfirmationScreen: React.FC = () => {
       return;
     }
 
+    if (!user) {
+      Alert.alert('Not Logged In', 'You must be logged in to make a booking.');
+      return;
+    }
+
     setLoading(true);
     try {
-      console.log('BookingConfirmationScreen - Starting payment process...');
-      
+      console.log('BookingConfirmationScreen - Starting booking process...');
+
+      // This is the data for your API 4
       const bookingData = {
-        professionalId: professional?.id || 'mock_professional',
-        serviceId: 'default_service',
-        userId: 'user_123',
-        date: selectedDate,
-        time: selectedTime,
+        user_id: user.id || user.userId,
+        professional_id: professional?.id,
+        slot_id: (params as any).selectedSlot?.id,
         duration: selectedDuration,
-        paymentMethod: selectedPaymentMethod,
-        amount: calculatePrice(),
+        coupon_code: "", // Add coupon code logic later
       };
 
+      // This is the endpoint you provided for API 4
+      const bookingEndpoint = '/user/consultation-booking/create';
+
       console.log('BookingConfirmationScreen - Creating booking with data:', bookingData);
-      const bookingResult = await professionalSlotService.createBooking(bookingData);
-      console.log('BookingConfirmationScreen - Booking result:', bookingResult);
-      
-      if (bookingResult.success) {
-        console.log('BookingConfirmationScreen - Booking created successfully, checking payment status...');
-        
-        const paymentStatus = await professionalSlotService.getPaymentStatus(bookingResult.bookingId);
-        console.log('BookingConfirmationScreen - Payment status:', paymentStatus);
-        
-        if (paymentStatus.status === 'completed') {
-          console.log('BookingConfirmationScreen - Payment completed, navigating to success screen...');
-          
-          // Navigate directly to success screen
-          (navigation as any).navigate(ROUTES.BOOKING_SUCCESS, {
-            category: 'yoga',
-            categoryName: categoryName || 'Yoga Classes',
-            categoryIcon: categoryIcon || 'yoga',
-            categoryColor: categoryColor || colors.primaryGreen,
-            instructor: professional,
-            professional: professional,
-            bookingDetails: {
-              bookingId: bookingResult.bookingId,
-              selectedDate,
-              selectedTime,
-              selectedDuration,
-              selectedClassType,
-              mode,
-              location,
-            },
-            paymentDetails: {
-              amount: calculatePrice(),
-              method: selectedPaymentMethod,
-              transactionId: paymentStatus.transactionId,
-            },
-          });
-        } else {
-          console.log('BookingConfirmationScreen - Payment status is not completed:', paymentStatus.status);
-          Alert.alert('Payment Pending', 'Your payment is being processed. You will receive a confirmation shortly.');
-        }
+
+      // Call the real API
+      const response = await makeApiRequest(bookingEndpoint, 'POST', bookingData);
+      console.log('BookingConfirmationScreen - Booking API response:', response);
+
+      if (response.success && response.data?.booking_id) {
+        console.log('BookingConfirmationScreen - Booking created successfully, proceeding to payment.');
+
+        const bookingId = response.data.booking_id;
+        const amountToPay = calculatePrice();
+
+        // Check if we have a payment URL in the response
+        const paymentUrl = response.data.payment_url || response.data.paymentUrl;
+
+        // Navigate to the PaymentScreen with the real booking ID and amount
+        (navigation as any).navigate(ROUTES.PAYMENT, {
+          amount: amountToPay,
+          bookingDetails: {
+            ...params,
+            bookingId: bookingId, // Pass the REAL booking ID
+            selectedDate,
+            selectedTime,
+            selectedDuration,
+            selectedClassType,
+            mode,
+            location,
+          },
+          professional: professional,
+          paymentUrl: paymentUrl, // Pass the payment URL if it exists
+        });
       } else {
-        console.log('BookingConfirmationScreen - Booking failed:', bookingResult);
-        Alert.alert('Booking Failed', 'Unable to create booking. Please try again.');
+        throw new Error(response.message || 'Failed to create booking. API did not return a booking ID.');
       }
-    } catch (error) {
-      console.error('BookingConfirmationScreen - Payment error:', error);
-      Alert.alert('Payment Error', 'Something went wrong. Please try again.');
+    } catch (error: unknown) {
+      console.error('BookingConfirmationScreen - Booking error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
+      Alert.alert('Booking Error', errorMessage);
     } finally {
       setLoading(false);
     }

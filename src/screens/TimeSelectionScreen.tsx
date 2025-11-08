@@ -16,12 +16,14 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 
 import { colors } from '../theme/colors';
 import { ROUTES } from '../navigation/constants';
-import { professionalSlotService } from '../services/professionalSlotService';
+import { professionalService } from '../services';
+import type { Professional } from '../services/professional/ProfessionalService';
 
 interface TimeSlot {
   id: string;
   time: string;
   isAvailable: boolean;
+  fullSlotData?: any; // For any additional slot data from the API
 }
 
 const TimeSelectionScreen: React.FC = () => {
@@ -38,40 +40,63 @@ const TimeSelectionScreen: React.FC = () => {
   const [selectedTime, setSelectedTime] = useState<TimeSlot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [professional, setProfessional] = useState<Professional | null>(null);
 
   const fetchTimeSlots = useCallback(async () => {
+    if (!professionalId) {
+      generateDefaultTimeSlots();
+      return;
+    }
+
     setLoading(true);
     setError(null);
+    
     try {
-      if (professionalId) {
-        // Fetch available time slots for the professional on the selected date
-        const response = await professionalSlotService.getAvailableSlots(professionalId, undefined, selectedDate);
-        if (response && response.slots) {
-          // Transform slots to time options
-          const slots = response.slots
-            .filter((slot: any) => slot.date === selectedDate)
-            .map((slot: any) => ({
-              id: slot.id || `slot_${slot.time}`,
-              time: slot.time,
-              isAvailable: slot.status !== 'booked'
+      // Get professional details and slots in parallel
+      const [profResponse, slotsResponse] = await Promise.all([
+        professionalService.getProfessionalById(professionalId),
+        professionalService.checkSlotAvailability(professionalId)
+      ]);
+
+      // Handle professional data
+      if (profResponse.success && profResponse.data) {
+        setProfessional(profResponse.data);
+      } else {
+        throw new Error(profResponse.message || 'Failed to load professional details');
+      }
+
+      // Handle time slots
+      if (slotsResponse.success && slotsResponse.data) {
+        const selectedDaySlots = slotsResponse.data.find(
+          (day: { date: string }) => day.date === selectedDate
+        );
+
+        if (selectedDaySlots?.slots?.length) {
+          const availableSlots = selectedDaySlots.slots
+            .filter((slot: { isAvailable: boolean }) => slot.isAvailable)
+            .map((slot: { startTime: string }) => ({
+              id: `slot_${slot.startTime}`,
+              time: slot.startTime,
+              isAvailable: true,
+              fullSlotData: {
+                ...slot,
+                date: selectedDate,
+                professionalId,
+                professional: profResponse.data
+              }
             }));
-          
-          if (slots.length > 0) {
-            setTimeSlots(slots);
-          } else {
-            // Generate default time slots if no slots available
-            generateDefaultTimeSlots();
-          }
+
+          setTimeSlots(availableSlots.length > 0 ? availableSlots : []);
         } else {
-          generateDefaultTimeSlots();
+          setTimeSlots([]);
         }
       } else {
-        // Generate default time slots if no professional ID
-        generateDefaultTimeSlots();
+        throw new Error(slotsResponse.message || 'Failed to load time slots');
       }
     } catch (error) {
-      console.error('Error fetching time slots:', error);
-      generateDefaultTimeSlots();
+      console.error('Error in fetchTimeSlots:', error);
+      setError('Failed to load time slots. Please try again.');
+      setTimeSlots([]);
     } finally {
       setLoading(false);
     }
@@ -121,13 +146,58 @@ const TimeSelectionScreen: React.FC = () => {
       return;
     }
 
-    (navigation as any).navigate(ROUTES.BOOKING_CONFIRMATION, {
-      professional: { name: 'Dr. Anya Sharma', rating: 4.8 },
-      selectedDate,
-      selectedTime: selectedTime.time,
+    if (!professional) {
+      Alert.alert('Error', 'Professional information not available');
+      return;
+    }
+
+    // Format the selected date and time
+    const [hours, minutes] = selectedTime.time.split(':');
+    const [year, month, day] = selectedDate.split('-');
+    const selectedDateTime = new Date(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day),
+      parseInt(hours),
+      parseInt(minutes)
+    );
+
+    // Prepare professional data for booking
+    const bookingProfessionalData = {
+      id: professional.id,
+      name: `${professional.firstName} ${professional.lastName}`,
+      title: professional.specializations?.[0] || 'Professional',
+      price: professional.serviceTypes?.[0]?.price || 0
+    };
+
+    // Prepare slot data
+    const slotData = {
+      id: selectedTime.id,
+      time: selectedTime.time,
+      date: selectedDate,
+      duration: 60, // Default 60 minutes
+      professionalId: professional.id,
+      professional: bookingProfessionalData,
+      ...(selectedTime as any).fullSlotData // Type assertion for additional slot data
+    };
+
+    // Navigate directly to BOOK_CONSULTATION with all necessary data
+    navigation.navigate(ROUTES.BOOK_CONSULTATION, {
+      professional: bookingProfessionalData,
+      selectedTime: selectedDateTime.toISOString(),
       mode,
-      duration: 60,
-      service: 'Wellness Consultation',
+      location,
+      slot: slotData,
+      // Include any additional data needed for the booking flow
+      bookingData: {
+        startTime: selectedDateTime.toISOString(),
+        endTime: new Date(selectedDateTime.getTime() + 60 * 60 * 1000).toISOString(), // 1 hour duration
+        mode,
+        location,
+        professional: bookingProfessionalData,
+        serviceType: 'consultation',
+        price: professional.serviceTypes?.[0]?.price || 0
+      }
     });
   };
 

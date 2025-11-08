@@ -1,22 +1,68 @@
 // PaymentScreen.tsx
 import React, { useState } from 'react';
 import {
+  Alert as RNAlert,
+  SafeAreaView,
+  StatusBar,
+  Linking,
+  StyleSheet,
   View,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  ScrollView,
   ActivityIndicator,
-  Alert,
-  SafeAreaView,
-  StatusBar,
+  ScrollView,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ROUTES } from '../navigation/constants';
-import { professionalSlotService } from '../services/professionalSlotService';
+import { useAuth } from '../utils/AuthContext';
+import { 
+  checkPaymentStatus, 
+  type PhonePeStatusResponse
+} from '../services/phonepeService';
+import { PaymentStatus } from '../types/payment';
+
+type NavigationParams = {
+  [ROUTES.BOOKING_SUCCESS]: {
+    category: string;
+    categoryName: string;
+    categoryIcon: string;
+    categoryColor: string;
+    professional: any; // Consider replacing 'any' with a proper Professional type
+    bookingDetails: {
+      bookingId: string;
+      [key: string]: any;
+    };
+    paymentDetails: {
+      amount: number;
+      method: string | null;
+      transactionId: string;
+    };
+  };
+  [ROUTES.APPOINTMENT_CONFIRMATION]: {
+    category: string;
+    categoryName: string;
+    categoryIcon: string;
+    categoryColor: string;
+    professional: any; // Consider replacing 'any' with a proper Professional type
+    bookingDetails: {
+      bookingId: string;
+      [key: string]: any;
+    };
+    paymentDetails: {
+      amount: number;
+      method: string | null;
+      transactionId: string;
+    };
+  };
+};
+
+type NavigationProp = NativeStackNavigationProp<NavigationParams>;
+
+// Using PaymentStatus, PaymentInitiateResponse, and PaymentStatusResponse from types/payment.ts
 
 const PAYMENT_METHODS = [
   { 
@@ -50,133 +96,169 @@ const PAYMENT_METHODS = [
 ];
 
 const PaymentScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp>();
   const route = useRoute();
-  const { amount, bookingDetails, professional } = route.params as { 
-    amount: number; 
-    bookingDetails?: any;
-    professional?: any;
-  };
+  const { user } = useAuth();
+  // Add type for route params
+  interface RouteParams {
+    amount: number;
+    bookingDetails?: {
+      bookingId?: string;
+      service?: string;
+      selectedDate?: string;
+      selectedTime?: string;
+      selectedDuration?: number;
+      selectedClassType?: string;
+      mode?: string;
+      location?: string;
+      category?: string;
+      categoryName?: string;
+      categoryIcon?: string;
+      categoryColor?: string;
+      instructor?: any;
+    };
+    professional?: {
+      id: string;
+      name: string;
+    };
+    paymentUrl?: string; // Add paymentUrl to RouteParams
+  }
+  const { amount, bookingDetails, professional, paymentUrl: initialPaymentUrl } = route.params as RouteParams;
 
-  const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<string | null>(initialPaymentUrl ? 'upi' : null);
   const [loading, setLoading] = useState(false);
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(initialPaymentUrl || null);
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
 
-  // Determine booking type and get appropriate details
-  const isYogaPackage = bookingDetails?.type === 'yoga_package';
-  const packageDetails = isYogaPackage ? bookingDetails.package : null;
+  // Determine if this is a yoga booking
+  const isYogaBooking = bookingDetails?.category === 'yoga';
 
   const handleSelectMethod = (method: string) => setSelectedMethod(method);
 
+  // Function to start polling payment status
+  const startPaymentStatusPolling = (bookingId: string) => {
+    // Clear any existing interval
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+
+    // Start a new polling interval
+    const interval = setInterval(async () => {
+      try {
+        console.log('Polling payment status for booking:', bookingId);
+        const statusResponse = await checkPaymentStatus(bookingId);
+        
+        if (statusResponse.success) {
+          const { status } = statusResponse.data;
+          
+          if (status === PaymentStatus.SUCCESS) {
+            // Payment successful, stop polling and navigate to success
+            clearInterval(interval);
+            navigateToSuccessScreen(bookingId);
+          } else if (status === PaymentStatus.FAILED) {
+            // Payment failed, stop polling and show error
+            clearInterval(interval);
+            RNAlert.alert(
+              'Payment Failed',
+              'Your payment was not successful. Please try again.'
+            );
+            setLoading(false);
+          }
+          // If status is PENDING, continue polling
+        }
+      } catch (error) {
+        console.error('Error checking payment status:', error);
+        // Don't stop polling on error, just log it and continue
+      }
+    }, 3000); // Poll every 3 seconds
+
+    setPollingInterval(interval);
+    return interval;
+  };
+
+  // Function to navigate to success screen
+  const navigateToSuccessScreen = (transactionId: string) => {
+    const successParams = {
+      category: bookingDetails?.category || 'consultation',
+      categoryName: bookingDetails?.categoryName || 'Consultation',
+      categoryIcon: bookingDetails?.categoryIcon || 'account-tie',
+      categoryColor: bookingDetails?.categoryColor || colors.primaryGreen,
+      professional: professional || {},
+      bookingDetails: {
+        ...(bookingDetails || {}),
+        bookingId: bookingDetails?.bookingId || transactionId,
+      },
+      paymentDetails: {
+        amount: amount,
+        method: selectedMethod || 'online',
+        transactionId: transactionId,
+      },
+    };
+    
+    // Determine the appropriate success screen based on booking type
+    const successScreen = isYogaBooking 
+      ? ROUTES.BOOKING_SUCCESS 
+      : ROUTES.APPOINTMENT_CONFIRMATION;
+    
+    // Navigate to the success screen
+    navigation.navigate(successScreen, successParams);
+  };
+
+  // Clean up interval on unmount
+  React.useEffect(() => {
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [pollingInterval]);
+
   const handlePayment = async () => {
-    if (!selectedMethod) {
-      Alert.alert('Select Payment Method', 'Please select a payment method to proceed.');
+    const bookingId = bookingDetails?.bookingId;
+    if (!bookingId) {
+      RNAlert.alert('Error', 'No booking ID found. Please try again.');
       return;
     }
+
+    if (!selectedMethod) {
+      RNAlert.alert('Select Payment Method', 'Please select a payment method to proceed.');
+      return;
+    }
+    
+    if (!user) {
+      RNAlert.alert('Not Logged In', 'You must be logged in to make a payment.');
+      return;
+    }
+    
     setLoading(true);
     try {
-      console.log('PaymentScreen - Starting payment process...');
-      console.log('PaymentScreen - Amount:', amount);
-      console.log('PaymentScreen - Selected method:', selectedMethod);
-      console.log('PaymentScreen - Booking details:', bookingDetails);
-
-      // Create booking using mock API
-      const bookingData = {
-        professionalId: professional?.id || bookingDetails?.professionalId || 'mock_professional',
-        serviceId: bookingDetails?.serviceId || 'default_service',
-        userId: 'user_123', // Replace with actual user ID from context
-        date: bookingDetails?.selectedDate || new Date().toISOString().split('T')[0],
-        time: bookingDetails?.selectedTime || '10:00',
-        duration: bookingDetails?.duration || bookingDetails?.selectedDuration || 60,
-        paymentMethod: selectedMethod,
-        amount: amount,
-      };
-
-      console.log('PaymentScreen - Creating booking with data:', bookingData);
-      const bookingResult = await professionalSlotService.createBooking(bookingData);
-      console.log('PaymentScreen - Booking result:', bookingResult);
-      
-      if (bookingResult.success) {
-        console.log('PaymentScreen - Booking created successfully, checking payment status...');
-        
-        // Check payment status
-        const paymentStatus = await professionalSlotService.getPaymentStatus(bookingResult.bookingId);
-        console.log('PaymentScreen - Payment status:', paymentStatus);
-        
-        if (paymentStatus.status === 'completed') {
-          console.log('PaymentScreen - Payment completed, navigating to success screen...');
-          
-          try {
-            // Navigate directly without Alert for smoother flow
-            if (bookingDetails?.category === 'yoga') {
-              // Navigate to booking success for yoga classes
-              console.log('PaymentScreen - Navigating to BOOKING_SUCCESS for yoga');
-              (navigation as any).navigate(ROUTES.BOOKING_SUCCESS, {
-                category: 'yoga',
-                categoryName: bookingDetails?.categoryName || 'Yoga Classes',
-                categoryIcon: bookingDetails?.categoryIcon || 'yoga',
-                categoryColor: bookingDetails?.categoryColor || colors.primaryGreen,
-                instructor: bookingDetails?.instructor,
-                professional: professional,
-                bookingDetails: {
-                  bookingId: bookingResult.bookingId,
-                  selectedDate: bookingDetails?.selectedDate,
-                  selectedTime: bookingDetails?.selectedTime,
-                  selectedDuration: bookingDetails?.selectedDuration,
-                  selectedClassType: bookingDetails?.selectedClassType,
-                  mode: bookingDetails?.mode,
-                  location: bookingDetails?.location,
-                },
-                paymentDetails: {
-                  amount,
-                  method: selectedMethod,
-                  transactionId: paymentStatus.transactionId,
-                },
-              });
-            } else {
-              // Navigate to appointment confirmation for consultations
-              console.log('PaymentScreen - Navigating to APPOINTMENT_CONFIRMATION for consultation');
-              const now = new Date();
-              const appointmentTime = new Date(now.getTime() + 24 * 60 * 60 * 1000); // Tomorrow
-              
-              (navigation as any).navigate(ROUTES.APPOINTMENT_CONFIRMATION, {
-                professional: professional || { name: 'Expert' },
-                appointmentTime: appointmentTime.toISOString(),
-                service: bookingDetails?.service || bookingDetails?.categoryName || 'Consultation',
-                duration: bookingDetails?.duration || bookingDetails?.selectedDuration || 60,
-                bookingId: bookingResult.bookingId,
-              });
-            }
-          } catch (navigationError) {
-            console.error('PaymentScreen - Navigation error:', navigationError);
-            // Fallback: Show success alert and go back to home
-            Alert.alert(
-              'Payment Successful!', 
-              `Your payment of ₹${amount} has been processed successfully.`,
-              [
-                {
-                  text: 'OK',
-                  onPress: () => {
-                    // Navigate back to home screen
-                    (navigation as any).navigate('Main');
-                  },
-                },
-              ]
-            );
-          }
-        } else {
-          console.log('PaymentScreen - Payment status is not completed:', paymentStatus.status);
-          Alert.alert('Payment Pending', 'Your payment is being processed. You will receive a confirmation shortly.');
+      // Use the paymentUrl passed from the previous screen
+      if (paymentUrl) { 
+        // 1. Open the PhonePe URL
+        const canOpen = await Linking.canOpenURL(paymentUrl);
+        if (!canOpen) {
+          throw new Error('Could not open payment URL. Please make sure you have a browser or PhonePe app installed.');
         }
+
+        await Linking.openURL(paymentUrl);
+
+        // 2. Start polling for status
+        RNAlert.alert(
+          'Payment in Progress',
+          'Please complete the payment in the opened window. We will verify your status.'
+        );
+        startPaymentStatusPolling(bookingId);
       } else {
-        console.log('PaymentScreen - Booking failed:', bookingResult);
-        Alert.alert('Booking Failed', 'Unable to create booking. Please try again.');
+        // This case should not happen if API 4 always returns a paymentUrl
+        throw new Error("No payment URL was provided.");
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('PaymentScreen - Payment error:', error);
-      Alert.alert('Payment Error', 'Something went wrong. Please try again.');
-    } finally {
+      const errorMessage = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
+      RNAlert.alert('Payment Error', errorMessage);
       setLoading(false);
     }
+    // Do not set loading to false here, the poller will handle it.
   };
 
   const handleBack = () => {
@@ -288,7 +370,7 @@ const PaymentScreen: React.FC = () => {
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Duration:</Text>
-                <Text style={styles.summaryValue}>{bookingDetails.duration || bookingDetails.selectedDuration || 60} min</Text>
+                <Text style={styles.summaryValue}>{bookingDetails?.selectedDuration || 60} min</Text>
               </View>
               {bookingDetails.selectedClassType && (
                 <View style={styles.summaryRow}>
