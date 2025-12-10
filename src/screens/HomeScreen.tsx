@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -10,15 +10,20 @@ import {
   StatusBar,
   SafeAreaView,
   Dimensions,
-  Linking
+  Linking,
+  Animated,
 } from 'react-native';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { HomeStackParamList } from '../../App';
+import { Alert } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { theme } from '../theme';
+import Card from '../components/Card';
+import ServiceEntryCard from '../components/ServiceEntryCard';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
+import { apiService } from '../services/apiService';
 
 const { width } = Dimensions.get('window');
 
@@ -35,21 +40,20 @@ interface NextAppointment {
   updated_at?: string;
 }
 
-interface ActionCardProps {
-  title: string;
-  description: string;
-  icon: string;
-  onPress: () => void;
-  color: string;
-}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: theme.colors.background.primary,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   header: {
-    backgroundColor: '#1E88E5',
+    backgroundColor: theme.colors.primary,
     paddingTop: StatusBar.currentHeight || 40,
     paddingBottom: 16,
     paddingHorizontal: 16,
@@ -99,15 +103,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   appointmentCard: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
     marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
   appointmentHeader: {
     flexDirection: 'row',
@@ -133,7 +131,7 @@ const styles = StyleSheet.create({
   },
   appointmentDateTime: {
     fontSize: 15,
-    color: '#374151',
+    color: theme.colors.accent,
     fontWeight: '500',
     marginBottom: 16,
   },
@@ -150,17 +148,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   noDataContainer: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
     margin: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
   noDataText: {
     fontSize: 16,
@@ -168,56 +160,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     textAlign: 'center',
     fontWeight: '500',
-  },
-  actionCardsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  actionCard: {
-    width: '48%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    alignItems: 'center',
-  },
-  actionCardIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  actionCardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  actionCardDescription: {
-    fontSize: 13,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  actionCardButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-    width: '100%',
-  },
-  actionCardButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,
@@ -236,6 +178,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     flex: 1,
     textAlign: 'center',
+  },
+  placeholder: {
+    width: 40,
   },
   notificationButton: {
     padding: 8,
@@ -270,29 +215,61 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
+  fab: {
+    position: 'absolute',
+    bottom: 40,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
+  },
+  prescriptionCard: {
+    padding: 16,
+  },
+  prescriptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  prescriptionIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#E3F2FD', // Light blue background matching primary theme
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  prescriptionTextContainer: {
+    flex: 1,
+  },
+  prescriptionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  prescriptionSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
 });
 
-// Action Card Component
-const ActionCard: React.FC<ActionCardProps> = ({ title, description, icon, onPress, color }) => (
-  <TouchableOpacity 
-    style={[styles.actionCard, { borderTopWidth: 4, borderTopColor: color }]}
-    onPress={onPress}
-  >
-    <View style={[styles.actionCardIcon, { backgroundColor: `${color}15` }]}>
-      <Ionicons name={icon} size={24} color={color} />
-    </View>
-    <Text style={styles.actionCardTitle}>{title}</Text>
-    <Text style={styles.actionCardDescription}>{description}</Text>
-    <View style={[styles.actionCardButton, { backgroundColor: `${color}20` }]}>
-      <Text style={[styles.actionCardButtonText, { color }]}>Get Started</Text>
-    </View>
-  </TouchableOpacity>
-);
 
 type HomeScreenNavigationProp = StackNavigationProp<HomeStackParamList, 'Home'>;
 
 const HomeScreen = () => {
   const { user } = useAuth();
+  const { theme } = useTheme();
   const navigation = useNavigation<HomeScreenNavigationProp>();
   
   // State variables
@@ -303,7 +280,9 @@ const HomeScreen = () => {
 
   // Fetch next appointment data
   const fetchNextAppointment = async () => {
-    if (!user?._id) {
+    // Check for user_id (primary) or _id (fallback)
+    const userId = (user as any)?.user_id || user?._id;
+    if (!userId) {
       console.log('❌ No user ID found, skipping appointment fetch');
       setIsLoading(false);
       return;
@@ -313,8 +292,8 @@ const HomeScreen = () => {
       setIsLoading(true);
       setError(null);
       
-      console.log('🔄 Fetching next appointment for user:', user._id);
-      const response = await apiService.getNextAppointment(user._id);
+      console.log('🔄 Fetching next appointment for user:', userId);
+      const response = await apiService.getNextAppointment(userId);
       console.log('📊 Next appointment response:', response);
 
       if (response.success && response.data?.appointment) {
@@ -344,15 +323,23 @@ const HomeScreen = () => {
     }, 10000);
     
     return () => clearTimeout(timeout);
-  }, [user?._id]);
+  }, [(user as any)?.user_id || user?._id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchNextAppointment();
   }, []);
 
+  const navigateToPrescriptions = () => {
+    navigation.navigate('PrescriptionsList');
+  };
+
   const openDrawer = () => {
     navigation.dispatch(DrawerActions.openDrawer());
+  };
+
+  const navigateToChat = () => {
+    navigation.navigate('ChatList');
   };
 
   const navigateToAppointments = () => {
@@ -370,16 +357,6 @@ const HomeScreen = () => {
     });
   };
 
-  const handleFindClass = () => {
-    navigation.navigate('ClassesList');
-  };
-
-  const handleBookConsultation = () => {
-    navigation.navigate('ProfessionalsList', { 
-      categoryName: 'Consultations',
-      searchQuery: 'consultation'
-    });
-  };
 
   const handleJoinSession = () => {
     if (nextAppointment?.session_link) {
@@ -409,22 +386,25 @@ const HomeScreen = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#1E88E5" barStyle="light-content" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+      <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
       
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
         <View style={styles.headerContent}>
-          <TouchableOpacity onPress={openDrawer} style={styles.menuButton}>
-            <Ionicons name="menu" size={24} color="#FFFFFF" />
+          <TouchableOpacity onPress={openDrawer} style={styles.menuButton} activeOpacity={0.7}>
+            <Ionicons name="menu-outline" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           
           <Text style={styles.appTitle}>SAMYAYOG</Text>
+
+          <View style={styles.placeholder} />
         </View>
       </View>
       
       <ScrollView 
-        style={styles.container}
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -452,7 +432,7 @@ const HomeScreen = () => {
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : nextAppointment ? (
-            <View style={styles.appointmentCard}>
+            <Card style={styles.appointmentCard}>
               <View style={styles.appointmentHeader}>
                 <Text style={styles.appointmentTitle}>Upcoming Session</Text>
                 <Ionicons name="time-outline" size={20} color="#6B7280" />
@@ -468,46 +448,62 @@ const HomeScreen = () => {
               </Text>
               {nextAppointment.session_link && (
                 <TouchableOpacity 
-                  style={[styles.actionButton, { backgroundColor: '#10B981' }]}
+                  style={[styles.actionButton, { backgroundColor: theme.colors.secondary }]}
                   onPress={handleJoinSession}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.actionButtonText}>Join Session</Text>
                 </TouchableOpacity>
               )}
-            </View>
+            </Card>
           ) : (
-            <View style={styles.noDataContainer}>
+            <Card style={styles.noDataContainer}>
               <Ionicons name="calendar-outline" size={48} color="#9CA3AF" />
               <Text style={styles.noDataText}>No upcoming sessions</Text>
               <TouchableOpacity 
-                style={[styles.actionButton, { marginTop: 16 }]}
-                onPress={handleBookConsultation}
+                style={[styles.actionButton, { marginTop: 16, backgroundColor: theme.colors.primary }]}
+                onPress={() => navigation.navigate('ProfessionalsList', {})}
+                activeOpacity={0.7}
               >
                 <Text style={styles.actionButtonText}>Book a Session</Text>
               </TouchableOpacity>
-            </View>
+            </Card>
           )}
           
-          {/* Action Cards */}
-          <Text style={styles.sectionTitle}>Get Started</Text>
-          <View style={styles.actionCardsContainer}>
-            <ActionCard
-              title="Find a Class"
-              description="Explore group sessions & programs"
-              icon="people-outline"
-              onPress={handleFindClass}
-              color="#8B5CF6" // Purple
-            />
-            <ActionCard
-              title="Book a Consultation"
-              description="Schedule a one-on-one session"
-              icon="person-outline"
-              onPress={handleBookConsultation}
-              color="#10B981" // Green
-            />
-          </View>
+          {/* Prescriptions Section */}
+          <Text style={styles.sectionTitle}>My Prescriptions</Text>
+          <Card style={styles.appointmentCard}>
+            <TouchableOpacity
+              style={styles.prescriptionCard}
+              onPress={navigateToPrescriptions}
+              activeOpacity={0.7}
+            >
+              <View style={styles.prescriptionContent}>
+                <View style={styles.prescriptionIconContainer}>
+                  <Ionicons name="medical-outline" size={32} color={theme.colors.primary} />
+                </View>
+                <View style={styles.prescriptionTextContainer}>
+                  <Text style={styles.prescriptionTitle}>View Prescriptions</Text>
+                  <Text style={styles.prescriptionSubtitle}>Access your medical records</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
+              </View>
+            </TouchableOpacity>
+          </Card>
+          
+          {/* Service Entry Card */}
+          <ServiceEntryCard />
         </View>
       </ScrollView>
+      
+      {/* Floating Action Button */}
+      <TouchableOpacity 
+        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+        onPress={navigateToChat}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="chatbubbles" size={24} color="#FFFFFF" />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 };

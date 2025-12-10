@@ -22,9 +22,11 @@ import { format } from 'date-fns';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { theme } from '../theme';
-import { apiService } from '../services/api';
+import { apiService } from '../services/apiService';
 import { RootStackParamList } from '../../App';
 import { useAuth } from '../contexts/AuthContext';
+import { FloatingLabelInput } from '../components/FloatingLabelInput';
+import { useTheme } from '../contexts/ThemeContext';
 
 type Gender = 'male' | 'female' | 'other' | '';
 
@@ -75,7 +77,7 @@ type Styles = {
 const styles = StyleSheet.create<Styles>({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background.light,
+    backgroundColor: theme.colors.background.primary,
   },
   header: {
     backgroundColor: '#1E88E5',
@@ -281,6 +283,7 @@ interface SignupScreenProps {
 }
 
 const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
+  const { theme } = useTheme();
   const { phoneNumber } = route.params;
   const { signIn } = useAuth();
 
@@ -474,90 +477,47 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
         latitude: formData.latitude,
         longitude: formData.longitude
       };
+      const result = await apiService.signup(payload);
 
-      const response = await fetch('http://88.222.241.179:7000/api/v1/user/auth/signup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const responseData = await response.json();
-
-      if (!response.ok) {
-        // Handle specific error cases
-        if (response.status === 400) {
-          // Handle validation errors from the server
-          if (responseData.errors) {
-            const serverErrors: Record<string, string> = {};
-            Object.entries(responseData.errors).forEach(([field, messages]) => {
-              if (Array.isArray(messages) && messages.length > 0) {
-                serverErrors[field] = messages[0];
-              }
-            });
-            setErrors(prev => ({
-              ...prev,
-              ...serverErrors,
-              _server: responseData.message || 'Please correct the errors below',
-            }));
-            return;
-          }
-          throw new Error(responseData.message || 'Please check your input and try again');
-        } else if (response.status === 409) {
-          // Handle conflict (e.g., email/phone already exists)
-          throw new Error('An account with this email or phone number already exists');
-        } else if (response.status >= 500) {
-          throw new Error('Server error. Please try again later.');
-        } else {
-          throw new Error(responseData.message || 'Signup failed. Please try again.');
-        }
-      }
-
-      if (responseData.success && responseData.data?.token && responseData.data?.user) {
-        console.log('🔐 Signup Success - User object from API:', responseData.data.user);
-        console.log('🔐 User has _id?', '_id' in responseData.data.user);
-        console.log('🔐 User has id?', 'id' in responseData.data.user);
-        
-        // Sign in the user and store the session
-        await signIn({
-          user: responseData.data.user,
-          token: responseData.data.token,
-        });
-
-        // Update API service with the new token
-        apiService.setAuthToken(responseData.data.token);
-
-        // Navigate to home screen on success
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Home' }],
-        });
-      } else {
-        throw new Error(responseData.message || 'Failed to sign up');
-      }
-    } catch (error) {
-      console.error('Signup error:', error);
-      
-      // Handle network errors
-      if (error instanceof TypeError && error.message.includes('Network request failed')) {
-        Alert.alert(
-          'Network Error',
-          'Unable to connect to the server. Please check your internet connection and try again.',
-          [{ text: 'OK' }],
-          { cancelable: false }
-        );
-      } else {
-        // Show user-friendly error message
-        const errorMessage = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
+      if (!result.success || !result.data?.token || !result.data?.user) {
+        const errorMessage = result.error || 'Failed to sign up. Please try again.';
         Alert.alert(
           'Error',
           errorMessage,
           [{ text: 'OK' }],
           { cancelable: false }
         );
+        return;
       }
+
+      console.log('🔐 Signup Success - User object from API:', result.data.user);
+      console.log('🔐 User has _id?', '_id' in result.data.user);
+      console.log('🔐 User has id?', 'id' in result.data.user);
+      
+      // Sign in the user and store the session
+      await signIn({
+        user: result.data.user,
+        token: result.data.token,
+      });
+
+      // Token is automatically stored in Redux by signIn, and the interceptor will use it
+      // No need to manually update apiService
+
+      // Navigate to home screen on success
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Home' }],
+      });
+    } catch (error) {
+      console.error('Signup error:', error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Something went wrong. Please try again.';
+      Alert.alert(
+        'Error',
+        errorMessage,
+        [{ text: 'OK' }],
+        { cancelable: false }
+      );
     } finally {
       setIsLoading(false);
     }
@@ -598,45 +558,30 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
             </View>
 
             <View style={styles.formContainer}>
-              <Text style={styles.label}>First Name</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  errors.first_name ? styles.inputError : null
-                ]}
-                placeholder="Enter your first name"
+              <FloatingLabelInput
+                label="First Name"
                 value={formData.first_name}
                 onChangeText={(value) => handleInputChange('first_name', value)}
+                error={errors.first_name}
                 autoCapitalize="words"
               />
-              {errors.first_name ? <Text style={styles.errorText}>{errors.first_name}</Text> : null}
 
-              <Text style={styles.label}>Last Name</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  errors.last_name ? styles.inputError : null
-                ]}
-                placeholder="Enter your last name"
+              <FloatingLabelInput
+                label="Last Name"
                 value={formData.last_name}
                 onChangeText={(value) => handleInputChange('last_name', value)}
+                error={errors.last_name}
                 autoCapitalize="words"
               />
-              {errors.last_name ? <Text style={styles.errorText}>{errors.last_name}</Text> : null}
 
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  errors.email ? styles.inputError : null
-                ]}
-                placeholder="Enter your email address"
+              <FloatingLabelInput
+                label="Email Address"
                 value={formData.email}
                 onChangeText={(value) => handleInputChange('email', value)}
+                error={errors.email}
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
-              {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
 
               <Text style={styles.label}>Date of Birth</Text>
               <TouchableOpacity
@@ -713,31 +658,21 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
               </View>
               {errors.city ? <Text style={styles.errorText}>{errors.city}</Text> : null}
 
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  errors.password ? styles.inputError : null
-                ]}
-                placeholder="Create a password"
+              <FloatingLabelInput
+                label="Password"
                 value={formData.password}
                 onChangeText={(value) => handleInputChange('password', value)}
+                error={errors.password}
                 secureTextEntry
               />
-              {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
 
-              <Text style={styles.label}>Confirm Password</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  errors.confirmPassword ? styles.inputError : null
-                ]}
-                placeholder="Confirm your password"
+              <FloatingLabelInput
+                label="Confirm Password"
                 value={formData.confirmPassword}
                 onChangeText={(value) => handleInputChange('confirmPassword', value)}
+                error={errors.confirmPassword}
                 secureTextEntry
               />
-              {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
 
               <TouchableOpacity
                 style={[

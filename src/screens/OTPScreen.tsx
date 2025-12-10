@@ -15,8 +15,9 @@ import {
   Alert,
 } from 'react-native';
 import { theme } from '../theme';
-import { apiService } from '../services/api';
+import { apiService } from '../services/apiService';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 type Styles = {
   container: ViewStyle;
@@ -105,15 +106,15 @@ const styles = StyleSheet.create<Styles>({
   otpInputContainer: {
     width: 50,
     height: 60,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
+    borderColor: '#6B7280',
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
   otpInputFocused: {
-    borderColor: '#1E88E5',
+    borderColor: '#008272',
   },
   otpInput: {
     fontSize: 24,
@@ -124,14 +125,14 @@ const styles = StyleSheet.create<Styles>({
     height: '100%',
   },
   button: {
-    backgroundColor: '#1E88E5',
+    backgroundColor: '#008272',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 24,
   },
   buttonDisabled: {
-    backgroundColor: '#9CA3AF',
+    backgroundColor: '#D1D5DB',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -170,15 +171,18 @@ const styles = StyleSheet.create<Styles>({
 });
 
 const OTPScreen = ({ navigation, route }: any) => {
-  const { phoneNumber } = route.params;
+  const { theme } = useTheme();
+  const { phoneNumber } = route.params || {};
   const { signIn } = useAuth();
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
-  const [countdown, setCountdown] = useState(30);
+  const [timeLeft, setTimeLeft] = useState(30);
   const [canResend, setCanResend] = useState(false);
   const inputRefs = useRef<(TextInput | null)[]>([]);
+  
+  const isOtpComplete = otp.every(digit => digit !== '');
 
   // Mask phone number for privacy
   const maskPhoneNumber = (phone: string) => {
@@ -193,7 +197,7 @@ const OTPScreen = ({ navigation, route }: any) => {
   useEffect(() => {
     // Start countdown timer
     const timer = setInterval(() => {
-      setCountdown((prev) => {
+      setTimeLeft((prev) => {
         if (prev <= 1) {
           setCanResend(true);
           clearInterval(timer);
@@ -294,7 +298,7 @@ const OTPScreen = ({ navigation, route }: any) => {
     if (!canResend) return;
 
     setCanResend(false);
-    setCountdown(30);
+    setTimeLeft(30);
     setError('');
 
     try {
@@ -308,8 +312,9 @@ const OTPScreen = ({ navigation, route }: any) => {
         }
 
         // Restart countdown
+        setTimeLeft(30);
         const timer = setInterval(() => {
-          setCountdown((prev) => {
+          setTimeLeft((prev: number) => {
             if (prev <= 1) {
               setCanResend(true);
               clearInterval(timer);
@@ -329,14 +334,12 @@ const OTPScreen = ({ navigation, route }: any) => {
     }
   };
 
-  const isOtpComplete = otp.every(digit => digit !== '');
-
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#1E88E5" barStyle="light-content" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+      <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
         <View style={styles.headerContent}>
           <TouchableOpacity
             style={styles.backButton}
@@ -409,7 +412,9 @@ const OTPScreen = ({ navigation, route }: any) => {
                 <Text style={styles.resendButton}>Resend OTP</Text>
               </TouchableOpacity>
             ) : (
-              <Text style={styles.countdownText}>Resend OTP in {countdown}s</Text>
+              <Text style={styles.countdownText}>
+                Resend OTP in {timeLeft} seconds
+              </Text>
             )}
           </View>
         </View>

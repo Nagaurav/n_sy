@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,8 +18,16 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { HomeStackParamList } from '../../App';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../services/api';
-import { Professional, ProfessionalsResponse, ProfessionalFilters, FilterModalState } from '../types/booking';
+import { apiService } from '../services/apiService';
+import { theme } from '../theme';
+import Card from '../components/Card';
+import CollapsibleCard from '../components/CollapsibleCard';
+import {
+  Professional,
+  ProfessionalsResponse,
+  ProfessionalFilters,
+  FilterModalState,
+} from '../types/booking';
 
 const { width } = Dimensions.get('window');
 
@@ -29,72 +37,14 @@ interface RouteParams {
   categoryName?: string;
 }
 
-type ProfessionalsListScreenNavigationProp = StackNavigationProp<HomeStackParamList>;
+type ProfessionalsListScreenNavigationProp =
+  StackNavigationProp<HomeStackParamList>;
 
 const ProfessionalsListScreen = () => {
-  // Add missing state
-  const [showFilterModal, setShowFilterModal] = useState(false);
-  
-  // Add missing function implementations
-  const handleLoadMore = () => {
-    if (!isLoadingMore && hasMoreData && !isLoading) {
-      fetchProfessionals(false, page + 1);
-    }
-  };
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchProfessionals(true, 1).finally(() => setRefreshing(false));
-  };
-
-  const renderFooter = () => {
-    if (!isLoadingMore) return null;
-    return (
-      <View 
-        style={styles.loadingMoreContainer}
-        accessibilityLabel="Loading more professionals"
-      >
-        <ActivityIndicator 
-          size="small" 
-          color="#1E88E5" 
-          accessibilityLabel="Loading spinner"
-        />
-        <Text style={styles.loadingMoreText}>Loading more professionals...</Text>
-      </View>
-    );
-  };
-
-  const renderEmptyList = () => (
-    <View style={styles.emptyContainer}>
-      <Ionicons 
-        name="search-outline" 
-        size={48} 
-        color="#9CA3AF" 
-        accessibilityLabel="No results"
-      />
-      <Text style={styles.emptyText}>
-        {currentSearchQuery || filters.category_id 
-          ? 'No matching professionals found' 
-          : 'No professionals available'}
-      </Text>
-      <Text style={styles.emptySubtext}>
-        {currentSearchQuery || filters.category_id
-          ? 'Try adjusting your search or filters'
-          : 'Please check back later or try a different category'}
-      </Text>
-      <TouchableOpacity
-        style={styles.refreshButton}
-        onPress={onRefresh}
-        accessibilityLabel="Refresh list"
-      >
-        <Ionicons name="refresh" size={16} color="#1E88E5" />
-        <Text style={styles.refreshButtonText}>Refresh</Text>
-      </TouchableOpacity>
-    </View>
-  );
   const navigation = useNavigation<ProfessionalsListScreenNavigationProp>();
   const route = useRoute();
-  const { categoryId, searchQuery, categoryName } = (route.params as RouteParams) || {};
+  const { categoryId, searchQuery, categoryName } =
+    (route.params as RouteParams) || {};
   const { user } = useAuth();
 
   // State management
@@ -106,8 +56,9 @@ const ProfessionalsListScreen = () => {
   const [page, setPage] = useState(1);
   const [hasMoreData, setHasMoreData] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
 
-  // Filter state
+  // Filters
   const [filters, setFilters] = useState<FilterModalState>({
     category_id: categoryId,
     is_online: undefined,
@@ -134,35 +85,25 @@ const ProfessionalsListScreen = () => {
     setError('');
 
     try {
-      // Build filter parameters
       const filterParams: ProfessionalFilters = {
         page: pageNum,
         limit: 10,
-        ...(searchQuery && { search_query: searchQuery }),
-        ...(categoryId && { category_id: categoryId }),
-        ...(filters.is_online !== undefined && { is_online: filters.is_online }),
-        ...(filters.gender && { gender: filters.gender }),
-        ...(filters.sort_by && { sort_by: filters.sort_by }),
-        ...(filters.city && { city: filters.city }),
+        search_query: currentSearchQuery || searchQuery,
+        category_id: categoryId,
+        is_online: filters.is_online,
+        gender: filters.gender,
+        sort_by: filters.sort_by,
+        city: filters.city,
+        min_price: filters.min_price,
+        max_price: filters.max_price,
+        role: filters.role,
       };
 
-      console.log('🔍 Fetching professionals with filters:', filterParams);
-
-      // Use the enhanced API call with filters
-      const response = await apiService.get<ProfessionalsResponse>('/user/professional/getProfessional', { 
-        params: filterParams 
-      });
+      const response = await apiService.searchProfessionalsWithFilters(filterParams);
 
       if (response.success && response.data?.data?.professionals) {
         const newProfessionals = response.data.data.professionals;
-        
-        if (resetList) {
-          setProfessionals(newProfessionals);
-        } else {
-          setProfessionals(prev => [...prev, ...newProfessionals]);
-        }
-
-        // Check if there's more data
+        setProfessionals(resetList ? newProfessionals : [...professionals, ...newProfessionals]);
         setHasMoreData(newProfessionals.length === 10);
         setPage(pageNum);
       } else {
@@ -177,22 +118,59 @@ const ProfessionalsListScreen = () => {
     }
   };
 
+  const handleLoadMore = () => {
+    if (!isLoadingMore && hasMoreData && !isLoading) {
+      fetchProfessionals(false, page + 1);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchProfessionals(true, 1).finally(() => setRefreshing(false));
+  };
+
+  const handleApplyFilters = () => {
+    // Simply refetch with current filters and search query
+    fetchProfessionals(true, 1);
+    setShowFilterModal(false);
+  };
+
+  const handleResetFilters = () => {
+    setFilters({
+      category_id: categoryId,
+      is_online: undefined,
+      min_price: 0,
+      max_price: 1000,
+      gender: undefined,
+      sort_by: 'rating',
+      city: undefined,
+      role: undefined,
+    });
+  };
+
   const handleSearch = async (query: string) => {
     if (!query.trim()) {
       fetchProfessionals();
       return;
     }
-
+    const trimmed = query.trim();
+    setCurrentSearchQuery(trimmed);
     setIsLoading(true);
     try {
-      const response = await apiService.get<ProfessionalsResponse>('/user/professional/getProfessional', {
-        params: {
-          search_query: query.trim(),
-          page: 1,
-          limit: 10
-        }
+      const response = await apiService.searchProfessionalsWithFilters({
+        search_query: trimmed,
+        page: 1,
+        limit: 10,
+        category_id: categoryId,
+        is_online: filters.is_online,
+        gender: filters.gender,
+        sort_by: filters.sort_by,
+        city: filters.city,
+        min_price: filters.min_price,
+        max_price: filters.max_price,
+        role: filters.role,
       });
-      
+
       if (response.success && response.data?.data?.professionals) {
         setProfessionals(response.data.data.professionals);
       }
@@ -205,1071 +183,465 @@ const ProfessionalsListScreen = () => {
   };
 
   const renderProfessional = ({ item }: { item: Professional }) => {
-    const fullName = `${item.first_name} ${item.last_name}`;
+    const fullName = `${item.first_name || ''} ${item.last_name || ''}`.trim() || 'Professional';
     const speciality = item.speciality_new?.name || item.specialization || 'Yoga Professional';
     const location = item.city && item.state ? `${item.city}, ${item.state}` : 'Location not specified';
+    const rating = item.rating ?? 0;
+    const price = item.min_session_price;
     const profileImage = item.profile_picture_url || item.profileImage;
-    
+    const about = item.description;
+
     return (
-      <TouchableOpacity
-        style={styles.professionalCard}
-        onPress={() => navigation.navigate('ProfessionalProfile', { professionalId: item.professional_id?.toString() || item._id || '' })}
-      >
-        <View style={styles.professionalInfo}>
-          <View style={styles.avatarContainer}>
-            {profileImage ? (
-              <Image
-                source={{ uri: profileImage }}
-                style={styles.avatarImage}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={styles.defaultAvatar}>
-                <Ionicons name="person" size={24} color="#6B7280" />
-              </View>
+      <Card style={styles.professionalCard}>
+        <TouchableOpacity
+          onPress={() =>
+            navigation.navigate('ProfessionalProfile', {
+              professionalId: item.professional_id?.toString() || item._id || '',
+            })
+          }
+          activeOpacity={0.7}
+          style={{ flexDirection: 'row', alignItems: 'center' }}
+        >
+          <Image
+            source={profileImage ? { uri: profileImage } : { uri: 'https://via.placeholder.com/64' }}
+            style={styles.avatarImage}
+          />
+          <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+            <Text style={styles.professionalName}>{fullName}</Text>
+            {item.is_verified && (
+              <Ionicons name="checkmark-circle" size={16} color={theme.colors.primary} style={{ marginLeft: 4 }} />
             )}
           </View>
-          
-          <View style={styles.professionalDetails}>
-            <Text style={styles.professionalName} numberOfLines={1} ellipsizeMode="tail">
-              {fullName}
-              {item.is_verified && (
-                <Ionicons 
-                  name="checkmark-circle" 
-                  size={16} 
-                  color="#10B981" 
-                  style={styles.verifiedIcon}
+          <Text style={styles.specialization}>{speciality}</Text>
+          <Text style={styles.locationText}>{location}</Text>
+
+          {/* Rating & Price Row */}
+          <View style={styles.ratingPriceRow}>
+            <View style={styles.ratingRow}>
+              {rating > 0 && (
+                <Text style={styles.ratingValue}>{rating.toFixed(1)}</Text>
+              )}
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Ionicons
+                  key={star}
+                  name={rating >= star ? 'star' : 'star-outline'}
+                  size={14}
+                  color={theme.colors.accent}
+                  style={{ marginRight: 2 }}
                 />
-              )}
-            </Text>
-            <Text style={styles.specialization} numberOfLines={1}>
-              {speciality}
-            </Text>
-            
-            <View style={styles.metaContainer}>
-              {item.language && (
-                <View style={styles.languageBadge}>
-                  <Ionicons name="language" size={12} color="#4B5563" />
-                  <Text style={styles.metaText} numberOfLines={1}>
-                    {item.language}
-                  </Text>
-                </View>
-              )}
-              
-              <View style={styles.locationContainer}>
-                <Ionicons name="location-outline" size={12} color="#6B7280" />
-                <Text style={styles.locationText} numberOfLines={1}>
-                  {location}
-                </Text>
-              </View>
+              ))}
             </View>
-            
-            {item.rating && (
-              <View style={styles.ratingContainer}>
-                <Ionicons name="star" size={14} color="#F59E0B" />
-                <Text style={styles.ratingText}>
-                  {item.rating.toFixed(1)}
-                </Text>
-              </View>
+            {typeof price === 'number' && (
+              <Text style={styles.priceText}>₹{price}</Text>
             )}
           </View>
-          
-          <View style={styles.availabilityContainer}>
-            {item.is_online && (
-              <View style={styles.onlineBadge}>
-                <View style={styles.onlineIndicator} />
-                <Text style={styles.onlineText}>Online</Text>
-              </View>
-            )}
+
+            {about ? (
+              <CollapsibleCard
+                title="About"
+                content={<Text style={styles.aboutText}>{about}</Text>}
+                containerStyle={{ marginTop: theme.spacing.s }}
+              />
+            ) : null}
+
+            <View style={styles.actionsRow}>
+              <TouchableOpacity
+                style={styles.bookButton}
+                activeOpacity={0.8}
+                onPress={() =>
+                  navigation.navigate('ProfessionalProfile', {
+                    professionalId: item.professional_id?.toString() || item._id || '',
+                  })
+                }
+              >
+                <Text style={styles.bookButtonText}>Book Now</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </Card>
     );
   };
 
-  const getScreenTitle = () => {
-    if (searchQuery) return `Search: "${searchQuery}"`;
-    if (categoryName) return categoryName;
-    return 'Find Professionals';
-  };
+  const renderFooter = () =>
+    isLoadingMore ? (
+      <View style={styles.loadingMoreContainer}>
+        <ActivityIndicator size="small" color="#1E88E5" />
+        <Text style={styles.loadingMoreText}>Loading more professionals...</Text>
+      </View>
+    ) : null;
+
+  const renderEmptyList = () => (
+    <View style={styles.emptyContainer}>
+      <Ionicons name="search-outline" size={48} color="#9CA3AF" />
+      <Text style={styles.emptyText}>No professionals found</Text>
+      <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
+        <Ionicons name="refresh" size={16} color="#1E88E5" />
+        <Text style={styles.refreshButtonText}>Refresh</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#1E88E5" barStyle="light-content" />
-      
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
+        <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {getScreenTitle()}
-        </Text>
-        <View style={styles.headerRight} />
+        <Text style={styles.headerTitle}>{categoryName || 'Professionals'}</Text>
       </View>
 
-      {/* Search Bar */}
+      {/* Search bar */}
       <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search professionals..."
-            placeholderTextColor="#9CA3AF"
-            value={currentSearchQuery}
-            onChangeText={setCurrentSearchQuery}
-            onSubmitEditing={({ nativeEvent }) => handleSearch(nativeEvent.text)}
-            returnKeyType="search"
-          />
-          {currentSearchQuery ? (
-            <TouchableOpacity 
-              style={styles.clearButton}
-              onPress={() => {
-                setCurrentSearchQuery('');
-                handleSearch('');
-              }}
-            >
-              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-        
-        <TouchableOpacity 
+        <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search professionals..."
+          value={currentSearchQuery}
+          onChangeText={setCurrentSearchQuery}
+          onSubmitEditing={({ nativeEvent }) => handleSearch(nativeEvent.text)}
+        />
+        {currentSearchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setCurrentSearchQuery('')}>
+            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Filters toggle and panel */}
+      <View style={styles.filterBar}>
+        <TouchableOpacity
           style={styles.filterButton}
-          onPress={() => setShowFilterModal(true)}
+          onPress={() => setShowFilterModal(!showFilterModal)}
         >
-          <Ionicons name="filter" size={20} color="#FFFFFF" />
+          <Ionicons name="options-outline" size={18} color="#1E88E5" />
+          <Text style={styles.filterButtonText}>Filters</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
-      {isLoading && !refreshing ? (
+      {showFilterModal && (
+        <View style={styles.filterPanel}>
+          <Text style={styles.filterLabel}>City</Text>
+          <TextInput
+            style={styles.filterInput}
+            placeholder="Enter city"
+            value={filters.city || ''}
+            onChangeText={(text) => setFilters((prev) => ({ ...prev, city: text }))}
+          />
+
+          <Text style={styles.filterLabel}>Role</Text>
+          <View style={styles.roleChipsRow}>
+            {[
+              { label: 'All', value: undefined },
+              { label: 'Yoga Teacher', value: 'yoga_teacher' },
+              { label: 'Nutritionist', value: 'nutritionist' },
+              { label: 'Therapist', value: 'therapist' },
+            ].map((option) => {
+              const isActive = filters.role === option.value || (!filters.role && option.value === undefined);
+              return (
+                <TouchableOpacity
+                  key={option.label}
+                  style={[styles.roleChip, isActive && styles.roleChipActive]}
+                  onPress={() =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      role: option.value,
+                    }))
+                  }
+                >
+                  <Text style={[styles.roleChipText, isActive && styles.roleChipTextActive]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.priceRowFilters}>
+            <View style={styles.priceColumn}>
+              <Text style={styles.filterLabel}>Min Price</Text>
+              <TextInput
+                style={styles.filterInput}
+                keyboardType="numeric"
+                placeholder="0"
+                value={String(filters.min_price ?? 0)}
+                onChangeText={(text) =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    min_price: Number(text) || 0,
+                  }))
+                }
+              />
+            </View>
+            <View style={styles.priceColumn}>
+              <Text style={styles.filterLabel}>Max Price</Text>
+              <TextInput
+                style={styles.filterInput}
+                keyboardType="numeric"
+                placeholder="1000"
+                value={String(filters.max_price ?? 1000)}
+                onChangeText={(text) =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    max_price: Number(text) || 0,
+                  }))
+                }
+              />
+            </View>
+          </View>
+
+          <View style={styles.filterActionsRow}>
+            <TouchableOpacity style={styles.filterResetButton} onPress={handleResetFilters}>
+              <Text style={styles.filterResetText}>Reset</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.filterApplyButton} onPress={handleApplyFilters}>
+              <Text style={styles.filterApplyText}>Apply</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* List */}
+      {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#1E88E5" />
-          <Text style={styles.loadingText}>Finding professionals...</Text>
         </View>
       ) : error ? (
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
-          <Text style={styles.errorText}>
-            {error || 'Failed to load professionals. Please try again.'}
-          </Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => fetchProfessionals()}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.retryButtonText}>Try Again</Text>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
+            <Text style={styles.refreshButtonText}>Try Again</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <FlatList
           data={professionals}
           renderItem={renderProfessional}
-          keyExtractor={(item) => item.professional_id?.toString() || item._id || Math.random().toString()}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={!isLoading ? renderEmptyList : null}
+          keyExtractor={(item) =>
+            item.professional_id?.toString() || item._id || Math.random().toString()
+          }
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
           ListFooterComponent={renderFooter}
+          ListEmptyComponent={renderEmptyList}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={['#1E88E5']}
-              tintColor="#1E88E5"
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#1E88E5']} />
           }
-          showsVerticalScrollIndicator={false}
         />
       )}
-      
-      {/* Filter Modal - Implementation needed */}
-      
     </SafeAreaView>
   );
 };
 
-// Common shadow styles
-const commonShadow = {
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.1,
-  shadowRadius: 4,
-  elevation: 3,
-  flex: 1,
-  backgroundColor: '#FFFFFF',
-};
-
 const styles = StyleSheet.create({
-  // Main container
-  container: commonShadow,
-
-  // Header Styles
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
-    ...commonShadow,
     backgroundColor: '#1E88E5',
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
   },
-  backButton: {
-    marginRight: 16,
-    padding: 4,
+  filterBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    marginBottom: 4,
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: theme.colors.background.surface,
+  },
+  filterButtonText: {
+    marginLeft: 4,
+    color: theme.colors.primary,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  filterPanel: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  filterLabel: {
+    fontSize: 13,
+    color: '#4B5563',
+    marginBottom: 4,
+    marginTop: 8,
+  },
+  filterInput: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: '#111827',
+  },
+  priceRowFilters: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  priceColumn: {
+    flex: 1,
+    marginRight: 8,
+  },
+  roleChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  roleChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    marginRight: 8,
+    marginBottom: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  roleChipActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.background.primary,
+  },
+  roleChipText: {
+    fontSize: 13,
+    color: '#4B5563',
+  },
+  roleChipTextActive: {
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  filterActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 12,
+  },
+  filterResetButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#9CA3AF',
+  },
+  filterResetText: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  filterApplyButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: theme.colors.primary,
+  },
+  filterApplyText: {
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   headerTitle: {
-    flex: 1,
+    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '600',
-    color: '#FFFFFF',
+    marginLeft: 12,
   },
-  headerRight: {
-    width: 40,
-  },
-
-  // Search Bar Styles
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  searchInputContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#F3F4F6',
+    margin: 16,
     borderRadius: 8,
     paddingHorizontal: 12,
-    height: 48,
   },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    height: '100%',
-    color: '#111827',
-    fontSize: 16,
-    paddingVertical: 0,
-  },
-  clearButton: {
-    padding: 4,
-    marginLeft: 4,
-  },
-  filterButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    backgroundColor: '#1E88E5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 12,
-  },
-
-  // Professional Card Styles
+  searchIcon: { marginRight: 8 },
+  searchInput: { flex: 1, height: 40, color: '#111827' },
   professionalCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.background.surface,
     marginHorizontal: 16,
-    ...commonShadow,
+    marginVertical: 8,
+    borderRadius: 16,
+    padding: 16,
+    ...theme.shadows.card,
   },
-  professionalInfo: {
+  avatarImage: { width: 64, height: 64, borderRadius: 32, marginRight: 12 },
+  professionalName: { fontSize: 16, fontWeight: '600', color: '#111827' },
+  specialization: { fontSize: 14, color: '#6B7280' },
+  locationText: { fontSize: 12, color: '#6B7280', marginTop: 4 },
+  aboutText: {
+    fontSize: 13,
+    color: theme.colors.text.secondary,
+  },
+  ratingPriceRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  avatarContainer: {
-    marginRight: 16,
-  },
-  avatarImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-  },
-  defaultAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  professionalDetails: {
-    flex: 1,
-  },
-  professionalName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  specialization: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  metaContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  languageBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  metaText: {
-    fontSize: 12,
-    color: '#4B5563',
-    marginLeft: 4,
-  },
-  locationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  locationText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  ratingText: {
-    fontSize: 14,
-    color: '#111827',
-    marginLeft: 4,
-    fontWeight: '600',
-  },
-  availabilityContainer: {
     marginTop: 8,
   },
-  onlineBadge: {
+  ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ECFDF5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
   },
-  onlineIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#10B981',
+  ratingValue: {
     marginRight: 4,
-  },
-  onlineText: {
-    fontSize: 12,
-    color: '#065F46',
-    fontWeight: '500',
-  },
-  availabilityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  availabilityText: {
-    fontSize: 12,
-    color: '#FFFFFF',
-    fontWeight: '500',
-  },
-
-  // Empty State Styles
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  emptyText: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#1F2937',
-    marginTop: 16,
-    textAlign: 'center',
+    color: theme.colors.text.primary,
   },
-  emptySubtext: {
+  priceText: {
     fontSize: 14,
-    color: '#6B7280',
-    marginTop: 8,
-    textAlign: 'center',
-    marginBottom: 24,
+    fontWeight: '700',
+    color: theme.colors.accent,
   },
+  actionsRow: {
+    marginTop: theme.spacing.s,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  bookButton: {
+    paddingVertical: theme.spacing.s,
+    paddingHorizontal: theme.spacing.l,
+    borderRadius: theme.borderRadius.m,
+    backgroundColor: theme.colors.primary,
+  },
+  bookButtonText: {
+    color: theme.colors.background.surface,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingMoreContainer: { padding: 12, flexDirection: 'row', justifyContent: 'center' },
+  loadingMoreText: { marginLeft: 8, color: '#6B7280' },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyText: { marginTop: 8, color: '#1F2937', fontSize: 16 },
   refreshButton: {
+    marginTop: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EFF6FF',
-    borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
-  },
-  refreshButtonText: {
-    color: '#1E88E5',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-
-  // Loading State
-  loadingContainer: {
-    ...commonContainer,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#4B5563',
-  },
-  loadingMoreContainer: {
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  loadingMoreText: {
-    marginLeft: 8,
-    color: '#6B7280',
-    fontSize: 14,
-  },
-
-  // Error State
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    marginTop: 12,
-    marginBottom: 20,
-
-// Search Bar Styles
-searchContainer: {
-flexDirection: 'row',
-alignItems: 'center',
-padding: 16,
-backgroundColor: '#FFFFFF',
-borderBottomWidth: 1,
-borderBottomColor: '#E5E7EB',
-},
-searchInputContainer: {
-flex: 1,
-flexDirection: 'row',
-alignItems: 'center',
-backgroundColor: '#F3F4F6',
-borderRadius: 8,
-paddingHorizontal: 12,
-height: 48,
-},
-searchIcon: {
-marginRight: 8,
-},
-searchInput: {
-flex: 1,
-height: '100%',
-color: '#111827',
-fontSize: 16,
-paddingVertical: 0,
-},
-clearButton: {
-padding: 4,
-marginLeft: 4,
-},
-filterButton: {
-width: 48,
-height: 48,
-borderRadius: 8,
-backgroundColor: '#1E88E5',
-justifyContent: 'center',
-alignItems: 'center',
-marginLeft: 12,
-},
-// Professional Card Styles
-professionalCard: {
-backgroundColor: '#FFFFFF',
-borderRadius: 12,
-padding: 16,
-marginBottom: 12,
-marginHorizontal: 16,
-...commonShadow,
-},
-professionalInfo: {
-flexDirection: 'row',
-alignItems: 'flex-start',
-},
-avatarContainer: {
-marginRight: 12,
-},
-avatarImage: {
-width: 64,
-height: 64,
-borderRadius: 32,
-backgroundColor: '#F3F4F6',
-},
-defaultAvatar: {
-width: 64,
-height: 64,
-borderRadius: 32,
-backgroundColor: '#E5E7EB',
-justifyContent: 'center',
-alignItems: 'center',
-},
-professionalDetails: {
-flex: 1,
-marginRight: 12,
-},
-professionalName: {
-fontSize: 16,
-fontWeight: '600',
-color: '#111827',
-marginBottom: 2,
-},
-specialization: {
-fontSize: 14,
-color: '#6B7280',
-marginBottom: 8,
-},
-verifiedIcon: {
-marginLeft: 4,
-},
-metaContainer: {
-flexDirection: 'row',
-flexWrap: 'wrap',
-marginBottom: 8,
-gap: 8,
-},
-languageBadge: {
-flexDirection: 'row',
-alignItems: 'center',
-backgroundColor: '#F3F4F6',
-paddingHorizontal: 8,
-paddingVertical: 4,
-borderRadius: 4,
-marginRight: 4,
-},
-metaText: {
-fontSize: 12,
-color: '#4B5563',
-marginLeft: 4,
-},
-locationContainer: {
-flexDirection: 'row',
-alignItems: 'center',
-},
-locationText: {
-fontSize: 12,
-color: '#6B7280',
-marginLeft: 4,
-},
-ratingContainer: {
-flexDirection: 'row',
-alignItems: 'center',
-},
-ratingText: {
-fontSize: 12,
-color: '#1F2937',
-fontWeight: '500',
-marginLeft: 4,
-},
-availabilityContainer: {
-alignItems: 'flex-end',
-},
-onlineBadge: {
-flexDirection: 'row',
-alignItems: 'center',
-backgroundColor: '#ECFDF5',
-paddingHorizontal: 8,
-paddingVertical: 4,
-borderRadius: 12,
-},
-onlineIndicator: {
-width: 8,
-height: 8,
-borderRadius: 4,
-backgroundColor: '#10B981',
-marginRight: 4,
-},
-onlineText: {
-fontSize: 12,
-color: '#065F46',
-fontWeight: '500',
-},
-availabilityBadge: {
-marginTop: 4,
-paddingHorizontal: 8,
-paddingVertical: 4,
-borderRadius: 4,
-backgroundColor: '#EFF6FF',
-},
-availabilityText: {
-fontSize: 12,
-color: '#1E40AF',
-fontWeight: '500',
-},
-// List and empty states
-listContent: {
-padding: 16,
-paddingBottom: 24,
-},
-emptyContainer: {
-flex: 1,
-justifyContent: 'center',
-alignItems: 'center',
-padding: 24,
-paddingTop: 80,
-},
-emptyText: {
-fontSize: 18,
-fontWeight: '600',
-color: '#111827',
-marginTop: 16,
-textAlign: 'center',
-},
-emptySubtext: {
-fontSize: 14,
-color: '#6B7280',
-marginTop: 8,
-textAlign: 'center',
-marginBottom: 24,
-},
-refreshButton: {
-flexDirection: 'row',
-alignItems: 'center',
-justifyContent: 'center',
-paddingVertical: 10,
-paddingHorizontal: 20,
-borderRadius: 8,
-borderWidth: 1,
-borderColor: '#1E88E5',
-backgroundColor: '#FFFFFF',
-},
-refreshButtonText: {
-color: '#1E88E5',
-fontSize: 14,
-fontWeight: '600',
-marginLeft: 8,
-},
-loadingMoreContainer: {
-paddingVertical: 16,
-alignItems: 'center',
-justifyContent: 'center',
-flexDirection: 'row',
-gap: 8,
-},
-loadingMoreText: {
-marginLeft: 8,
-color: '#6B7280',
-fontSize: 14,
-},
-// Error state styles
-errorContainer: {
-flex: 1,
-justifyContent: 'center',
-alignItems: 'center',
-padding: 20,
-},
-errorText: {
-marginTop: 12,
-marginBottom: 20,
-fontSize: 16,
-textAlign: 'center',
-color: '#4B5563',
-paddingHorizontal: 20,
-},
-// Empty state styles
-headerRight: {
-width: 40,
-},
-searchContainer: {
-flexDirection: 'row',
-alignItems: 'center',
-padding: 16,
-backgroundColor: '#FFFFFF',
-borderBottomWidth: 1,
-borderBottomColor: '#E5E7EB',
-},
-searchInputContainer: {
-flex: 1,
-flexDirection: 'row',
-alignItems: 'center',
-backgroundColor: '#F3F4F6',
-borderRadius: 8,
-paddingHorizontal: 12,
-height: 48,
-},
-searchIcon: {
-marginRight: 8,
-},
-searchInput: {
-flex: 1,
-height: '100%',
-color: '#111827',
-fontSize: 16,
-paddingVertical: 0,
-},
-clearButton: {
-padding: 4,
-marginLeft: 8,
-},
-filterButton: {
-width: 48,
-height: 48,
-borderRadius: 24,
-backgroundColor: '#1E88E5',
-justifyContent: 'center',
-alignItems: 'center',
-marginLeft: 12,
-...commonShadow,
-},
-// Professional card
-professionalCard: {
-backgroundColor: '#FFFFFF',
-borderRadius: 12,
-padding: 16,
-marginBottom: 12,
-...commonShadow,
-},
-professionalInfo: {
-flexDirection: 'row',
-alignItems: 'flex-start',
-},
-avatarContainer: {
-marginRight: 12,
-},
-avatarImage: {
-width: 64,
-height: 64,
-borderRadius: 32,
-backgroundColor: '#F3F4F6',
-},
-defaultAvatar: {
-width: 64,
-height: 64,
-borderRadius: 32,
-backgroundColor: '#E5E7EB',
-justifyContent: 'center',
-alignItems: 'center',
-},
-professionalDetails: {
-flex: 1,
-marginRight: 12,
-},
-professionalName: {
-fontSize: 16,
-fontWeight: '600',
-color: '#111827',
-marginBottom: 2,
-},
-specialization: {
-fontSize: 14,
-color: '#6B7280',
-marginBottom: 8,
-},
-verifiedIcon: {
-marginLeft: 4,
-},
-metaContainer: {
-flexDirection: 'row',
-flexWrap: 'wrap',
-marginBottom: 8,
-gap: 8,
-},
-languageBadge: {
-flexDirection: 'row',
-alignItems: 'center',
-backgroundColor: '#F3F4F6',
-paddingHorizontal: 8,
-paddingVertical: 4,
-borderRadius: 4,
-marginRight: 4,
-},
-metaText: {
-fontSize: 12,
-color: '#4B5563',
-marginLeft: 4,
-},
-locationContainer: {
-flexDirection: 'row',
-alignItems: 'center',
-},
-locationText: {
-fontSize: 12,
-color: '#6B7280',
-marginLeft: 4,
-},
-ratingContainer: {
-flexDirection: 'row',
-alignItems: 'center',
-},
-ratingText: {
-fontSize: 12,
-color: '#1F2937',
-fontWeight: '500',
-marginLeft: 4,
-},
-availabilityContainer: {
-alignItems: 'flex-end',
-},
-onlineBadge: {
-flexDirection: 'row',
-alignItems: 'center',
-backgroundColor: '#ECFDF5',
-paddingHorizontal: 8,
-paddingVertical: 4,
-borderRadius: 12,
-},
-onlineIndicator: {
-width: 8,
-height: 8,
-borderRadius: 4,
-backgroundColor: '#10B981',
-marginRight: 4,
-},
-onlineText: {
-fontSize: 12,
-color: '#065F46',
-fontWeight: '500',
-},
-availabilityBadge: {
-marginTop: 4,
-paddingHorizontal: 8,
-paddingVertical: 4,
-borderRadius: 4,
-backgroundColor: '#EFF6FF',
-},
-availabilityText: {
-fontSize: 12,
-color: '#1E40AF',
-fontWeight: '500',
-},
-// Empty state
-emptyContainer: {
-flex: 1,
-justifyContent: 'center',
-alignItems: 'center',
-padding: 40,
-},
-emptyText: {
-fontSize: 18,
-fontWeight: '600',
-color: '#1F2937',
-marginTop: 16,
-textAlign: 'center',
-},
-emptySubtext: {
-fontSize: 14,
-color: '#6B7280',
-marginTop: 8,
-textAlign: 'center',
-marginBottom: 24,
-},
-loadingMoreText: {
-marginLeft: 8,
-color: '#6B7280',
-fontSize: 14,
-},
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  searchInputContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
     borderRadius: 8,
-    paddingHorizontal: 12,
-    height: 48,
+    borderColor: '#1E88E5',
+    borderWidth: 1,
   },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    height: '100%',
-    color: '#111827',
-    fontSize: 16,
-    paddingVertical: 0,
-  },
-  clearButton: {
-    padding: 4,
-    marginLeft: 4,
-  },
-  filterButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    backgroundColor: '#1E88E5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 12,
-  },
-  professionalCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    marginHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  professionalInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarContainer: {
-    marginRight: 16,
-  },
-  avatarImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-  },
-  defaultAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  professionalDetails: {
-    flex: 1,
-  },
-  professionalName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  specialization: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  metaContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  languageBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  metaText: {
-    fontSize: 12,
-    color: '#4B5563',
-    marginLeft: 4,
-  },
-  locationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  locationText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  ratingText: {
-    fontSize: 14,
-    color: '#111827',
-    marginLeft: 4,
-    fontWeight: '600',
-  },
-  availabilityContainer: {
-    marginTop: 8,
-  },
-  onlineBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ECFDF5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-  },
-  onlineIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#10B981',
-    marginRight: 4,
-  },
-  onlineText: {
-    fontSize: 12,
-    color: '#065F46',
-    fontWeight: '500',
-  },
-  availabilityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  availabilityText: {
-    fontSize: 12,
-    color: '#FFFFFF',
-    fontWeight: '500',
-  },
-
-  // Empty state
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginTop: 8,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  loadingMoreText: {
-    marginLeft: 8,
-    color: '#6B7280',
-    fontSize: 14,
-  },
+  refreshButtonText: { marginLeft: 6, color: '#1E88E5', fontWeight: '600' },
+  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
+  errorText: { marginTop: 8, color: '#EF4444', textAlign: 'center' },
 });
 
 export default ProfessionalsListScreen;

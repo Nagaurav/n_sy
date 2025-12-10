@@ -9,8 +9,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'react-native';
 import { Provider } from 'react-redux';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { store } from './src/store';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { theme } from './src/theme';
+import { ThemeProvider } from './src/contexts/ThemeContext';
 
 // Import your screens
 import SplashScreen from './src/screens/SplashScreen';
@@ -23,6 +26,13 @@ import BookingConfirmationScreen from './src/screens/BookingConfirmationScreen';
 import PaymentGatewayScreen from './src/screens/PaymentGatewayScreen';
 import BookingSuccessScreen from './src/screens/BookingSuccessScreen';
 import BookingFailedScreen from './src/screens/BookingFailedScreen';
+import EditProfileScreen from './src/screens/EditProfileScreen';
+import PrescriptionsListScreen from './src/screens/PrescriptionsListScreen';
+import PrescriptionDetailScreen from './src/screens/PrescriptionDetailScreen';
+import ChatListScreen from './src/screens/ChatListScreen';
+import ChatScreen from './src/screens/ChatScreen';
+import AppointmentsScreen from './src/screens/AppointmentsScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 
 // Navigation Types
 export type AuthStackParamList = {
@@ -35,8 +45,8 @@ export type AuthStackParamList = {
 export type DrawerParamList = {
   HomeStack: undefined;
   Appointments: undefined;
-  Articles: undefined;
   Profile: undefined;
+  Articles: undefined;
   Settings: undefined;
   Support: undefined;
   FAQ: undefined;
@@ -78,6 +88,11 @@ export type HomeStackParamList = {
     paymentUrl: string;
     bookingId: string;
     paymentId: string;
+    amount: number;
+    customerId: string;
+    customerEmail: string;
+    customerPhone: string;
+    merchantId?: string;
   };
   BookingSuccess: {
     bookingId: string;
@@ -94,6 +109,19 @@ export type HomeStackParamList = {
     bookingId?: string;
     error?: string;
   };
+  EditProfile: {
+    currentUser: import('./src/types/userProfile').UserProfileData;
+  };
+  ChatList: undefined;
+  ChatScreen: {
+    chatId: string;
+    title?: string;
+    receiverId?: string;
+  };
+  PrescriptionsList: undefined;
+  PrescriptionDetail: {
+    prescriptionId: string;
+  };
 };
 
 const AuthStack = createStackNavigator<AuthStackParamList>();
@@ -101,9 +129,7 @@ const Drawer = createDrawerNavigator<DrawerParamList>();
 const HomeStack = createStackNavigator<HomeStackParamList>();
 
 // Import additional screens for drawer
-import AppointmentsScreen from './src/screens/AppointmentsScreen';
 import ArticlesScreen from './src/screens/ArticlesScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import SupportScreen from './src/screens/SupportScreen';
 import FaqScreen from './src/screens/FaqScreen';
@@ -149,6 +175,11 @@ const HomeStackNavigator = () => (
         gestureEnabled: true,
       }}
     />
+    <HomeStack.Screen name="EditProfile" component={EditProfileScreen} />
+    <HomeStack.Screen name="ChatList" component={ChatListScreen} />
+    <HomeStack.Screen name="ChatScreen" component={ChatScreen} />
+    <HomeStack.Screen name="PrescriptionsList" component={PrescriptionsListScreen} />
+    <HomeStack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
   </HomeStack.Navigator>
 );
 
@@ -182,19 +213,9 @@ const MainDrawerNavigator = () => {
         name="Appointments" 
         component={AppointmentsScreen}
         options={{
-          drawerLabel: 'My Appointments',
+          drawerLabel: 'Appointments',
           drawerIcon: ({ color }) => (
             <Ionicons name="calendar-outline" size={24} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen 
-        name="Articles" 
-        component={ArticlesScreen}
-        options={{
-          drawerLabel: 'Wellness Articles',
-          drawerIcon: ({ color }) => (
-            <Ionicons name="newspaper-outline" size={24} color={color} />
           ),
         }}
       />
@@ -205,6 +226,16 @@ const MainDrawerNavigator = () => {
           drawerLabel: 'My Profile',
           drawerIcon: ({ color }) => (
             <Ionicons name="person-outline" size={24} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen 
+        name="Articles" 
+        component={ArticlesScreen}
+        options={{
+          drawerLabel: 'Wellness Articles',
+          drawerIcon: ({ color }) => (
+            <Ionicons name="newspaper-outline" size={24} color={color} />
           ),
         }}
       />
@@ -254,23 +285,30 @@ const MainDrawerNavigator = () => {
 
 // Navigation component that handles auth routing
 const AppNavigator = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isAuthReady } = useAuth();
   
-  // TEMPORARY: Force loading to false after 2 seconds for testing
-  const [forceLoaded, setForceLoaded] = React.useState(false);
+  // Add a timeout to prevent infinite loading
+  const [isNavigationReady, setIsNavigationReady] = React.useState(false);
+  
   React.useEffect(() => {
     const timer = setTimeout(() => {
-      console.log('🔧 FORCE: Setting forceLoaded to true');
-      setForceLoaded(true);
-    }, 2000);
+      console.log('🔧 Navigation ready timeout reached');
+      setIsNavigationReady(true);
+    }, 5000); // 5 second timeout
+    
     return () => clearTimeout(timer);
   }, []);
 
-  console.log('🧭 AppNavigator state:', { isLoading, isAuthenticated, forceLoaded });
+  console.log('🧭 AppNavigator state:', { 
+    isLoading, 
+    isAuthenticated, 
+    isAuthReady,
+    isNavigationReady 
+  });
 
-  // Use forceLoaded OR !isLoading to prevent infinite loading
-  if (isLoading && !forceLoaded) {
-    console.log('⏳ Showing loading screen...');
+  // Show splash screen only if we're still loading and navigation isn't ready
+  if ((isLoading || !isAuthReady) && !isNavigationReady) {
+    console.log('⏳ Showing splash screen...');
     return (
       <AuthStack.Navigator screenOptions={{ headerShown: false }}>
         <AuthStack.Screen name="Splash" component={SplashScreen} />
@@ -302,14 +340,18 @@ const AppNavigator = () => {
 const App = () => {
   return (
     <Provider store={store}>
-      <AuthProvider>
-        <SafeAreaProvider>
-          <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-          <NavigationContainer>
-            <AppNavigator />
-          </NavigationContainer>
-        </SafeAreaProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <SafeAreaProvider>
+            <KeyboardProvider>
+              <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+              <NavigationContainer>
+                <AppNavigator />
+              </NavigationContainer>
+            </KeyboardProvider>
+          </SafeAreaProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </Provider>
   );
 };

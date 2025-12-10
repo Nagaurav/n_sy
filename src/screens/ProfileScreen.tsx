@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,14 +6,113 @@ import {
   SafeAreaView,
   TouchableOpacity,
   StatusBar,
+  ScrollView,
+  Image,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../contexts/AuthContext';
+import apiService from '../services/apiService';
+import { UserProfileData, UserHealthProfile } from '../types/userProfile';
+
+// Simple inline SVG avatar fallback to avoid missing local asset
+const DEFAULT_AVATAR =
+  'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzY2NjY2NiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yMCAyMWMtMi4yIDAtNC0xLjgtNC00dj0xYzAtLjYtLjQtMS0xLTFjLS42IDAtMSAuNC0xIDF2MWMwIDEuMS0uOSAyLTIgMnMtMi0uOS0yLTJ2LTFjMC0xLjYtMS4zLTMtMy0zYy0xLjYgMC0zIDEuMy0zIDN2MWMwIDEuMS0uOSAyLTIgMnMtMi0uOS0yLTJ2LTFjMC0xLjYtMS4zLTMtMy0zYy0xLjYgMC0zIDEuMy0zIDN2MWMwIDIuMiAxLjggNCA0IDRoMTZ6Ii8+PHBhdGggZD0iTTEyIDExYzIuOCAwIDUtMi4yIDUtNXMtMi4yLTUtNS01cy01IDIuMi01IDUgMi4yIDUgNSA1eiIvPjwvc3ZnPg==';
+
+// Helper function to format date
+const formatDate = (dateString: string) => {
+  if (!dateString) return 'Not specified';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+};
+
+// Helper function to format blood group
+const formatBloodGroup = (bloodGroup: string) => {
+  if (!bloodGroup) return 'Not specified';
+  return bloodGroup
+    .split('_')
+    .map(word => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(' ');
+};
+
+// Helper function to format marital status
+const formatMaritalStatus = (status: string) => {
+  if (!status) return 'Not specified';
+  return status.charAt(0) + status.slice(1).toLowerCase();
+};
 
 const ProfileScreen = () => {
   const navigation = useNavigation();
   const { user } = useAuth();
+  const [profileData, setProfileData] = useState<UserProfileData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchProfile = async () => {
+    try {
+      const userId = user?.user_id || user?._id;
+      if (!userId) {
+        throw new Error('User ID not found');
+      }
+      
+      const response = await apiService.getUserProfile(userId);
+      setProfileData(response.user);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+      setError('Failed to load profile. Please try again.');
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProfile();
+  }, [user]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchProfile();
+  };
+
+  if (isLoading && !refreshing) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#1E88E5" />
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.errorContainer}>
+        <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => fetchProfile()}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.editButton, { marginTop: 12 }]}
+          onPress={() =>
+            (navigation as any).navigate('HomeStack', {
+              screen: 'PrescriptionsList',
+            })
+          }
+        >
+          <Text style={styles.editButtonText}>View Prescriptions</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -30,38 +129,162 @@ const ProfileScreen = () => {
         <Text style={styles.headerTitle}>My Profile</Text>
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.profileCard}>
-          <Text style={styles.sectionTitle}>Profile Information</Text>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>Name:</Text>
-            <Text style={styles.value}>{user?.first_name || user?.firstName} {user?.last_name || user?.lastName}</Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>Email:</Text>
-            <Text style={styles.value}>{user?.email}</Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>Phone:</Text>
-            <Text style={styles.value}>{user?.phone}</Text>
+      <ScrollView 
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Profile Card */}
+        <View style={styles.card}>
+          <View style={styles.profileHeader}>
+            <Image
+              source={profileData?.photo_url
+                ? { uri: profileData.photo_url }
+                : { uri: DEFAULT_AVATAR }
+              }
+              style={styles.avatar}
+            />
+            <View style={styles.profileInfo}>
+              <Text style={styles.userName}>
+                {profileData?.first_name} {profileData?.last_name}
+              </Text>
+              <Text style={styles.userEmail}>{profileData?.email}</Text>
+              <Text style={styles.userPhone}>{profileData?.phone}</Text>
+            </View>
           </View>
         </View>
 
-        <TouchableOpacity style={styles.editButton}>
+        {/* Personal Details Card */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Personal Details</Text>
+          <InfoRow label="Date of Birth" value={profileData?.dob ? formatDate(profileData.dob) : 'Not specified'} />
+          <InfoRow label="Gender" value={profileData?.gender ? profileData.gender.charAt(0).toUpperCase() + profileData.gender.slice(1).toLowerCase() : 'Not specified'} />
+          <InfoRow label="City" value={profileData?.city || 'Not specified'} />
+          {profileData?.address && (
+            <InfoRow label="Address" value={profileData?.address} />
+          )}
+          {profileData?.pin_code && (
+            <InfoRow label="PIN Code" value={profileData?.pin_code} />
+          )}
+        </View>
+
+        {/* Health Details Card */}
+        {profileData?.user_health && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Health Details</Text>
+            <InfoRow 
+              label="Blood Group" 
+              value={formatBloodGroup(profileData.user_health.blood_group)} 
+            />
+            <InfoRow 
+              label="Marital Status" 
+              value={formatMaritalStatus(profileData.user_health.marital_status)} 
+            />
+            <InfoRow 
+              label="Height" 
+              value={profileData.user_health.height ? `${profileData.user_health.height} cm` : 'Not specified'} 
+            />
+            <InfoRow 
+              label="Weight" 
+              value={profileData.user_health.weight ? `${profileData.user_health.weight} kg` : 'Not specified'} 
+            />
+          </View>
+        )}
+
+        {/* Emergency Contact Card */}
+        {profileData?.user_health?.emergency_contact_name && (
+          <View style={[styles.card, { borderLeftColor: '#EF4444', borderLeftWidth: 4 }]}>
+            <Text style={styles.cardTitle}>Emergency Contact</Text>
+            <InfoRow 
+              label="Name" 
+              value={profileData.user_health.emergency_contact_name} 
+            />
+            <InfoRow 
+              label="Phone" 
+              value={profileData.user_health.emergency_contact_phone || 'Not specified'} 
+            />
+          </View>
+        )}
+
+        <TouchableOpacity 
+          style={styles.editButton}
+          onPress={() => {
+            if (profileData) {
+              (navigation as any).navigate('HomeStack', {
+                screen: 'EditProfile',
+                params: { currentUser: profileData },
+              });
+            }
+          }}
+        >
           <Text style={styles.editButtonText}>Edit Profile</Text>
         </TouchableOpacity>
-      </View>
+
+        <TouchableOpacity
+          style={[styles.editButton, { marginTop: 8 }]}
+          onPress={() =>
+            (navigation as any).navigate('HomeStack', {
+              screen: 'PrescriptionsList',
+            })
+          }
+        >
+          <Text style={styles.editButtonText}>View Prescriptions</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </SafeAreaView>
   );
 };
+
+// InfoRow component for consistent info display
+const InfoRow = ({ label, value }: { label: string; value: string }) => (
+  <View style={styles.infoRow}>
+    <Text style={styles.label}>{label}</Text>
+    <Text style={styles.value} numberOfLines={2} ellipsizeMode="tail">
+      {value || 'Not specified'}
+    </Text>
+  </View>
+);
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F3F4F6',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#F3F4F6',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#1E88E5',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  scrollView: {
+    flex: 1,
+    padding: 16,
   },
   header: {
     backgroundColor: '#1E88E5',
@@ -81,26 +304,55 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     flex: 1,
   },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  profileCard: {
+  card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 20,
-    marginBottom: 20,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  sectionTitle: {
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginRight: 16,
+    backgroundColor: '#E5E7EB',
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  userEmail: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  userPhone: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  cardTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#111827',
     marginBottom: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
   infoRow: {
     flexDirection: 'row',
@@ -108,23 +360,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#F3F4F6',
   },
   label: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#6B7280',
     fontWeight: '500',
+    flex: 1,
   },
   value: {
-    fontSize: 16,
-    color: '#1F2937',
-    fontWeight: '600',
+    fontSize: 15,
+    color: '#111827',
+    fontWeight: '500',
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 16,
   },
   editButton: {
     backgroundColor: '#1E88E5',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 32,
   },
   editButtonText: {
     color: '#FFFFFF',

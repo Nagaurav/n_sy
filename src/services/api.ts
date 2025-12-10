@@ -44,13 +44,28 @@ class ApiService {
   private setupInterceptors() {
     // Request interceptor to add auth token
     this.axiosInstance.interceptors.request.use(
-      (config) => {
-        if (this.authToken && config.headers) {
-          config.headers.Authorization = `Bearer ${this.authToken}`;
+      async (config) => {
+        console.log('Request interceptor - Current authToken:', this.authToken);
+        console.log('Request URL:', config.url);
+        
+        if (!this.authToken) {
+          console.log('No auth token found, loading from storage...');
+          await this.loadToken();
+          console.log('Token after loading:', this.authToken);
         }
+        
+        if (this.authToken) {
+          console.log('Setting Authorization header with token');
+          config.headers = config.headers || {};
+          config.headers.Authorization = `Bearer ${this.authToken}`;
+        } else {
+          console.warn('No auth token available for request');
+        }
+        
         return config;
       },
       (error) => {
+        console.error('Request interceptor error:', error);
         return Promise.reject(error);
       }
     );
@@ -84,9 +99,15 @@ class ApiService {
 
   private async loadToken() {
     try {
+      console.log('Loading token from storage...');
       const token = await AsyncStorage.getItem('@Auth:token');
+      console.log('Token from storage:', token ? 'Token exists' : 'No token found');
+      
       if (token) {
         this.setAuthToken(token);
+        console.log('Token set in API service');
+      } else {
+        console.warn('No auth token found in storage');
       }
     } catch (error) {
       console.error('Failed to load auth token', error);
@@ -167,9 +188,17 @@ class ApiService {
     }
   }
 
-  // --- NEW GENERIC GET METHOD ---
+  // --- GENERIC HTTP METHODS ---
   public async get<T = any>(endpoint: string, config?: any): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, 'GET', undefined, config);
+  }
+
+  public async post<T = any>(
+    endpoint: string, 
+    data?: any, 
+    config?: any
+  ): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, 'POST', data, config);
   }
 
   // OTP Related APIs (No auth required)

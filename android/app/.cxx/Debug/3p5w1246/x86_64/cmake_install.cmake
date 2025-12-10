@@ -42,22 +42,6 @@ if(NOT DEFINED CMAKE_OBJDUMP)
   set(CMAKE_OBJDUMP "C:/Users/naikg/AppData/Local/Android/Sdk/ndk/29.0.14033849/toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-objdump.exe")
 endif()
 
-if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  # Include the install script for each subdirectory.
-  include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/x86_64/rnasyncstorage_autolinked_build/cmake_install.cmake")
-  include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/x86_64/RNDateTimePickerCGen_autolinked_build/cmake_install.cmake")
-  include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/x86_64/RNCGeolocationSpec_autolinked_build/cmake_install.cmake")
-  include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/x86_64/rnpicker_autolinked_build/cmake_install.cmake")
-  include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/x86_64/lottiereactnative_autolinked_build/cmake_install.cmake")
-  include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/x86_64/rngesturehandler_codegen_autolinked_build/cmake_install.cmake")
-  include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/x86_64/rnreanimated_autolinked_build/cmake_install.cmake")
-  include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/x86_64/safeareacontext_autolinked_build/cmake_install.cmake")
-  include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/x86_64/rnscreens_autolinked_build/cmake_install.cmake")
-  include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/x86_64/RNVectorIconsSpec_autolinked_build/cmake_install.cmake")
-  include("C:/Projects/SAMYAYOG/android/app/.cxx/Debug/3p5w1246/x86_64/RNCWebViewSpec_autolinked_build/cmake_install.cmake")
-
-endif()
-
 if(CMAKE_INSTALL_COMPONENT)
   set(CMAKE_INSTALL_MANIFEST "install_manifest_${CMAKE_INSTALL_COMPONENT}.txt")
 else()

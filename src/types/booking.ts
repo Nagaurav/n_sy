@@ -159,6 +159,8 @@ export interface AvailableSlot {
   price_offline_15min: number | null;
   price_offline_30min: number | null;
   price_offline_60min: number | null;
+  // Optional duration in minutes (mapped from TimeSlot.duration or derived on the client)
+  duration?: number;
 }
 
 export interface FormattedAvailableSlot extends AvailableSlot {
@@ -214,4 +216,5 @@ export interface FilterModalState {
   gender?: 'male' | 'female' | 'other';
   sort_by: 'rating' | 'price_asc' | 'price_desc' | 'reviews';
   city?: string;
+  role?: string;
 }

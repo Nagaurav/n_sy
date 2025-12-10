@@ -13,16 +13,21 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
+import { apiService } from '../services/apiService';
 import { ConsultationBooking } from '../types/booking';
 import { theme } from '../theme';
 
 const AppointmentsScreen = ({ navigation }: any) => {
   const { user, signOut, isLoading: authLoading } = useAuth();
+  const { theme } = useTheme();
   const [appointments, setAppointments] = useState<ConsultationBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useEffect(() => {
     console.log('📱 AppointmentsScreen - Auth State:', {
@@ -43,7 +48,7 @@ const AppointmentsScreen = ({ navigation }: any) => {
     
     if (userId) {
       console.log('✅ User authenticated, fetching appointments for:', userId);
-      fetchAppointments();
+      fetchAppointments(1);
     } else {
       console.log('❌ User not authenticated - user object:', user);
       setIsLoading(false);
@@ -51,19 +56,36 @@ const AppointmentsScreen = ({ navigation }: any) => {
     }
   }, [(user as any)?.user_id, user?._id, (user as any)?.id, authLoading]);
 
-  const fetchAppointments = useCallback(async () => {
+  const fetchAppointments = useCallback(async (pageToLoad: number = 1) => {
     // Check for user_id, _id, or id (API returns user_id)
     const userId = (user as any)?.user_id || user?._id || (user as any)?.id;
     
     if (!userId) {
       setError('User not authenticated');
-      setIsLoading(false);
+      if (pageToLoad === 1) {
+        setIsLoading(false);
+      } else {
+        setIsLoadingMore(false);
+      }
       return;
     }
 
+    const limit = 10;
+    const offset = (pageToLoad - 1) * limit;
+
     try {
       setError(null);
-      const response = await apiService.getUserAppointments(String(userId));
+
+      if (pageToLoad === 1) {
+        setIsLoading(true);
+      } else {
+        setIsLoadingMore(true);
+      }
+
+      const response = await apiService.getUserAppointments(String(userId), {
+        limit,
+        offset,
+      });
       
       console.log('📋 Appointments API Response:', response);
       console.log('📋 response.data type:', typeof response.data);
@@ -84,7 +106,15 @@ const AppointmentsScreen = ({ navigation }: any) => {
         const sortedAppointments = appointmentsList.sort((a: any, b: any) => {
           return new Date(b.date).getTime() - new Date(a.date).getTime();
         });
-        setAppointments(sortedAppointments as any);
+
+        if (pageToLoad === 1) {
+          setAppointments(sortedAppointments as any);
+        } else {
+          setAppointments((prev) => [...prev, ...(sortedAppointments as any)]);
+        }
+
+        setHasMore(appointmentsList.length === limit);
+        setPage(pageToLoad);
       } else {
         setError(response.error || 'Failed to fetch appointments');
       }
@@ -92,15 +122,53 @@ const AppointmentsScreen = ({ navigation }: any) => {
       console.error('Error fetching appointments:', err);
       setError('Network error. Please check your connection and try again.');
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (pageToLoad === 1) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      } else {
+        setIsLoadingMore(false);
+      }
     }
   }, [user?._id]);
 
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
-    fetchAppointments();
+    setPage(1);
+    setHasMore(true);
+    fetchAppointments(1);
   }, [fetchAppointments]);
+
+  const handleLoadMore = useCallback(() => {
+    if (isLoadingMore || isLoading || !hasMore) {
+      return;
+    }
+    fetchAppointments(page + 1);
+  }, [fetchAppointments, page, isLoadingMore, isLoading, hasMore]);
+
+  const handleViewPrescription = useCallback(
+    async (bookingId: number | string) => {
+      try {
+        const numericId = Number(bookingId);
+        const response = await apiService.getBookingPrescription(numericId);
+        if (response?.data?.id) {
+          navigation.navigate('HomeStack', {
+            screen: 'PrescriptionDetail',
+            params: { prescriptionId: response.data.id },
+          });
+        } else {
+          Alert.alert('No prescription uploaded yet.');
+        }
+      } catch (error: any) {
+        const status = error?.response?.status;
+        if (status === 404) {
+          Alert.alert('No prescription uploaded yet.');
+        } else {
+          Alert.alert('Error', 'Failed to fetch prescription. Please try again later.');
+        }
+      }
+    },
+    [navigation],
+  );
 
   const handleLogout = async () => {
     Alert.alert(
@@ -123,33 +191,39 @@ const AppointmentsScreen = ({ navigation }: any) => {
     );
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusBadgeStyle = (status: string) => {
     switch (status.toLowerCase()) {
       case 'confirmed':
-        return '#10B981';
-      case 'pending':
-        return '#F59E0B';
+      case 'upcoming':
+        return {
+          backgroundColor: '#E6F4F1',
+          textColor: theme.colors.primary,
+          icon: 'calendar-check',
+        };
       case 'completed':
-        return '#6366F1';
-      case 'cancelled':
-        return '#EF4444';
-      default:
-        return '#6B7280';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'confirmed':
-        return 'checkmark-circle';
+        return {
+          backgroundColor: '#DCFCE7',
+          textColor: '#166534',
+          icon: 'checkmark-done-circle',
+        };
       case 'pending':
-        return 'time';
-      case 'completed':
-        return 'checkmark-done-circle';
+        return {
+          backgroundColor: '#FEF3C7',
+          textColor: '#92400E',
+          icon: 'time',
+        };
       case 'cancelled':
-        return 'close-circle';
+        return {
+          backgroundColor: '#FEE2E2',
+          textColor: '#B91C1C',
+          icon: 'close-circle',
+        };
       default:
-        return 'help-circle';
+        return {
+          backgroundColor: '#F8F9FA',
+          textColor: '#6B7280',
+          icon: 'help-circle',
+        };
     }
   };
 
@@ -184,8 +258,7 @@ const AppointmentsScreen = ({ navigation }: any) => {
   const renderAppointment = ({ item }: { item: any }) => {
     // Handle both API response formats
     const status = (item.booking_status || item.status || '').toLowerCase();
-    const statusColor = getStatusColor(status);
-    const statusIcon = getStatusIcon(status);
+    const statusBadgeStyle = getStatusBadgeStyle(status);
     const bookingId = item.booking_id || item._id;
     const timeDisplay = item.time; // Already formatted as "09:00 - 09:15"
 
@@ -209,9 +282,11 @@ const AppointmentsScreen = ({ navigation }: any) => {
               <Text style={styles.appointmentTime}>{timeDisplay}</Text>
             </View>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-            <Ionicons name={statusIcon as any} size={16} color="#FFFFFF" />
-            <Text style={styles.statusText}>{status.toUpperCase()}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: statusBadgeStyle.backgroundColor }]}>
+            <Ionicons name={statusBadgeStyle.icon as any} size={14} color={statusBadgeStyle.textColor} />
+            <Text style={[styles.statusText, { color: statusBadgeStyle.textColor }]}>
+              {status.toUpperCase()}
+            </Text>
           </View>
         </View>
 
@@ -263,19 +338,31 @@ const AppointmentsScreen = ({ navigation }: any) => {
           )}
         </View>
 
-        {status === 'confirmed' && (
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => {
-              Alert.alert(
-                'Appointment Details',
-                `Professional: ${item.professional_name}\nDate: ${formatDate(item.date)}\nTime: ${timeDisplay}\nMode: ${item.mode}\nAmount: ₹${item.amount}`
-              );
-            }}
-          >
-            <Ionicons name="information-circle" size={20} color="#1E88E5" />
-            <Text style={styles.actionButtonText}>View Details</Text>
-          </TouchableOpacity>
+        {(status === 'confirmed' || status === 'completed') && (
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => {
+                Alert.alert(
+                  'Appointment Details',
+                  `Professional: ${item.professional_name}\nDate: ${formatDate(item.date)}\nTime: ${timeDisplay}\nMode: ${item.mode}\nAmount: ₹${item.amount}`,
+                );
+              }}
+            >
+              <Ionicons name="information-circle" size={20} color="#1E88E5" />
+              <Text style={styles.actionButtonText}>View Details</Text>
+            </TouchableOpacity>
+
+            {status === 'completed' && (
+              <TouchableOpacity
+                style={styles.secondaryActionButton}
+                onPress={() => handleViewPrescription(bookingId)}
+              >
+                <Ionicons name="medkit-outline" size={20} color={theme.colors.primary} />
+                <Text style={styles.secondaryActionButtonText}>View Prescription</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         )}
       </View>
     );
@@ -356,7 +443,7 @@ const AppointmentsScreen = ({ navigation }: any) => {
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle" size={64} color="#EF4444" />
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={fetchAppointments} style={styles.retryButton}>
+          <TouchableOpacity onPress={handleRefresh} style={styles.retryButton}>
             <Ionicons name="refresh" size={20} color="#FFFFFF" />
             <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
@@ -368,22 +455,32 @@ const AppointmentsScreen = ({ navigation }: any) => {
           keyExtractor={(item: any) => String(item.booking_id || item._id || Math.random())}
           contentContainerStyle={[
             styles.listContainer,
-            appointments.length === 0 && styles.emptyListContainer
+            appointments.length === 0 && styles.emptyListContainer,
           ]}
           refreshControl={
-            <RefreshControl 
-              refreshing={isRefreshing} 
+            <RefreshControl
+              refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              colors={['#1E88E5']}
+              colors={["#1E88E5"]}
               tintColor="#1E88E5"
             />
+          }
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            isLoadingMore ? (
+              <View style={styles.footerLoader}>
+                <ActivityIndicator size="small" color="#1E88E5" />
+                <Text style={styles.footerLoaderText}>Loading more appointments...</Text>
+              </View>
+            ) : null
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="calendar-outline" size={80} color="#D1D5DB" />
               <Text style={styles.emptyText}>No Appointments Yet</Text>
               <Text style={styles.emptySubtext}>
-                Your booking history will appear here.{'\n'}
+                Your booking history will appear here.{"\n"}
                 Start by booking your first consultation!
               </Text>
             </View>
@@ -544,14 +641,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   appointmentCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.background.surface,
     borderRadius: 16,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    ...theme.shadows.card,
     overflow: 'hidden',
   },
   cardHeader: {
@@ -588,16 +681,18 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
     gap: 4,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   statusText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
   divider: {
     height: 1,
@@ -638,7 +733,16 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     lineHeight: 20,
   },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 12,
+  },
   actionButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -650,6 +754,23 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     color: '#1E88E5',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  secondaryActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  secondaryActionButtonText: {
+    color: theme.colors.primary,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -672,6 +793,16 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
     lineHeight: 22,
+  },
+  footerLoader: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerLoaderText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#6B7280',
   },
 });
 

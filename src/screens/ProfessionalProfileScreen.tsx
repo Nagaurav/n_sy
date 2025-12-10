@@ -20,17 +20,16 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 
 const DEFAULT_AVATAR = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzY2NjY2NiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yMCAyMWMtMi4yIDAtNC0xLjgtNC00dj0xYzAtLjYtLjQtMS0xLTFjLS42IDAtMSAuNC0xIDF2MWMwIDEuMS0uOSAyLTIgMnMtMi0uOS0yLTJ2LTFjMC0xLjYtMS4zLTMtMy0zYy0xLjYgMC0zIDEuMy0zIDN2MWMwIDEuMS0uOSAyLTIgMnMtMi0uOS0yLTJ2LTFjMC0xLjYtMS4zLTMtMy0zYy0xLjYgMC0zIDEuMy0zIDN2MWMwIDIuMiAxLjggNCA0IDRoMTZ6Ii8+PHBhdGggZD0iTTEyIDExYzIuOCAwIDUtMi4yIDUtNXMtMi4yLTUtNS01cy01IDIuMi01IDUgMi4yIDUgNSA1eiIvPjwvc3ZnPg==';
 import type { StackNavigationProp } from '@react-navigation/stack';
-import type { HomeStackParamList } from '../../App';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { apiService } from '../services/apiService';
 import { ProfessionalAuthProfile, Gender, WorkArrangement, ProfessionalRole } from '../types/professional';
-import type { RootStackParamList } from '../types/navigation';
+import type { HomeStackParamList } from '../types/navigation';
 import { theme } from '../theme';
 
 const { width } = Dimensions.get('window');
 
-type ProfessionalProfileRouteProp = RouteProp<RootStackParamList, 'ProfessionalProfile'>;
-type ProfessionalProfileNavigationProp = StackNavigationProp<RootStackParamList, 'ProfessionalProfile'>;
+type ProfessionalProfileRouteProp = RouteProp<HomeStackParamList, 'ProfessionalProfile'>;
+type ProfessionalProfileNavigationProp = StackNavigationProp<HomeStackParamList, 'ProfessionalProfile'>;
 
 // Format work arrangement for display
 const formatWorkArrangement = (arrangement?: WorkArrangement): string => {
@@ -91,10 +90,19 @@ const ProfessionalProfileScreen = () => {
       if (!response) {
         throw new Error('No data received from the server');
       }
-      
+
+      const specialization =
+        response.speciality_new?.name ||
+        response.specialization ||
+        (response as any).speciality ||
+        undefined;
+
       // Map the response to match our ProfessionalAuthProfile type
       const profileData: ProfessionalAuthProfile = {
-        professional_id: response.id || parseInt(professionalId, 10),
+        professional_id:
+          response.professional_id ||
+          response.id ||
+          parseInt(professionalId as string, 10),
         first_name: response.first_name || response.firstName || '',
         last_name: response.last_name || response.lastName || '',
         email: response.email || '',
@@ -113,6 +121,9 @@ const ProfessionalProfileScreen = () => {
         about: response.about || response.bio || 'No bio available',
         work_arrangement: response.work_arrangement || WorkArrangement.FREELANCE,
         language: response.language || (response.languages && response.languages[0]) || 'English',
+        specialization,
+        speciality: specialization,
+        speciality_new_name: response.speciality_new?.name,
         created_at: response.created_at || response.createdAt || new Date().toISOString(),
         updated_at: response.updated_at || response.updatedAt || new Date().toISOString(),
       };
@@ -169,6 +180,10 @@ const ProfessionalProfileScreen = () => {
       navigation.navigate('DateTimeSelection', {
         professionalId: navigationParams.professionalId,
         professionalName: navigationParams.professionalName,
+        serviceId: navigationParams.serviceDetails.id,
+        serviceName: navigationParams.serviceDetails.name,
+        price: navigationParams.serviceDetails.price,
+        duration: navigationParams.serviceDetails.duration,
         serviceDetails: {
           ...navigationParams.serviceDetails,
           // Ensure all required fields are present
@@ -461,24 +476,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
-  },
-  errorText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  retryButton: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   scrollView: {
     flex: 1,

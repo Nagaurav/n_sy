@@ -24,7 +24,10 @@ export const usePayment = () => {
   const initiatePayment = useCallback(
     async (params: PaymentParams) => {
       if (!user) {
-        throw new Error('User not authenticated');
+        const errorMsg = 'User not authenticated';
+        console.error(errorMsg);
+        setPaymentError(errorMsg);
+        throw new Error(errorMsg);
       }
 
       setIsProcessing(true);
@@ -38,15 +41,24 @@ export const usePayment = () => {
         
         // Validate required fields
         if (!userId) {
-          throw new Error('User ID is required');
+          const errorMsg = 'User ID is required';
+          console.error(errorMsg);
+          setPaymentError(errorMsg);
+          throw new Error(errorMsg);
         }
         
         if (!params.amount || params.amount <= 0) {
-          throw new Error('Invalid payment amount');
+          const errorMsg = `Invalid payment amount: ${params.amount}`;
+          console.error(errorMsg);
+          setPaymentError(errorMsg);
+          throw new Error(errorMsg);
         }
 
         if (!params.professionalId || !params.slotId || !params.duration) {
-          throw new Error('Missing required booking information');
+          const errorMsg = `Missing required booking information - Professional: ${params.professionalId}, Slot: ${params.slotId}, Duration: ${params.duration}`;
+          console.error(errorMsg);
+          setPaymentError(errorMsg);
+          throw new Error(errorMsg);
         }
 
         console.log('Initiating booking and payment with params:', {
@@ -55,31 +67,65 @@ export const usePayment = () => {
           slotId: params.slotId,
           serviceType,
           serviceId,
+          amount: params.amount,
           couponCode: params.couponCode,
           duration: params.duration,
-          metadata: params.metadata
+          hasMetadata: !!params.metadata
         });
         
-        // Use the new createBookingAndInitiatePayment function
-        const response = await apiService.createBookingAndInitiatePayment({
-          userId,
-          professionalId: params.professionalId,
-          slotId: params.slotId,
-          serviceType,
-          serviceId,
-          couponCode: params.couponCode,
-          duration: params.duration,
-          metadata: params.metadata
-        });
+        try {
+          // Use the createBookingAndInitiatePayment function
+          const response = await apiService.createBookingAndInitiatePayment({
+            userId,
+            professionalId: params.professionalId,
+            slotId: params.slotId,
+            serviceType,
+            serviceId,
+            couponCode: params.couponCode,
+            duration: params.duration,
+            metadata: params.metadata
+          });
 
-        if (response?.paymentUrl) {
-          return response;
+          console.log('Payment initiation response:', {
+            hasPaymentUrl: !!response?.payment_url,
+            bookingId: response?.booking_id,
+            responseKeys: response ? Object.keys(response) : 'No response'
+          });
+
+          if (response?.payment_url) {
+            return {
+              ...response,
+              paymentUrl: response.payment_url // Ensure consistent property name
+            };
+          }
+
+          const errorMsg = 'Failed to initiate payment: No payment URL in response';
+          console.error(errorMsg, { response });
+          throw new Error(errorMsg);
+        } catch (apiError: any) {
+          console.error('API Error in initiatePayment:', {
+            message: apiError.message,
+            response: apiError.response?.data,
+            status: apiError.response?.status,
+            config: {
+              url: apiError.config?.url,
+              method: apiError.config?.method,
+              data: apiError.config?.data
+            }
+          });
+          throw apiError; // Re-throw to be caught by the outer catch
         }
-
-        throw new Error('Failed to initiate payment: No payment URL received');
       } catch (error: any) {
-        console.error('Payment initiation error:', error);
-        const errorMessage = error.response?.data?.message || error.message || 'Payment failed';
+        const errorMessage = error.response?.data?.message || 
+                           error.message || 
+                           'Payment processing failed. Please try again.';
+        
+        console.error('Payment initiation error:', {
+          error: errorMessage,
+          stack: error.stack,
+          response: error.response?.data
+        });
+        
         setPaymentError(errorMessage);
         throw new Error(errorMessage);
       } finally {

@@ -20,10 +20,17 @@ export enum ProfessionalRole {
   OTHER = 'other'
 }
 
+export interface SpecialityNew {
+  speciality_id: number;
+  name: string;
+  image_url?: string | null;
+}
+
 export interface Professional {
   // Core fields
   id: number;
   user_id: number;
+  professional_id?: number; // Backend often uses professional_id as primary key
   first_name: string;
   last_name: string;
   email: string;
@@ -35,12 +42,15 @@ export interface Professional {
   profile_picture?: string;
   photo_url?: string;
   experience_years?: number;
-  specialization?: string;
+  specialization?: string; // Legacy field used by UI
+  speciality?: string; // Alias for specialization
+  speciality_new?: SpecialityNew; // New nested speciality object from backend
   languages?: string[];
   language?: string;
   rating?: number;
   review_count?: number;
   is_available?: boolean;
+  is_verified?: boolean;
   
   // Location fields
   city?: string;
@@ -96,6 +106,10 @@ export interface ProfessionalAuthProfile {
   about: string;
   work_arrangement: WorkArrangement;
   language: string;
+  // Optional specialization fields for UI convenience
+  specialization?: string;
+  speciality?: string;
+  speciality_new_name?: string;
   created_at: string;
   updated_at: string;
 }

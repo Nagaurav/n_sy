@@ -22,10 +22,11 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Geolocation from 'react-native-geolocation-service';
 
-import { apiService } from '../services/api';
+import { apiService } from '../services/apiService';
 import { YogaClass, YogaClassesFilters, PaginationInfo } from '../types/yogaClasses';
 import { HomeStackParamList } from '../types/navigation';
 import { theme } from '../theme';
+import CollapsibleCard from '../components/CollapsibleCard';
 
 type ClassesListScreenNavigationProp = StackNavigationProp<HomeStackParamList, 'ClassesList'>;
 
@@ -293,13 +294,14 @@ const ClassesListScreen = () => {
           </Text>
         </View>
         
-        <Text 
-          style={styles.classDescription} 
-          numberOfLines={2}
-          accessibilityElementsHidden={true}
-        >
-          {item.description}
-        </Text>
+        <CollapsibleCard
+          title="Class Description"
+          content={(
+            <Text style={styles.classDescription} accessibilityElementsHidden={true}>
+              {item.description}
+            </Text>
+          )}
+        />
         
         <View style={styles.classMeta}>
           <View style={styles.metaItem} accessibilityElementsHidden={true}>

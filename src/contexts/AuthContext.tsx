@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, ReactNode } from 'react';
 import { useAppSelector, useAppDispatch } from '../store';
 import { signInAsync, signOutAsync, updateUserAsync, rehydrateAuthAsync, rehydrateAuth } from '../store/authSlice';
-import { apiService } from '../services/api';
+import { apiService } from '../services/apiService';
 
 import { User } from '../types/auth';
 
@@ -10,6 +10,8 @@ type AuthContextData = {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  // Critical flag to prevent premature API calls - true when auth state is ready
+  isAuthReady: boolean;
   signIn: (userData: { user: User; token: string }) => Promise<void>;
   signOut: () => Promise<void>;
   updateUser: (userData: Partial<User>) => Promise<void>;
@@ -47,17 +49,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => clearTimeout(timeout);
   }, [dispatch]);
 
-  useEffect(() => {
-    // Update API service token when token changes
-    if (token) {
-      apiService.setAuthToken(token);
-    } else {
-      apiService.setAuthToken(null);
-    }
-  }, [token]);
+  // Token is now managed entirely by Redux - the interceptor reads it automatically
+  // No need to manually sync token with apiService
 
   async function signIn({ user, token }: { user: User; token: string }) {
     try {
+      // Token is stored in Redux, and the interceptor will automatically use it
       await dispatch(signInAsync({ user, token }) as any);
     } catch (error) {
       console.error('Failed to sign in', error);
@@ -67,6 +64,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   async function signOut() {
     try {
+      // Token is cleared from Redux, and the interceptor will automatically stop using it
       await dispatch(signOutAsync() as any);
     } catch (error) {
       console.error('Failed to sign out', error);
@@ -83,6 +81,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
+  // isAuthReady indicates that auth rehydration is complete and API calls can proceed
+  // This prevents premature API calls before the token is loaded from storage
+  const isAuthReady = !isLoading;
+
   return (
     <AuthContext.Provider
       value={{
@@ -90,6 +92,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         token,
         isLoading,
         isAuthenticated,
+        isAuthReady,
         signIn,
         signOut,
         updateUser,

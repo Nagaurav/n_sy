@@ -12,10 +12,10 @@ import {
   Linking,
   Platform
 } from 'react-native';
-import { useNavigation, useRoute, CommonActions, RouteProp, useFocusEffect } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useAppSelector } from '../store';
-import { HomeStackParamList } from '../../App';
+import Config from 'react-native-config';
+import { CommonActions, useFocusEffect } from '@react-navigation/native';
 import { theme } from '../theme';
 import { usePayment } from '../hooks/usePayment';
 import apiService from '../services/apiService';
@@ -74,7 +74,11 @@ type BookingConfirmationRouteProp = RouteProp<{
   };
 }, 'BookingConfirmation'>;
 
-type NavigationProp = StackNavigationProp<HomeStackParamList, 'BookingConfirmation'>;
+type NavigationProp = {
+  navigate: (screen: string, params?: any) => void;
+  goBack: () => void;
+  dispatch: (action: any) => void;
+};
 
 // Define the expected structure of the API response
 interface CreateBookingSuccessResponse {
@@ -102,7 +106,7 @@ const BookingConfirmationScreen = () => {
   const { bookingData } = route.params;
 
   // Get auth state from Redux
-  const { user, isAuthenticated, isLoading: isAuthLoading } = useAppSelector((state) => state.auth);
+  const { user, isAuthenticated, isLoading: isAuthLoading } = useAppSelector((state: any) => state.auth);
   const userId = user?.user_id || user?._id;
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -121,27 +125,60 @@ const BookingConfirmationScreen = () => {
   };
 
   const handleApplyCoupon = useCallback(async () => {
-    if (!couponCode.trim()) return;
-    
+    const code = couponCode.trim();
+    if (!code) return;
+
     try {
       setIsLoading(true);
-      // Here you would typically validate the coupon with your API
-      // For now, we'll just apply a 10% discount as an example
-      const discountAmount = priceDetails.original_amount * 0.1; // 10% discount
-      
-      setPriceDetails(prev => ({
-        ...prev,
-        discount_amount: discountAmount,
-        final_amount: prev.original_amount - discountAmount
-      }));
-      
+
+      // Determine slot and duration for price calculation
+      const rawSlotId = (bookingData as any).slotId ?? bookingData.slot_id;
+      const numericSlotId = Number(rawSlotId);
+
+      if (!Number.isFinite(numericSlotId) || numericSlotId <= 0) {
+        Alert.alert(
+          'Error',
+          'Unable to apply coupon because the booking slot could not be determined. Please go back and re-select your time slot.',
+        );
+        return;
+      }
+
+      const duration =
+        typeof bookingData.duration === 'string'
+          ? parseInt(bookingData.duration, 10)
+          : bookingData.duration || 60;
+
+      const result = await apiService.calculateBookingPrice({
+        slotId: numericSlotId,
+        duration,
+        couponCode: code,
+        userId,
+      });
+
+      if (!result.success || !result.data) {
+        Alert.alert('Error', result.error || 'Invalid or expired coupon code');
+        return;
+      }
+
+      setPriceDetails({
+        original_amount: result.data.original_amount,
+        discount_amount: result.data.discount_amount,
+        final_amount: result.data.final_amount,
+      });
+
       setIsCouponApplied(true);
     } catch (error) {
-      Alert.alert('Error', 'Invalid or expired coupon code');
+      console.error('Error applying coupon:', error);
+      Alert.alert(
+        'Error',
+        error instanceof Error
+          ? error.message
+          : 'Invalid or expired coupon code',
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [couponCode, priceDetails.original_amount]);
+  }, [couponCode, bookingData]);
 
   const handleRemoveCoupon = useCallback(() => {
     setCouponCode('');
@@ -407,11 +444,16 @@ const BookingConfirmationScreen = () => {
       });
 
       // If we have a payment URL, open it in the WebView
-      if (paymentResponse?.paymentUrl) {
+      if (paymentResponse?.payment_url) {
         navigation.navigate('PaymentGateway', {
-          paymentUrl: paymentResponse.paymentUrl,
-          bookingId: paymentResponse.bookingId,
-          paymentId: paymentResponse.transactionId || paymentResponse.paymentId
+          paymentUrl: paymentResponse.payment_url,
+          bookingId: paymentResponse.booking_id?.toString() || '',
+          paymentId: paymentResponse.data?.payment_id || '',
+          amount: paymentResponse.data?.final_amount || bookingData.price,
+          customerId: userId?.toString() || '',
+          customerEmail: user?.email || '',
+          customerPhone: user?.phone || '',
+          merchantId: Config.PHONEPE_MERCHANT_ID || 'PGTESTPAYUAT' // Fallback to test ID if not set
         });
       } else {
         throw new Error('No payment URL received');

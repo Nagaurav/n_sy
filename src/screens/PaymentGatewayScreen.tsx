@@ -12,7 +12,7 @@ import {
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { apiService } from '../services/api';
+import { apiService } from '../services/apiService';
 import { RootStackParamList } from '../../App';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
@@ -122,13 +122,15 @@ const PaymentGatewayScreen = () => {
     }
 
     try {
-      console.log('Calling getPaymentStatus for booking:', bookingId);
-      
-      // Call the payment status endpoint
-      const response: PaymentStatusResponse = await apiService.getPaymentStatus(bookingId);
-      
-      console.log('Payment status response:', response);
-      
+      console.log('Calling getBookingPaymentStatus for booking:', bookingId);
+
+      // Call the booking payment status endpoint (returns backend wrapper)
+      const wrapped = await apiService.getBookingPaymentStatus(bookingId);
+
+      console.log('Payment status response:', wrapped);
+
+      const response: PaymentStatusResponse = wrapped as any;
+
       if (response.success && response.data) {
         const { status, amount, bookingDetails } = response.data;
         

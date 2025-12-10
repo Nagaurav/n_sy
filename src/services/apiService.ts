@@ -1,73 +1,411 @@
 import axios, { AxiosInstance } from 'axios';
 import { Platform } from 'react-native';
+import { API_BASE_URL } from '../config';
+import { store } from '../store';
+import { signOutAsync } from '../store/authSlice';
 import { YogaClass } from '../types/yogaClasses';
 import { Professional, ProfessionalAuthProfile } from '../types/professional';
 import { YogaPlanResponse } from '../types/yogaPlan';
-import { TimeSlot } from '../types/booking';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { TimeSlot, ProfessionalFilters, ProfessionalsResponse } from '../types/booking';
+import type {
+  PaginatedPrescriptionsResponse,
+  SinglePrescriptionResponse,
+  Prescription,
+} from '../types/medical';
+import type { ChatSession, ChatMessage } from '../types/chat';
 
-// Create axios instance with base URL
-const api = axios.create({
-  baseURL: 'http://88.222.241.179:7000/api/v1',
+// Unified lightweight API result type used by OTP and several legacy helpers
+type SimpleApiResult<T = any> = {
+  success: boolean;
+  data?: T;
+  error?: string;
+};
+
+// Central Axios instance
+const api: AxiosInstance = axios.create({
+  baseURL: API_BASE_URL || 'http://88.222.241.179:7000/api/v1',
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'X-Requested-With': 'XMLHttpRequest',
   },
-  timeout: 30000, // 30 seconds
+  timeout: 10000, // 10 second timeout
 });
 
-// Add a request interceptor to include the auth token
+// --- REQUEST INTERCEPTOR: Dynamically inject token from Redux store ---
 api.interceptors.request.use(
   async (config) => {
-    try {
-      const token = await AsyncStorage.getItem('userToken');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-      return config;
-    } catch (error) {
-      return Promise.reject(error);
+    // CRITICAL: Only read from Redux State - single source of truth
+    const state = store.getState();
+    const token = state.auth.token;
+
+    if (token && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
+    return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error),
 );
 
-// Add a response interceptor to handle errors
+// --- RESPONSE INTERCEPTOR: Handle auth errors (401/403) and logout ---
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+    
     if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
       console.error('API Error Response:', {
         status: error.response.status,
         data: error.response.data,
         headers: error.response.headers,
       });
+
+      // CRITICAL: Only logout on 401 (Unauthorized), not 403 (Forbidden)
+      // 403 can mean permission denied for a specific resource, not auth failure
+      const isAuthError = error.response.status === 401;
+      
+      // Handle authentication errors (401 Unauthorized only)
+      if (isAuthError) {
+        // Check if this is not an auth-related endpoint (login, signup, OTP, etc.)
+        const isAuthEndpoint = originalRequest?.url?.includes('/auth/') ||
+                              originalRequest?.url?.includes('/otp/') ||
+                              originalRequest?.url?.includes('/signup');
+        
+        if (!isAuthEndpoint) {
+          console.log('🔒 Authentication Failed/Expired (401): Logging out...');
+          
+          // Dispatch logout action to clear Redux state and AsyncStorage
+          // This will automatically clear the token from Redux, which the interceptor reads
+          try {
+            await store.dispatch(signOutAsync() as any);
+            console.log('✅ User logged out successfully');
+          } catch (logoutError) {
+            console.error('❌ Error during logout:', logoutError);
+          }
+          
+          // Return a user-friendly error
+          return Promise.reject(new Error('Session Expired. Please log in again.'));
+        }
+      }
+      
+      // Handle 403 Forbidden separately (permission denied, not auth failure)
+      if (error.response.status === 403) {
+        const errorMessage = error.response.data?.message || 
+                           error.response.data?.error || 
+                           'Access denied. You do not have permission to access this resource.';
+        console.warn('⚠️ 403 Forbidden (not logging out):', errorMessage);
+        return Promise.reject(new Error(errorMessage));
+      }
     } else if (error.request) {
-      // The request was made but no response was received
       console.error('API Request Error:', error.request);
     } else {
-      // Something happened in setting up the request that triggered an Error
       console.error('API Error:', error.message);
     }
+    
     return Promise.reject(error);
-  }
+  },
 );
 
-// API methods
+const buildApiErrorResponse = <T = any>(error: any): SimpleApiResult<T> => {
+  if (error?.response) {
+    return {
+      success: false,
+      error:
+        error.response.data?.message ||
+        error.response.data?.error ||
+        'Something went wrong',
+    };
+  }
+  if (error?.request) {
+    return {
+      success: false,
+      error: 'Network error. Please check your connection and try again.',
+    };
+  }
+  return {
+    success: false,
+    error: error?.message || 'An unexpected error occurred.',
+  };
+};
+
 export const apiService = {
+  // Generic GET wrapper used by some legacy screens
+  get: async <T = any>(
+    endpoint: string,
+    config?: any,
+  ): Promise<{ success: boolean; data?: T; error?: string }> => {
+    try {
+      const response = await api.get<T>(endpoint, config);
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: any) {
+      console.error('Error in GET request:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
+  // Chat: list of user chats
+  getUserChats: async (
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<SimpleApiResult<ChatSession[]>> => {
+    try {
+      const response = await api.get('/chat/list', { params: { page, limit } });
+      const raw = response.data as any;
+      const dataField = raw?.data ?? raw;
+      let chats: ChatSession[] = [];
+      if (Array.isArray(dataField)) {
+        chats = dataField;
+      } else if (Array.isArray(dataField?.items)) {
+        chats = dataField.items;
+      }
+      return {
+        success: true,
+        data: chats,
+      };
+    } catch (error: any) {
+      console.error('Error fetching user chats:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
+  // Chat: messages for a chat
+  getChatMessages: async (
+    chatId: string,
+    page: number = 1,
+    limit: number = 50,
+  ): Promise<SimpleApiResult<ChatMessage[] | any[]>> => {
+    try {
+      // CRITICAL: Ensure chatId is explicitly a string (UUID format)
+      const chatIdStr = String(chatId || '').trim();
+      
+      if (!chatIdStr || chatIdStr === 'undefined' || chatIdStr === 'null') {
+        console.error('❌ Invalid chatId provided to getChatMessages:', chatId);
+        return {
+          success: false,
+          error: 'Invalid chat ID. Please try again.',
+        };
+      }
+      
+      console.log('📡 API: Fetching messages for chatId:', chatIdStr, 'Type:', typeof chatIdStr);
+      
+      const response = await api.get(`/chat/${chatIdStr}/messages`, {
+        params: { page, limit },
+      });
+      const raw = response.data as any;
+      const dataField = raw?.data ?? raw;
+      let messages: any[] = [];
+      if (Array.isArray(dataField)) {
+        messages = dataField;
+      } else if (Array.isArray(dataField?.items)) {
+        messages = dataField.items;
+      }
+      return {
+        success: true,
+        data: messages,
+      };
+    } catch (error: any) {
+      // Handle 403 Forbidden specifically for chat messages
+      if (error.response?.status === 403) {
+        const errorMessage = error.response.data?.message || 
+                           error.response.data?.error || 
+                           'You do not have permission to access this chat.';
+        console.warn('⚠️ 403 Forbidden when fetching chat messages:', errorMessage);
+        return {
+          success: false,
+          error: errorMessage,
+        };
+      }
+      // Handle 404 Not Found (chat doesn't exist or no messages)
+      if (error.response?.status === 404) {
+        console.log('ℹ️ Chat or messages not found (404) - returning empty array');
+        return {
+          success: true,
+          data: [],
+        };
+      }
+      console.error('Error fetching chat messages:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
+  // Chat: create a new private chat
+  createChat: async (
+    participantId: string,
+    participantType: string,
+  ): Promise<SimpleApiResult<any>> => {
+    try {
+      const payload = {
+        participantIds: [participantId],
+        participantTypes: [participantType],
+        chatType: 'private',
+      };
+      const response = await api.post('/chat/create', payload);
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: any) {
+      console.error('Error creating chat:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
+  // Professional search with filters (city, role, price range, etc.)
+  searchProfessionalsWithFilters: async (
+    filters: ProfessionalFilters,
+  ): Promise<SimpleApiResult<ProfessionalsResponse>> => {
+    try {
+      const queryParams = new URLSearchParams();
+
+      const apiFilters: Record<string, any> = {
+        city: filters.city,
+        state: filters.state,
+        gender: filters.gender,
+        language: filters.language,
+        role: filters.role,
+        speciality_id: filters.speciality_id,
+        min_price: filters.min_price,
+        max_price: filters.max_price,
+        page: filters.page || 1,
+        limit: filters.limit || 10,
+        search_query: filters.search_query,
+        is_online: filters.is_online,
+        sort_by: filters.sort_by,
+        category_id: filters.category_id,
+      };
+
+      Object.entries(apiFilters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          const paramValue = typeof value === 'boolean' ? String(value) : String(value);
+          queryParams.append(key, paramValue);
+        }
+      });
+
+      const queryString = queryParams.toString();
+      const endpoint = `/user/professional/getProfessional${
+        queryString ? `?${queryString}` : ''
+      }`;
+
+      const response = await api.get<ProfessionalsResponse>(endpoint);
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: any) {
+      console.error('Error searching professionals with filters:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
+  // User appointments (booking history) with optional pagination
+  getUserAppointments: async (
+    userId: string,
+    pagination?: { limit?: number; offset?: number },
+  ) => {
+    try {
+      const config = pagination
+        ? { params: { limit: pagination.limit, offset: pagination.offset } }
+        : undefined;
+
+      const response = await api.get(`/user/consultation-booking/user/${userId}`, config);
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: any) {
+      console.error('Error fetching user appointments:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
+  // Simple consultation booking (used in examples / legacy flows)
+  createConsultationBooking: async (bookingData: any) => {
+    try {
+      const response = await api.post('/user/consultation-booking/create', bookingData);
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: any) {
+      console.error('Error creating consultation booking:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
   // Get yoga classes with filters
   getYogaClasses: async (filters = {}) => {
     try {
       const response = await api.get('/user/yoga-classes', { params: filters });
-      return response.data;
-    } catch (error) {
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: any) {
       console.error('Error fetching yoga classes:', error);
-      throw error;
+      return buildApiErrorResponse(error);
+    }
+  },
+
+  // OTP / Auth helpers used by PhoneNumber and OTPScreen
+  sendOTP: async (phoneNumber: string): Promise<SimpleApiResult<any>> => {
+    try {
+      const response = await api.post('/user/otp/sendotp', { phone: phoneNumber });
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: any) {
+      console.error('Error sending OTP:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
+  verifyOTP: async (
+    phoneNumber: string,
+    code: string | number,
+  ): Promise<SimpleApiResult<any>> => {
+    try {
+      const payload = {
+        phone: phoneNumber,
+        code: typeof code === 'string' ? parseInt(code, 10) : code,
+      };
+      const response = await api.post('/user/otp/verifyotp', payload);
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: any) {
+      console.error('Error verifying OTP:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
+  // User signup helper used by SignupScreen
+  signup: async (
+    payload: any,
+  ): Promise<SimpleApiResult<{ token: string; user: any }>> => {
+    try {
+      const response = await api.post('/user/auth/signup', payload);
+      const data = response.data;
+
+      if (data?.success && data.data?.token && data.data?.user) {
+        return {
+          success: true,
+          data: {
+            token: data.data.token,
+            user: data.data.user,
+          },
+        };
+      }
+
+      return {
+        success: false,
+        error: data?.message || 'Signup failed. Please try again.',
+      };
+    } catch (error: any) {
+      console.error('Error during signup:', error);
+      return buildApiErrorResponse(error);
     }
   },
 
@@ -82,12 +420,90 @@ export const apiService = {
     }
   },
 
+  // Customer support ticket creation
+  submitSupportTicket: async (userId: string | number, subject: string, message: string) => {
+    try {
+      const payload = {
+        user_id: Number(userId),
+        subject,
+        message,
+      };
+      const response = await api.post('/user/customer-support/create', payload);
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: any) {
+      console.error('Error submitting support ticket:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
+  // Fetch support tickets for a user
+  getUserSupportTickets: async (userId: string | number) => {
+    try {
+      const response = await api.get(`/user/customer-support/${userId}`);
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: any) {
+      console.error('Error fetching support tickets:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
+  // FAQs
+  getFaqs: async () => {
+    try {
+      const response = await api.get('/user/faq/get');
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: any) {
+      console.error('Error fetching FAQs:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
+  // Next appointment for a user
+  getNextAppointment: async (userId: string | number) => {
+    try {
+      const response = await api.get(`/user/consultation-booking/next/${userId}`);
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: any) {
+      // 404 is not an error - it just means user has no upcoming appointments
+      if (error.response?.status === 404) {
+        console.log('ℹ️ No upcoming appointments found (404)');
+        return {
+          success: true,
+          data: { appointment: null },
+        };
+      }
+      console.error('Error fetching next appointment:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
   // Get professional profile by ID
   getProfessionalProfile: async (id: string | number): Promise<Professional> => {
     try {
       console.log(`🔍 Fetching professional with ID: ${id}`);
-      const response = await api.get<{ data: Professional }>(`/professional/auth/getProfessional/${id}`);
+
+      const response = await api.get<{ success: boolean; data: Professional }>(
+        `/user/professional/getProfessional/${id}`,
+      );
+
       console.log('✅ Professional data received:', response.data);
+
+      if (!response.data?.success || !response.data.data) {
+        throw new Error('Failed to load professional profile');
+      }
+
       return response.data.data;
     } catch (error: any) {
       console.error(`❌ Error fetching professional with ID ${id}:`, {
@@ -234,13 +650,95 @@ export const apiService = {
     }
   },
 
+  // Calculate booking price on backend to keep pricing logic authoritative
+  calculateBookingPrice: async (params: {
+    slotId: string | number;
+    duration: number;
+    couponCode?: string;
+    userId?: string | number;
+  }): Promise<SimpleApiResult<{ original_amount: number; discount_amount: number; final_amount: number }>> => {
+    const safeDuration =
+      Number.isFinite(params.duration) && params.duration > 0
+        ? Math.round(params.duration)
+        : 60;
+
+    const payload: any = {
+      slot_id: Number(params.slotId),
+      duration: safeDuration,
+      coupon_code: params.couponCode || undefined,
+      user_id:
+        params.userId !== undefined && params.userId !== null
+          ? Number(params.userId)
+          : undefined,
+    };
+
+    try {
+      console.log('Calculating booking price with payload:', payload);
+
+      const response = await api.post('/user/consultation-booking/calculate-price', payload);
+      const data = response.data;
+
+      // Support both { success, data: { ... } } and flat { ... } shapes
+      const priceData: any =
+        data?.data && typeof data.data === 'object' ? data.data : data;
+
+      if (
+        !priceData ||
+        (typeof priceData.final_amount !== 'number' &&
+          typeof priceData.original_amount !== 'number')
+      ) {
+        return {
+          success: false,
+          error: data?.message || 'Failed to calculate price. Please try again.',
+        };
+      }
+
+      const original =
+        typeof priceData.original_amount === 'number'
+          ? priceData.original_amount
+          : priceData.final_amount;
+      const final =
+        typeof priceData.final_amount === 'number'
+          ? priceData.final_amount
+          : original;
+      const discount =
+        typeof priceData.discount_amount === 'number'
+          ? priceData.discount_amount
+          : original - final;
+
+      return {
+        success: true,
+        data: {
+          original_amount: original,
+          discount_amount: discount,
+          final_amount: final,
+        },
+      };
+    } catch (error: any) {
+      console.error(
+        'Error calculating booking price (details):\n' +
+          JSON.stringify(
+            {
+              message: error.message,
+              status: error.response?.status,
+              data: error.response?.data,
+              payload,
+            },
+            null,
+            2,
+          ),
+      );
+      return buildApiErrorResponse(error);
+    }
+  },
+
   // Create a booking and initiate payment
   createBookingAndInitiatePayment: async (params: {
     userId: string | number;
     professionalId: string | number;
     slotId: string | number;
-    serviceType?: 'yoga_class' | 'consultation' | 'membership';
-    serviceId?: string;
+    serviceType?: 'yoga_class' | 'consultation' | 'membership'; // frontend-only, not sent to createBooking
+    serviceId?: string; // frontend-only identifier
     couponCode?: string;
     duration: number; // in minutes
     metadata?: Record<string, any>;
@@ -262,43 +760,125 @@ export const apiService = {
 
       console.log('Creating booking with payload:', JSON.stringify(payload, null, 2));
       
-      // Use the correct consultation booking endpoint for all bookings (as requested)
+      // Try the new endpoint first
       const endpoint = '/user/consultation-booking/create';
+      const fullUrl = `http://88.222.241.179:7000/api/v1${endpoint}`;
       
-      console.log(`Using endpoint: ${endpoint} for service type: ${params.serviceType}`);
-      const response = await api.post(endpoint, {
-        ...payload,
-        service_type: params.serviceType || 'yoga_class', // Ensure service_type is included
-        service_id: params.serviceId || 'yoga_plan_custom', // Use provided serviceId or default
-        duration: params.duration || 30, // Ensure duration is included
-      });
+      console.log(`Making POST request to: ${fullUrl}`);
       
-      if (!response.data) {
-        throw new Error('No data received from booking service');
-      }
-      
-      // Handle the API response format
-      if (response.data.msg === 'Booking created successfully' && response.data.payment_url) {
-        return {
-          success: true,
-          paymentUrl: response.data.payment_url,
-          bookingId: response.data.data.booking_id,
-          transactionId: response.data.data.payment_id,
-          amount: response.data.data.final_amount,
-          ...response.data.data
-        };
-      }
-      
-      throw new Error(response.data.msg || 'Failed to create booking and initiate payment');
-    } catch (error: any) {
-      console.error('Error creating booking:', {
-        error: error.response?.data || error.message,
-        status: error.response?.status,
-        config: {
-          url: error.config?.url,
-          method: error.config?.method,
-          data: error.config?.data
+      try {
+        const response = await api.post(endpoint, payload);
+        
+        if (!response.data) {
+          throw new Error('No data received from booking service');
         }
+        
+        console.log('Booking API response:', JSON.stringify(response.data, null, 2));
+        
+        // Handle the API response format where payment_url is at the root level
+        if (response.data.payment_url) {
+          return {
+            success: true,
+            payment_url: response.data.payment_url,
+            booking_id: response.data.data?.booking_id,
+            data: {
+              ...(response.data.data || {}),
+              payment_id: response.data.data?.payment_id || `TXN_${Date.now()}`,
+              final_amount: response.data.data?.final_amount || 0,
+              original_amount: response.data.data?.original_amount || 0,
+              discount_amount: response.data.data?.discount_amount || 0
+            }
+          };
+        }
+        
+        // Fallback to check if payment_url is inside data object
+        if (response.data.data?.payment_url) {
+          return {
+            success: true,
+            payment_url: response.data.data.payment_url,
+            booking_id: response.data.data.booking_id,
+            data: {
+              ...response.data.data,
+              payment_id: response.data.data.payment_id || `TXN_${Date.now()}`,
+              final_amount: response.data.data.final_amount || 0,
+              original_amount: response.data.data.original_amount || 0,
+              discount_amount: response.data.data.discount_amount || 0
+            }
+          };
+        }
+        
+        // If we have a booking ID but no payment URL, try to get it separately
+        if (response.data.data?.booking_id) {
+          console.log('No payment URL in response, trying to get payment URL separately...');
+          try {
+            const paymentResponse = await api.get(`/user/consultation-booking/${response.data.data.booking_id}/payment-url`);
+            if (paymentResponse.data?.payment_url) {
+              return {
+                success: true,
+                payment_url: paymentResponse.data.payment_url,
+                booking_id: response.data.data.booking_id,
+                data: {
+                  ...(response.data.data || {}),
+                  payment_id: response.data.data.payment_id || `TXN_${Date.now()}`,
+                  final_amount: response.data.data.final_amount || 0,
+                  original_amount: response.data.data.original_amount || 0,
+                  discount_amount: response.data.data.discount_amount || 0
+                }
+              };
+            }
+          } catch (e) {
+            console.warn('Failed to get payment URL separately:', e);
+          }
+        }
+        
+        throw new Error(response.data.msg || 'No payment URL received from the server');
+        
+      } catch (apiError: any) {
+        console.error('API Error:', {
+          message: apiError.message,
+          response: apiError.response?.data,
+          status: apiError.response?.status,
+          config: {
+            url: apiError.config?.url,
+            method: apiError.config?.method,
+            data: apiError.config?.data
+          }
+        });
+        
+        // If we get a 404, try with the full URL directly
+        if (apiError.response?.status === 404) {
+          console.log('Received 404, trying with direct URL...');
+          try {
+            const directResponse = await axios.post(fullUrl, payload, {
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': api.defaults.headers.common['Authorization']
+              }
+            });
+            
+            if (directResponse.data?.payment_url) {
+              return {
+                success: true,
+                payment_url: directResponse.data.payment_url,
+                booking_id: directResponse.data.data?.booking_id,
+                data: directResponse.data.data || {}
+              };
+            }
+          } catch (directError) {
+            console.error('Direct URL request also failed:', directError);
+            throw new Error('Failed to process payment. Please try again later.');
+          }
+        }
+        
+        throw apiError;
+      }
+      
+    } catch (error: any) {
+      console.error('Error in createBookingAndInitiatePayment:', {
+        error: error.message,
+        stack: error.stack,
+        response: error.response?.data,
+        status: error.response?.status
       });
       
       // Extract error message from response if available
@@ -329,6 +909,72 @@ export const apiService = {
     }
   },
 
+  // User prescriptions (medical history)
+  async getUserPrescriptions(
+    page: number = 1,
+    limit: number = 10,
+    prescriptionType?: string,
+  ): Promise<PaginatedPrescriptionsResponse> {
+    try {
+      // Token is automatically injected by the request interceptor from Redux store
+      const state = store.getState();
+      const token = state.auth.token;
+      console.log('🔑 Current auth token from Redux:', token ? 'Token exists' : 'No token found');
+      
+      if (!token) {
+        throw new Error('Authentication required. Please log in again.');
+      }
+
+      const params: any = { page, limit };
+      if (prescriptionType) {
+        params.prescriptionType = prescriptionType;
+      }
+
+      console.log('📡 Making request to /user/prescription with params:', params);
+      // Token is automatically added by the request interceptor - no need to add it manually
+      const response = await api.get<PaginatedPrescriptionsResponse>('/user/prescription', {
+        params,
+      });
+
+      console.log('✅ Prescriptions response:', response.status, response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error in getUserPrescriptions:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers,
+        },
+      });
+      throw error;
+    }
+  },
+
+  async getPrescriptionById(id: string): Promise<SinglePrescriptionResponse> {
+    try {
+      const response = await api.get<SinglePrescriptionResponse>(`/user/prescription/${id}`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error fetching prescription with ID ${id}:`, error);
+      throw error;
+    }
+  },
+
+  async getBookingPrescription(bookingId: number): Promise<SinglePrescriptionResponse> {
+    try {
+      const response = await api.get<SinglePrescriptionResponse>(
+        `/user/prescription/booking/${bookingId}`,
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error fetching prescription for booking ${bookingId}:`, error);
+      throw error;
+    }
+  },
+
   getPaymentStatus: async (paymentId: string) => {
     try {
       const response = await api.get(`/payments/status/${paymentId}`);
@@ -354,8 +1000,66 @@ export const apiService = {
       console.error('Error verifying payment:', error);
       throw error;
     }
-  }
+  },
+
+  // Get user profile with health data
+  async getUserProfile(userId: string | number) {
+    try {
+      const response = await api.get(`/user/profile/${userId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      throw error;
+    }
+  },
+
+  // Update user profile (personal + health) with a flat payload
+  async updateUserProfile(userId: string | number, data: any) {
+    try {
+      const payload: any = {
+        // Personal details
+        first_name: data.first_name,
+        last_name: data.last_name,
+        phone: data.phone,
+        city: data.city,
+        address: data.address,
+        pin_code: data.pin_code,
+        gender: data.gender,
+        dob: data.dob,
+        // Health profile (flat, not nested)
+        blood_group: data.blood_group,
+        marital_status: data.marital_status,
+        height: data.height,
+        weight: data.weight,
+        emergency_contact_name: data.emergency_contact_name,
+        emergency_contact_phone: data.emergency_contact_phone,
+        is_active: data.is_active,
+        notifications_enabled: data.notifications_enabled,
+        newsletter_enabled: data.newsletter_enabled,
+      };
+
+      const response = await api.patch(`/user/profile/${userId}`, payload);
+      return response.data;
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      throw error;
+    }
+  },
+
+  // Rollback a coupon
+  async rollbackCoupon(couponCode: string) {
+    try {
+      const response = await api.post('/coupons/rollback', { couponCode });
+      return response.data;
+    } catch (error) {
+      console.error('Error rolling back coupon:', error);
+      throw error;
+    }
+  },
 
 };
+
+// Export the axios instance for direct use when needed
+export { api };
 
 export default apiService;

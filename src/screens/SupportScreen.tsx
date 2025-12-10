@@ -17,7 +17,8 @@ import {
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../services/api';
+import { apiService } from '../services/apiService';
+import { FloatingLabelInput } from '../components/FloatingLabelInput';
 
 interface SupportTicket {
   id: number;
@@ -143,7 +144,7 @@ const SupportScreen = () => {
           ]
         );
       } else {
-        throw new Error(response.message || 'Failed to submit ticket');
+        throw new Error(response.error || 'Failed to submit ticket');
       }
     } catch (error: any) {
       console.error('Error submitting ticket:', error);
@@ -252,27 +253,21 @@ const SupportScreen = () => {
               </View>
             )}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Subject</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Brief description of your issue"
-                placeholderTextColor="#9CA3AF"
+              <FloatingLabelInput
+                label="Subject"
                 value={subject}
                 onChangeText={setSubject}
               />
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Message</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Describe your issue in detail..."
-                placeholderTextColor="#9CA3AF"
+              <FloatingLabelInput
+                label="Message"
                 value={message}
                 onChangeText={setMessage}
                 multiline
                 numberOfLines={6}
-                textAlignVertical="top"
+                inputStyle={styles.textArea}
               />
             </View>
 

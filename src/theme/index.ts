@@ -1,47 +1,117 @@
 import { Dimensions } from 'react-native';
 
 export type ColorPalette = {
-  primary: string;
-  accent: string;
-  error: string; // Added error color at the root level for direct access
+  primary: string;      // Calming Teal
+  secondary: string;    // Deep Forest Green
+  accent: string;        // Soft Coral for alerts/urgent CTAs
+  error: string;        // Error color
   text: {
-    primary: string;
-    secondary: string;
+    primary: string;     // Deep Gray
+    secondary: string;   // Subtle gray for captions
   };
   background: {
-    light: string;
-    white: string;
+    primary: string;     // Off-White for screen backgrounds
+    surface: string;     // Pure white for cards/modals
   };
   feedback: {
     error: string;
+    success: string;
+    warning: string;
   };
   // For backward compatibility
   colors?: {
     primary: string;
+    secondary: string;
+    accent: string;
     error: string;
     text: string;
     background: string;
+    surface: string;
     border: string;
   };
 };
 
 export type Spacing = {
-  small: number;
-  medium: number;
-  large: number;
+  xs: number;    // 4px
+  s: number;     // 8px
+  m: number;     // 16px
+  l: number;     // 24px
+  xl: number;    // 32px
+  xxl: number;   // 48px
 };
 
 export type BorderRadius = {
-  small: number;
-  medium: number;
-  large: number;
+  xs: number;
+  s: number;
+  m: number;
+  l: number;
+  xl: number;
   circle: number;
+};
+
+export type Shadows = {
+  card: {
+    shadowColor: string;
+    shadowOffset: { width: number; height: number };
+    shadowOpacity: number;
+    shadowRadius: number;
+    elevation: number;
+  };
+  float: {
+    shadowColor: string;
+    shadowOffset: { width: number; height: number };
+    shadowOpacity: number;
+    shadowRadius: number;
+    elevation: number;
+  };
+  none: {
+    shadowColor: string;
+    shadowOffset: { width: number; height: number };
+    shadowOpacity: number;
+    shadowRadius: number;
+    elevation: number;
+  };
+};
+
+export type Typography = {
+  h1: {
+    fontSize: number;
+    fontWeight: string;
+    lineHeight: number;
+  };
+  h2: {
+    fontSize: number;
+    fontWeight: string;
+    lineHeight: number;
+  };
+  h3: {
+    fontSize: number;
+    fontWeight: string;
+    lineHeight: number;
+  };
+  body: {
+    fontSize: number;
+    fontWeight: string;
+    lineHeight: number;
+  };
+  small: {
+    fontSize: number;
+    fontWeight: string;
+    lineHeight: number;
+  };
+  caption: {
+    fontSize: number;
+    fontWeight: string;
+    lineHeight: number;
+  };
 };
 
 export type Theme = {
   colors: ColorPalette;
   spacing: Spacing;
   borderRadius: BorderRadius;
+  shadows: Shadows;
+  typography: Typography;
   dimensions: {
     width: number;
     height: number;
@@ -52,39 +122,105 @@ const { width, height } = Dimensions.get('window');
 
 export const theme: Theme = {
   colors: {
-    primary: '#1E88E5',
-    accent: '#50E3C2',
-    error: '#EF4444', // Added error at root level
+    primary: '#008272',      // Calming Teal
+    secondary: '#4C7360',    // Deep Forest Green
+    accent: '#FF7043',       // Soft Coral for alerts/urgent CTAs
+    error: '#DC2626',        // Error red
     text: {
-      primary: '#1F2937',
-      secondary: '#6B7280',
+      primary: '#1A202C',     // Deep Gray
+      secondary: '#6B7280',   // Subtle gray for captions
     },
     background: {
-      light: '#F3F4F6',
-      white: '#FFFFFF',
+      primary: '#F7F9FC',     // Off-White for screen backgrounds
+      surface: '#FFFFFF',     // Pure white for cards/modals
     },
     feedback: {
-      error: '#EF4444',
+      error: '#DC2626',      // Error red
+      success: '#059669',     // Success green
+      warning: '#D97706',     // Warning orange
     },
     // For backward compatibility with existing code
     colors: {
-      primary: '#1E88E5',
-      error: '#EF4444',
-      text: '#1F2937',
-      background: '#FFFFFF',
+      primary: '#008272',
+      secondary: '#4C7360',
+      accent: '#FF7043',
+      error: '#DC2626',
+      text: '#1A202C',
+      background: '#F7F9FC',
+      surface: '#FFFFFF',
       border: '#E5E7EB',
     },
   },
   spacing: {
-    small: 8,
-    medium: 16,
-    large: 24,
+    xs: 4,      // 4px
+    s: 8,       // 8px
+    m: 16,      // 16px
+    l: 24,      // 24px
+    xl: 32,     // 32px
+    xxl: 48,    // 48px
   },
   borderRadius: {
-    small: 4,
-    medium: 8,
-    large: 16,
-    circle: 30,
+    xs: 4,
+    s: 8,
+    m: 12,
+    l: 16,
+    xl: 20,
+    circle: 9999, // Very large for perfect circles
+  },
+  shadows: {
+    card: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    float: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      elevation: 6,
+    },
+    none: {
+      shadowColor: 'transparent',
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      elevation: 0,
+    },
+  },
+  typography: {
+    h1: {
+      fontSize: 32,
+      fontWeight: '700',
+      lineHeight: 40,
+    },
+    h2: {
+      fontSize: 24,
+      fontWeight: '600',
+      lineHeight: 32,
+    },
+    h3: {
+      fontSize: 20,
+      fontWeight: '600',
+      lineHeight: 28,
+    },
+    body: {
+      fontSize: 16,
+      fontWeight: '400',
+      lineHeight: 24,
+    },
+    small: {
+      fontSize: 14,
+      fontWeight: '400',
+      lineHeight: 20,
+    },
+    caption: {
+      fontSize: 12,
+      fontWeight: '400',
+      lineHeight: 16,
+    },
   },
   dimensions: {
     width,
@@ -96,41 +232,82 @@ export const theme: Theme = {
 export const commonStyles = {
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background.white,
+    backgroundColor: theme.colors.background.primary,
+  },
+  surfaceContainer: {
+    flex: 1,
+    backgroundColor: theme.colors.background.surface,
   },
   contentContainer: {
     flex: 1,
-    padding: theme.spacing.medium,
+    padding: theme.spacing.m,
+  },
+  card: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: theme.borderRadius.l,
+    padding: theme.spacing.m,
+    ...theme.shadows.card,
+  },
+  floatingCard: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: theme.borderRadius.l,
+    padding: theme.spacing.m,
+    ...theme.shadows.float,
   },
   heading: {
-    fontSize: 24,
-    fontWeight: 'bold' as const,
+    ...theme.typography.h2,
     color: theme.colors.text.primary,
-    marginBottom: theme.spacing.medium,
+    marginBottom: theme.spacing.m,
   },
   subheading: {
-    fontSize: 18,
+    ...theme.typography.h3,
     color: theme.colors.text.secondary,
-    marginBottom: theme.spacing.medium,
+    marginBottom: theme.spacing.m,
   },
   button: {
     backgroundColor: theme.colors.primary,
-    padding: theme.spacing.medium,
-    borderRadius: theme.borderRadius.medium,
+    paddingVertical: theme.spacing.m,
+    paddingHorizontal: theme.spacing.l,
+    borderRadius: theme.borderRadius.m,
     alignItems: 'center' as const,
-    marginVertical: theme.spacing.small,
+    marginVertical: theme.spacing.s,
+    ...theme.shadows.card,
   },
   buttonText: {
-    color: theme.colors.background.white,
-    fontWeight: 'bold' as const,
-    fontSize: 16,
+    ...theme.typography.body,
+    color: theme.colors.background.surface,
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    paddingVertical: theme.spacing.m,
+    paddingHorizontal: theme.spacing.l,
+    borderRadius: theme.borderRadius.m,
+    alignItems: 'center' as const,
+    marginVertical: theme.spacing.s,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  secondaryButtonText: {
+    ...theme.typography.body,
+    color: theme.colors.primary,
+    fontWeight: '600',
   },
   input: {
     borderWidth: 1,
     borderColor: theme.colors.text.secondary,
-    borderRadius: theme.borderRadius.small,
-    padding: theme.spacing.medium,
-    marginBottom: theme.spacing.medium,
-    fontSize: 16,
+    borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.m,
+    marginBottom: theme.spacing.m,
+    fontSize: theme.typography.body.fontSize,
+    backgroundColor: theme.colors.background.surface,
+  },
+  pillBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: theme.spacing.s,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.xl,
+    gap: theme.spacing.xs,
   },
 };

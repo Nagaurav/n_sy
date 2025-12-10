@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, StatusBar, ViewStyle, TextStyle } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, StatusBar, ViewStyle, TextStyle, Animated } from 'react-native';
 import { theme, commonStyles } from '../theme';
 
 type Styles = {
@@ -27,34 +27,56 @@ const styles = StyleSheet.create<Styles>({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: theme.spacing.large,
+    marginBottom: theme.spacing.l,
     overflow: 'hidden',
   },
   logoText: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: theme.colors.background.white,
+    color: theme.colors.background.surface,
   },
   appName: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: theme.colors.background.white,
+    color: theme.colors.background.surface,
     letterSpacing: 2,
-    marginTop: theme.spacing.large,
+    marginTop: theme.spacing.l,
   },
 });
 
 const SplashScreen = () => {
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [scaleAnim, opacityAnim]);
+
+  const animatedLogoStyle = {
+    transform: [{ scale: scaleAnim }],
+    opacity: opacityAnim,
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
-      <View style={styles.logoContainer}>
+      <Animated.View style={[styles.logoContainer, animatedLogoStyle]}>
         <View style={styles.logoCircle}>
-          {/* Logo image will be placed here */}
           <Text style={styles.logoText}>SY</Text>
         </View>
         <Text style={styles.appName}>SAMYAYOG</Text>
-      </View>
+      </Animated.View>
     </View>
   );
 };

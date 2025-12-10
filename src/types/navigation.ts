@@ -1,4 +1,6 @@
 import { StackNavigationProp } from '@react-navigation/stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { UserProfileData } from './userProfile';
 
 export type HomeStackParamList = {
   Home: undefined;
@@ -21,6 +23,13 @@ export type HomeStackParamList = {
       price: number;
     };
   };
+  EditProfile: {
+    currentUser: UserProfileData;
+  };
+  PrescriptionsList: undefined;
+  PrescriptionDetail: { prescriptionId: string };
+  ChatList: undefined;
+  ChatScreen: { chatId: string; title?: string; receiverId?: string };
 };
 
 export type ClassesListScreenNavigationProp = StackNavigationProp<
@@ -32,3 +41,13 @@ export type ProfessionalProfileScreenNavigationProp = StackNavigationProp<
   HomeStackParamList,
   'ProfessionalProfile'
 >;
+
+// Bottom Tab Navigator Types
+export type MainTabParamList = {
+  Home: undefined;
+  Appointments: undefined;
+  ChatList: undefined;
+  Profile: undefined;
+};
+
+export type MainTabNavigationProp = BottomTabNavigationProp<MainTabParamList>;

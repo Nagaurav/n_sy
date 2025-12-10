@@ -9,7 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Alert } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppSelector } from '../store';
-import { apiService } from '../services/api';
+import { apiService } from '../services/apiService';
 import { ConsultationBooking } from '../types/booking';
 
 // Example 1: Basic Authentication State Access
@@ -56,8 +56,9 @@ export const UserAppointmentsExample = () => {
       // The user_id is retrieved from the global auth state
       const response = await apiService.getUserAppointments(user._id);
       
-      if (response.success) {
-        setAppointments(response.data?.appointments || []);
+      if (response.success && response.data) {
+        const data: any = response.data;
+        setAppointments(data.appointments || data.data || []);
       } else {
         Alert.alert('Error', response.error || 'Failed to fetch appointments');
       }
@@ -102,7 +103,7 @@ export const CreateBookingExample = () => {
 
       console.log('Creating booking for user:', user._id);
       
-      const response = await apiService.createConsultationBooking(bookingData);
+      const response = await apiService.createConsultationBooking(bookingData as any);
       
       if (response.success) {
         Alert.alert('Success', 'Booking created successfully!');
@@ -186,10 +187,10 @@ export const ErrorHandlingExample = () => {
       }
 
       // Make API call that requires authentication
-      const response = await apiService.getUserProfile(user._id);
+      const profile = await apiService.getUserProfile(user._id as any);
       
-      if (!response.success) {
-        throw new Error(response.error || 'Request failed');
+      if (!profile || !profile.user) {
+        throw new Error('Request failed');
       }
 
       // Handle successful response
@@ -236,9 +237,9 @@ export const UpdateProfileExample = () => {
       };
 
       // Update via API (this will also update the backend)
-      const response = await apiService.updateUserProfile(user._id, updatedData);
+      const response = await apiService.updateUserProfile(user._id as any, updatedData as any);
       
-      if (response.success && response.data?.user) {
+      if ((response as any)?.user) {
         // Update local state
         await updateUser(updatedData);
         Alert.alert('Success', 'Profile updated successfully');

@@ -14,7 +14,9 @@ import {
   Linking,
 } from 'react-native';
 import { theme } from '../theme';
-import { apiService } from '../services/api';
+import { apiService } from '../services/apiService';
+import { FloatingLabelInput } from '../components/FloatingLabelInput';
+import { useTheme } from '../contexts/ThemeContext';
 
 type Styles = {
   container: ViewStyle;
@@ -98,23 +100,17 @@ const styles = StyleSheet.create<Styles>({
     marginBottom: 40,
     lineHeight: 24,
   },
-  inputContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+  phoneInputContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
+    alignItems: 'flex-end',
     marginBottom: 24,
-    height: 56,
   },
-  input: {
+  phoneInputWrapper: {
     flex: 1,
-    paddingVertical: 0,
+    marginLeft: 8,
+  },
+  phoneInput: {
     fontSize: 16,
-    color: '#1F2937',
-    height: '100%',
   },
   countryCode: {
     fontSize: 16,
@@ -123,14 +119,14 @@ const styles = StyleSheet.create<Styles>({
     marginRight: 8,
   },
   button: {
-    backgroundColor: '#1E88E5',
+    backgroundColor: '#008272',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 24,
   },
   buttonDisabled: {
-    backgroundColor: '#9CA3AF',
+    backgroundColor: '#D1D5DB',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -168,6 +164,7 @@ const styles = StyleSheet.create<Styles>({
 });
 
 const PhoneNumberScreen = ({ navigation }: any) => {
+  const { theme } = useTheme();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -221,8 +218,8 @@ const PhoneNumberScreen = ({ navigation }: any) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
         <View style={styles.logoContainer}>
           <View style={styles.logoCircle}>
             <Text style={styles.logoText}>SY</Text>
@@ -240,21 +237,20 @@ const PhoneNumberScreen = ({ navigation }: any) => {
           <Text style={styles.title}>Welcome to Samyayog</Text>
           <Text style={styles.subtitle}>Enter your mobile number to begin.</Text>
 
-          <View style={styles.inputContainer}>
+          <View style={styles.phoneInputContainer}>
             <Text style={styles.countryCode}>🇮🇳 +91</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Phone Number"
-              placeholderTextColor={theme.colors.text.secondary}
+            <FloatingLabelInput
+              label="Phone Number"
               value={phoneNumber}
               onChangeText={handlePhoneNumberChange}
+              error={error}
               keyboardType="phone-pad"
               maxLength={10}
-              editable={!isLoading}
+              autoFocus
+              containerStyle={styles.phoneInputWrapper}
+              inputStyle={styles.phoneInput}
             />
           </View>
-
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
           <TouchableOpacity
             style={[

@@ -17,6 +17,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { format, parseISO } from 'date-fns';
 import { HomeStackParamList } from '../../App';
 import { apiService } from '../services/apiService';
+import { useAppSelector } from '../store';
 import { theme } from '../theme';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { 
@@ -41,6 +42,15 @@ const DateTimeSelectionScreen = () => {
   const [selectedSlot, setSelectedSlot] = useState<FormattedAvailableSlot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [priceDetails, setPriceDetails] = useState<{
+    original_amount: number;
+    discount_amount: number;
+    final_amount: number;
+  } | null>(null);
+  const [isPriceLoading, setIsPriceLoading] = useState(false);
+  const [priceError, setPriceError] = useState<string | null>(null);
+  const { user } = useAppSelector((state: any) => state.auth);
+  const userId = user?.user_id || user?._id || user?.id;
   
   // Format time to 12-hour format with AM/PM
   const formatTime = (dateString: string): string => {
@@ -145,11 +155,67 @@ const DateTimeSelectionScreen = () => {
     }
   }, [professionalId]);
 
+  const getSlotDuration = (startTime: string, endTime: string): number => {
+    try {
+      const start = new Date(startTime);
+      const end = new Date(endTime);
+      return Math.round((end.getTime() - start.getTime()) / (1000 * 60)); // Convert ms to minutes
+    } catch (error) {
+      console.error('Error calculating slot duration:', error);
+      return 0;
+    }
+  };
+
+  const fetchPriceForSlot = async (slot: FormattedAvailableSlot) => {
+    try {
+      setIsPriceLoading(true);
+      setPriceError(null);
+
+      const rawDuration = getSlotDuration(slot.start_time, slot.end_time);
+      const duration =
+        Number.isFinite(rawDuration) && rawDuration > 0
+          ? rawDuration
+          : slot.duration || 60;
+
+      console.log('Requesting price for slot:', {
+        slotId: slot.id,
+        duration,
+      });
+      const result = await apiService.calculateBookingPrice({
+        slotId: slot.id,
+        duration,
+        userId,
+      });
+
+      if (!result.success || !result.data) {
+        setPriceDetails(null);
+        setPriceError(result.error || 'Failed to calculate price. Please try again.');
+        return;
+      }
+
+      setPriceDetails(result.data);
+    } catch (err: any) {
+      console.error('Error calculating price:', err);
+      setPriceDetails(null);
+      setPriceError(
+        err?.message || 'Failed to calculate price. Please try again.',
+      );
+    } finally {
+      setIsPriceLoading(false);
+    }
+  };
+
   // Handle slot selection
   const handleSlotSelect = (slot: FormattedAvailableSlot) => {
-    setSelectedSlot(prevSlot => 
-      prevSlot?.id === slot.id ? null : slot
-    );
+    if (selectedSlot?.id === slot.id) {
+      setSelectedSlot(null);
+      setPriceDetails(null);
+      setPriceError(null);
+      return;
+    }
+
+    setSelectedSlot(slot);
+    fetchPriceForSlot(slot);
   };
 
   // Handle booking confirmation
@@ -164,11 +230,15 @@ const DateTimeSelectionScreen = () => {
       return;
     }
 
-    // Use the getSlotPrice function to ensure consistent price calculation
-    const price = getSlotPrice(selectedSlot);
+    if (!priceDetails || isPriceLoading) {
+      Alert.alert('Price not ready', 'Please wait while we calculate the price.');
+      return;
+    }
     
     // Get the slot duration in minutes
     const slotDuration = getSlotDuration(selectedSlot.start_time, selectedSlot.end_time);
+
+    const finalPrice = priceDetails.final_amount;
 
     // Format the booking data as expected by BookingConfirmationScreen
     const bookingData = {
@@ -179,13 +249,13 @@ const DateTimeSelectionScreen = () => {
       startTime: selectedSlot.start_time,
       endTime: selectedSlot.end_time,
       duration: slotDuration,
-      price: price,
+      price: finalPrice,
       isOnline: selectedSlot.is_online,
       serviceDetails: {
         id: serviceDetails.id,
         name: serviceDetails.name,
         duration: slotDuration,
-        price: price
+        price: finalPrice
       }
     };
 
@@ -193,7 +263,7 @@ const DateTimeSelectionScreen = () => {
     navigation.navigate('BookingConfirmation', {
       bookingData,
     });
-  }, [navigation, professionalId, professionalName, selectedSlot, serviceDetails]);
+  }, [navigation, professionalId, professionalName, selectedSlot, serviceDetails, priceDetails, isPriceLoading]);
 
   useFocusEffect(
     useCallback(() => {
@@ -206,53 +276,9 @@ const DateTimeSelectionScreen = () => {
     fetchAvailableSlots();
   }, [fetchAvailableSlots]);
 
-  // Get the duration in minutes from start and end times
-  const getSlotDuration = (startTime: string, endTime: string): number => {
-    try {
-      const start = new Date(startTime);
-      const end = new Date(endTime);
-      return Math.round((end.getTime() - start.getTime()) / (1000 * 60)); // Convert ms to minutes
-    } catch (error) {
-      console.error('Error calculating slot duration:', error);
-      return 0;
-    }
-  };
-
-  // Get the price based on slot duration and online/offline status
-  const getSlotPrice = (slot: AvailableSlot): number => {
-    try {
-      const duration = getSlotDuration(slot.start_time, slot.end_time);
-      const isOnline = slot.is_online;
-      
-      // Determine which price to use based on duration and online status
-      if (duration <= 15 && slot.price_online_15min !== null) {
-        return isOnline ? slot.price_online_15min : (slot.price_offline_15min || 0);
-      } else if (duration <= 30 && slot.price_online_30min !== null) {
-        return isOnline ? slot.price_online_30min : (slot.price_offline_30min || 0);
-      } else if (duration > 30 && slot.price_online_60min !== null) {
-        return isOnline ? slot.price_online_60min : (slot.price_offline_60min || 0);
-      }
-      
-      // Fallback to first available price
-      if (slot.price_online_15min !== null) {
-        return isOnline ? slot.price_online_15min : (slot.price_offline_15min || 0);
-      } else if (slot.price_online_30min !== null) {
-        return isOnline ? slot.price_online_30min : (slot.price_offline_30min || 0);
-      } else if (slot.price_online_60min !== null) {
-        return isOnline ? slot.price_online_60min : (slot.price_offline_60min || 0);
-      }
-      
-      return 0; // Default to 0 if no price is available
-    } catch (error) {
-      console.error('Error calculating slot price:', error);
-      return 0;
-    }
-  };
-
   // Render individual time slot item
   const renderSlotItem = ({ item }: { item: FormattedAvailableSlot }) => {
     const duration = getSlotDuration(item.start_time, item.end_time);
-    const price = getSlotPrice(item);
     
     return (
       <TouchableOpacity
@@ -276,9 +302,6 @@ const DateTimeSelectionScreen = () => {
             {duration} min
           </Text>
         </View>
-        <Text style={styles.slotPriceText}>
-          ${price}
-        </Text>
       </TouchableOpacity>
     );
   };
@@ -328,6 +351,8 @@ const DateTimeSelectionScreen = () => {
       </SafeAreaView>
     );
   }
+
+  const isConfirmDisabled = !selectedSlot || isPriceLoading || !!priceError || !priceDetails;
 
   // Render error state
   if (error) {
@@ -403,10 +428,10 @@ const DateTimeSelectionScreen = () => {
         <TouchableOpacity 
           style={[
             styles.confirmButton,
-            !selectedSlot && styles.disabledButton,
+            isConfirmDisabled && styles.disabledButton,
           ]}
           onPress={handleConfirm}
-          disabled={!selectedSlot}
+          disabled={isConfirmDisabled}
           accessibilityRole="button"
           accessibilityLabel="Confirm time slot"
           accessibilityHint="Proceed to booking confirmation"
@@ -419,12 +444,25 @@ const DateTimeSelectionScreen = () => {
           
           {selectedSlot && (
             <View style={styles.priceContainer}>
-              <Text style={styles.priceText}>
-                ${getSlotPrice(selectedSlot).toFixed(2)}
-              </Text>
-              <Text style={styles.priceLabel}>
-                for {getSlotDuration(selectedSlot.start_time, selectedSlot.end_time)} min
-              </Text>
+              {isPriceLoading ? (
+                <>
+                  <ActivityIndicator size="small" color="#fff" />
+                  <Text style={[styles.priceLabel, { marginLeft: 8, color: '#fff' }]}> 
+                    Calculating price...
+                  </Text>
+                </>
+              ) : priceDetails ? (
+                <>
+                  <Text style={styles.priceText}>
+                    ₹{priceDetails.final_amount.toFixed(2)}
+                  </Text>
+                  <Text style={styles.priceLabel}>
+                    for {getSlotDuration(selectedSlot.start_time, selectedSlot.end_time)} min
+                  </Text>
+                </>
+              ) : priceError ? (
+                <Text style={styles.priceLabel}>{priceError}</Text>
+              ) : null}
             </View>
           )}
         </TouchableOpacity>

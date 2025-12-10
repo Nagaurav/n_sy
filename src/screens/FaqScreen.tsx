@@ -9,26 +9,19 @@ import {
   StatusBar,
   ActivityIndicator,
   RefreshControl,
-  LayoutAnimation,
-  Platform,
-  UIManager,
 } from 'react-native';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { apiService } from '../services/api';
+import { apiService } from '../services/apiService';
 import { FAQ } from '../types/support';
-
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+import { theme } from '../theme';
+import CollapsibleCard from '../components/CollapsibleCard';
 
 const FaqScreen = () => {
   const navigation = useNavigation();
   const [faqData, setFaqData] = useState<Record<string, FAQ[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   // Fetch FAQs from API
@@ -71,11 +64,6 @@ const FaqScreen = () => {
     fetchFaqs();
   };
 
-  const toggleExpand = (id: number) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setExpandedId(expandedId === id ? null : id);
-  };
-
   const openDrawer = () => {
     console.log('🔵 Opening drawer from FAQ...');
     navigation.dispatch(DrawerActions.openDrawer());
@@ -83,26 +71,12 @@ const FaqScreen = () => {
 
   // Reusable FAQ Item Component
   const renderFaqItem = (faq: FAQ) => (
-    <TouchableOpacity
+    <CollapsibleCard
       key={faq.id}
-      style={styles.faqCard}
-      onPress={() => toggleExpand(faq.id)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.faqHeader}>
-        <Text style={styles.faqQuestion}>{faq.question}</Text>
-        <Ionicons
-          name={expandedId === faq.id ? 'chevron-up' : 'chevron-down'}
-          size={24}
-          color="#1E88E5"
-        />
-      </View>
-      {expandedId === faq.id && (
-        <View style={styles.answerContainer}>
-          <Text style={styles.faqAnswer}>{faq.answer}</Text>
-        </View>
-      )}
-    </TouchableOpacity>
+      title={faq.question}
+      content={<Text style={styles.faqAnswer}>{faq.answer}</Text>}
+      containerStyle={styles.faqCard}
+    />
   );
 
   if (isLoading) {
@@ -258,15 +232,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#1E88E5',
   },
   faqCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   faqHeader: {
     flexDirection: 'row',
