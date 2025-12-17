@@ -481,7 +481,7 @@ export const apiService = {
         console.log('ℹ️ No upcoming appointments found (404)');
         return {
           success: true,
-          data: { appointment: null },
+          data: null, // Return null instead of nested object
         };
       }
       console.error('Error fetching next appointment:', error);

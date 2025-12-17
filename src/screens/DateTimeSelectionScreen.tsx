@@ -143,6 +143,12 @@ const DateTimeSelectionScreen = () => {
       });
 
       setSectionedSlots(groupedSlots);
+      console.log('🔍 Final sectionedSlots state:', {
+        totalSections: groupedSlots.length,
+        totalSlots: groupedSlots.reduce((acc, section) => acc + section.data.length, 0),
+        firstSection: groupedSlots[0],
+        isLoading: false
+      });
     } catch (error: any) {
       console.error('❌ Error fetching available slots:', error);
       setError(
@@ -244,7 +250,7 @@ const DateTimeSelectionScreen = () => {
     const bookingData = {
       professionalId,
       professionalName,
-      slotId: selectedSlot.id,
+      slot_id: selectedSlot.id, // Use slot_id to match BookingConfirmationScreen interface
       date: selectedSlot.date,
       startTime: selectedSlot.start_time,
       endTime: selectedSlot.end_time,
@@ -344,6 +350,7 @@ const DateTimeSelectionScreen = () => {
 
   // Render loading state
   if (isLoading && sectionedSlots.length === 0) {
+    console.log('🔍 Rendering loading state:', { isLoading, sectionedSlotsLength: sectionedSlots.length });
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -356,6 +363,7 @@ const DateTimeSelectionScreen = () => {
 
   // Render error state
   if (error) {
+    console.log('🔍 Rendering error state:', { error, isLoading, sectionedSlotsLength: sectionedSlots.length });
     return (
       <SafeAreaView style={styles.errorContainer}>
         <Ionicons 
@@ -374,8 +382,16 @@ const DateTimeSelectionScreen = () => {
     );
   }
 
+  console.log('🔍 Rendering main component:', { 
+    isLoading, 
+    sectionedSlotsLength: sectionedSlots.length,
+    hasError: !!error,
+    firstSection: sectionedSlots[0]
+  });
+
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
@@ -390,6 +406,21 @@ const DateTimeSelectionScreen = () => {
           {professionalName || 'Select Time'}
         </Text>
         <View style={styles.headerRight} />
+      </View>
+
+      {/* TEST TEXT - REMOVE LATER */}
+      <View style={{ 
+        position: 'absolute', 
+        top: 100, 
+        left: 20, 
+        backgroundColor: '#FFFFFF', 
+        padding: 20, 
+        borderRadius: 10,
+        zIndex: 9999 
+      }}>
+        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#000000' }}>
+          🟢 DATETIME SELECTION SCREEN IS VISIBLE
+        </Text>
       </View>
 
       {/* Main Content */}
@@ -474,11 +505,12 @@ const DateTimeSelectionScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background.white,
+    backgroundColor: '#FFFFFF',
   },
   content: {
     flex: 1,
-    backgroundColor: theme.colors.background.light,
+    backgroundColor: '#F8F9FA',
+    paddingBottom: 80, // Add padding to prevent content from being hidden behind footer
   },
   header: {
     flexDirection: 'row',
@@ -641,10 +673,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+    backgroundColor: '#FFFFFF',
     padding: 16,
-    backgroundColor: theme.colors.background.white,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.colors?.border || '#E5E7EB',
+    borderTopColor: '#E5E7EB',
     ...Platform.select({
       ios: {
         shadowColor: '#000',

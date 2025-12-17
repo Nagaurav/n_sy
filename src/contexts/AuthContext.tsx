@@ -44,7 +44,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const timeout = setTimeout(() => {
       console.log('⚠️ Auth rehydration timeout, forcing loading to false');
       dispatch(rehydrateAuth(null));
-    }, 3000); // 3 second timeout (reduced for faster testing)
+    }, 10000); // 10 second timeout for AsyncStorage rehydration
     
     return () => clearTimeout(timeout);
   }, [dispatch]);

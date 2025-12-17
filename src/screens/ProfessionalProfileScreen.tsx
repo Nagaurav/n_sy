@@ -177,6 +177,7 @@ const ProfessionalProfileScreen = () => {
     console.log('🚀 Navigating to DateTimeSelection with params:', navigationParams);
     
     try {
+      console.log('🚀 About to call navigation.navigate...');
       navigation.navigate('DateTimeSelection', {
         professionalId: navigationParams.professionalId,
         professionalName: navigationParams.professionalName,
@@ -194,6 +195,11 @@ const ProfessionalProfileScreen = () => {
         },
       });
       console.log('✅ Navigation called successfully');
+      
+      // Add a small delay to check if navigation actually happens
+      setTimeout(() => {
+        console.log('🔍 Navigation check - 500ms after navigate call');
+      }, 500);
     } catch (error) {
       console.error('❌ Navigation error:', error);
       Alert.alert('Error', 'Unable to proceed with booking. Please try again.');
@@ -270,6 +276,11 @@ const ProfessionalProfileScreen = () => {
               accessibilityLabel={`${profileData.first_name}'s profile picture`}
               onError={(e) => {
                 console.log('Error loading profile image:', e.nativeEvent.error);
+                console.log('Falling back to default avatar for:', profileData.first_name);
+                // Force fallback to default avatar
+                e.currentTarget.setNativeProps({ 
+                  source: { uri: DEFAULT_AVATAR } 
+                });
               }}
             />
           </View>
@@ -364,7 +375,12 @@ const ProfessionalProfileScreen = () => {
       <View style={styles.footer}>
         <TouchableOpacity
           style={styles.bookButton}
-          onPress={handleBookAppointment}
+          onPress={() => {
+            console.log('🔘 TouchableOpacity pressed immediately');
+            handleBookAppointment();
+          }}
+          activeOpacity={0.8}
+          disabled={false}
           accessibilityRole="button"
           accessibilityLabel="Book a consultation"
           accessibilityHint="Double tap to book a consultation with this professional"
@@ -453,7 +469,7 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: theme.colors.background.white,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.text.secondary + '33', // Adding 33 for 20% opacity
+    borderTopColor: '#E5E7EB',
   },
   bookButton: {
     backgroundColor: theme.colors.primary,
@@ -461,15 +477,6 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Platform.OS === 'ios' ? 0 : 16,
-    ...Platform.select({
-      ios: {
-        marginBottom: 0,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
   },
   bookButtonText: {
     color: theme.colors.background.white,
@@ -479,9 +486,10 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    backgroundColor: theme.colors.background.white,
   },
   scrollViewContent: {
-    paddingBottom: 100, // Extra space for the fixed button
+    paddingBottom: 100, // Space for the fixed footer button
   },
   header: {
     flexDirection: 'row',
@@ -651,36 +659,6 @@ const styles = StyleSheet.create({
     height: 100,
   } as ViewStyle,
   
-  // Sticky button container
-  stickyButtonContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 8,
-  } as ViewStyle,
-  
-  // Book now button styles
-  bookNowButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-  } as ViewStyle,
-  bookNowButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  } as TextStyle,
 });
 
 export default ProfessionalProfileScreen;

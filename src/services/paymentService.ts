@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Buffer } from 'buffer';
 import crypto from 'crypto';
 import { PHONEPE_SALT_KEY, PHONEPE_SALT_INDEX } from '@env';
-import { api } from './api';
+import { api } from './apiService';
 
 // Types
 interface PaymentWebhookPayload {
@@ -57,7 +57,7 @@ export const paymentService = {
         transactionId: payload.transactionId,
         bookingId: payload.merchantTransactionId,
         amount: payload.amount / 100, // Convert to currency units
-        status: this.mapPaymentStatus(payload.paymentState, payload.responseCode),
+        status: paymentService.mapPaymentStatus(payload.paymentState || '', payload.responseCode || ''),
         paymentMethod: 'phonepe',
         rawResponse: JSON.stringify(payload)
       });
@@ -122,7 +122,7 @@ export const paymentService = {
   /**
    * Initiate a payment with PhonePe
    */
-  initiatePayment: async (params: InitiatePaymentParams) => {
+  initiatePayment: async function(params: InitiatePaymentParams) {
     try {
       const { 
         bookingId, 

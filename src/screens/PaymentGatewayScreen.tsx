@@ -45,6 +45,11 @@ const PaymentGatewayScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [verifyingText, setVerifyingText] = useState('Verifying Payment...');
+  
+  const maxRetries = 5;
+  const retryInterval = 2000; // 2 seconds
 
   // Handle Android back button
   useEffect(() => {
@@ -113,8 +118,8 @@ const PaymentGatewayScreen = () => {
     }
   };
 
-  // Verify payment status with the backend
-  const verifyPaymentStatus = async () => {
+  // Verify payment status with backend
+  const verifyPaymentStatus = async (currentRetry = 0) => {
     if (!bookingId) {
       setError('Invalid booking reference');
       setIsVerifying(false);
@@ -122,7 +127,7 @@ const PaymentGatewayScreen = () => {
     }
 
     try {
-      console.log('Calling getBookingPaymentStatus for booking:', bookingId);
+      console.log(`Calling getBookingPaymentStatus for booking: ${bookingId} (attempt ${currentRetry + 1}/${maxRetries})`);
 
       // Call the booking payment status endpoint (returns backend wrapper)
       const wrapped = await apiService.getBookingPaymentStatus(bookingId);
@@ -150,28 +155,51 @@ const PaymentGatewayScreen = () => {
             error: response.error || 'Payment was not completed successfully.'
           });
         } else {
-          // Handle pending or other statuses
-          console.log('Payment status:', status);
-          navigation.replace('BookingFailed', {
-            bookingId,
-            error: `Payment status: ${status}. Please contact support if amount was deducted.`
-          });
+          // Handle pending or other statuses with retry logic
+          console.log(`Payment status: ${status} (attempt ${currentRetry + 1}/${maxRetries})`);
+          
+          if (currentRetry < maxRetries - 1) {
+            // Update retry count and message
+            const newRetryCount = currentRetry + 1;
+            setRetryCount(newRetryCount);
+            setVerifyingText(`Verifying Payment... (${newRetryCount}/${maxRetries})`);
+            
+            // Schedule next retry
+            setTimeout(() => {
+              verifyPaymentStatus(newRetryCount);
+            }, retryInterval);
+          } else {
+            // Max retries reached, navigate to failed screen
+            console.log('Max retries reached, navigating to failed screen');
+            navigation.replace('BookingFailed', {
+              bookingId,
+              error: `Payment status: ${status}. Verification timed out after ${maxRetries} attempts. Please contact support if amount was deducted.`
+            });
+          }
         }
       } else {
         throw new Error(response.error || 'Failed to verify payment status');
       }
     } catch (err: any) {
-      console.error('Payment verification error:', err);
-      setError(err.message || 'Failed to verify payment status');
+      console.error(`Payment verification error (attempt ${currentRetry + 1}/${maxRetries}):`, err);
       
-      // Still navigate to failed screen even on error
-      navigation.replace('BookingFailed', {
-        bookingId,
-        error: err.message || 'Unable to verify payment status. Please check your bookings or contact support.'
-      });
-    } finally {
-      setIsVerifying(false);
-      setIsLoading(false);
+      if (currentRetry < maxRetries - 1) {
+        // Retry on network errors as well
+        const newRetryCount = currentRetry + 1;
+        setRetryCount(newRetryCount);
+        setVerifyingText(`Verifying Payment... (${newRetryCount}/${maxRetries})`);
+        
+        setTimeout(() => {
+          verifyPaymentStatus(newRetryCount);
+        }, retryInterval);
+      } else {
+        // Max retries reached, show error and navigate to failed screen
+        setError(err.message || 'Failed to verify payment status');
+        navigation.replace('BookingFailed', {
+          bookingId,
+          error: `Unable to verify payment status after ${maxRetries} attempts. ${err.message || 'Please check your bookings or contact support.'}`
+        });
+      }
     }
   };
 
@@ -264,7 +292,7 @@ const PaymentGatewayScreen = () => {
           {isVerifying && (
             <View style={styles.verifyingContainer}>
               <ActivityIndicator size="large" color="#4A90E2" />
-              <Text style={styles.verifyingText}>Verifying Payment...</Text>
+              <Text style={styles.verifyingText}>{verifyingText}</Text>
               <Text style={styles.verifyingSubtext}>Please wait while we confirm your payment</Text>
             </View>
           )}

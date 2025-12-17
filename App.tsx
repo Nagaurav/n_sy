@@ -9,7 +9,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'react-native';
 import { Provider } from 'react-redux';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { store } from './src/store';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { theme } from './src/theme';
@@ -343,12 +342,10 @@ const App = () => {
       <ThemeProvider>
         <AuthProvider>
           <SafeAreaProvider>
-            <KeyboardProvider>
-              <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-              <NavigationContainer>
-                <AppNavigator />
-              </NavigationContainer>
-            </KeyboardProvider>
+            <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+            <NavigationContainer>
+              <AppNavigator />
+            </NavigationContainer>
           </SafeAreaProvider>
         </AuthProvider>
       </ThemeProvider>

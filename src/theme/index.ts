@@ -12,6 +12,7 @@ export type ColorPalette = {
   background: {
     primary: string;     // Off-White for screen backgrounds
     surface: string;     // Pure white for cards/modals
+    white: string;       // Pure white for text/icons
   };
   feedback: {
     error: string;
@@ -133,6 +134,7 @@ export const theme: Theme = {
     background: {
       primary: '#F7F9FC',     // Off-White for screen backgrounds
       surface: '#FFFFFF',     // Pure white for cards/modals
+      white: '#FFFFFF',       // Pure white for text/icons
     },
     feedback: {
       error: '#DC2626',      // Error red
