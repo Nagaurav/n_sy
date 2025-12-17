@@ -30,3 +30,12 @@
 .env.*
 
     
+# Android build outputs
+android/app/build/
+android/.gradle/
+*.apk
+*.aab
+*.so
+
+# Node / React Native
+node_modules/
