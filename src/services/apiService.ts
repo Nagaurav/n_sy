@@ -409,6 +409,34 @@ export const apiService = {
     }
   },
 
+  // User login helper used by LoginScreen
+  login: async (
+    credentials: { identifier: string; password: string },
+  ): Promise<SimpleApiResult<{ token: string; user: any }>> => {
+    try {
+      const response = await api.post('/user/auth/login', credentials);
+      const data = response.data;
+
+      if (data?.success && data.data?.token && data.data?.user) {
+        return {
+          success: true,
+          data: {
+            token: data.data.token,
+            user: data.data.user,
+          },
+        };
+      }
+
+      return {
+        success: false,
+        error: data?.message || 'Login failed. Please try again.',
+      };
+    } catch (error: any) {
+      console.error('Error during login:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
   // Get class details by ID
   getClassById: async (id: string | number): Promise<YogaClass> => {
     try {

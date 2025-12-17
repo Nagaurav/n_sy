@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { theme } from '../theme';
 import { apiService } from '../services/apiService';
 import { FloatingLabelInput } from '../components/FloatingLabelInput';
@@ -31,10 +32,15 @@ type Styles = {
   inputContainer: ViewStyle;
   input: TextStyle;
   countryCode: TextStyle;
+  phoneInputContainer: ViewStyle;
+  phoneInputWrapper: ViewStyle;
+  phoneInput: TextStyle;
   button: ViewStyle;
   buttonText: TextStyle;
   buttonDisabled: ViewStyle;
   errorText: TextStyle;
+  loginWithEmailButton: ViewStyle;
+  loginWithEmailText: TextStyle;
   footer: ViewStyle;
   footerText: TextStyle;
   linkText: TextStyle;
@@ -100,14 +106,26 @@ const styles = StyleSheet.create<Styles>({
     marginBottom: 40,
     lineHeight: 24,
   },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  input: {
+    fontSize: 16,
+    color: '#1F2937',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
   phoneInputContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'stretch',
     marginBottom: 24,
   },
   phoneInputWrapper: {
     flex: 1,
-    marginLeft: 8,
+    marginLeft: 0,
   },
   phoneInput: {
     fontSize: 16,
@@ -143,6 +161,17 @@ const styles = StyleSheet.create<Styles>({
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 16,
+  },
+  loginWithEmailButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  loginWithEmailText: {
+    color: theme.colors.primary,
+    fontSize: 14,
+    fontWeight: '500',
+    textDecorationLine: 'underline',
   },
   footer: {
     position: 'absolute',
@@ -265,6 +294,15 @@ const PhoneNumberScreen = ({ navigation }: any) => {
             ) : (
               <Text style={styles.buttonText}>Send OTP</Text>
             )}
+          </TouchableOpacity>
+
+          {/* Login with Email option */}
+          <TouchableOpacity
+            style={styles.loginWithEmailButton}
+            onPress={() => navigation.navigate('Login')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.loginWithEmailText}>Login with Email Instead</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

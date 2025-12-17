@@ -16,6 +16,7 @@ import { ThemeProvider } from './src/contexts/ThemeContext';
 
 // Import your screens
 import SplashScreen from './src/screens/SplashScreen';
+import LoginScreen from './src/screens/LoginScreen';
 import PhoneNumberScreen from './src/screens/PhoneNumberScreen';
 import OTPScreen from './src/screens/OTPScreen';
 import SignupScreen from './src/screens/SignupScreen';
@@ -36,6 +37,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 // Navigation Types
 export type AuthStackParamList = {
   Splash: undefined;
+  Login: undefined;
   PhoneNumber: undefined;
   OTP: { phoneNumber: string };
   Signup: { phoneNumber: string };
@@ -327,7 +329,9 @@ const AppNavigator = () => {
           animation: 'none',
           gestureEnabled: false
         }}
+        initialRouteName="Login"
       >
+        <AuthStack.Screen name="Login" component={LoginScreen} />
         <AuthStack.Screen name="PhoneNumber" component={PhoneNumberScreen} />
         <AuthStack.Screen name="OTP" component={OTPScreen} />
         <AuthStack.Screen name="Signup" component={SignupScreen} />
