@@ -4,7 +4,15 @@ import type { UserProfileData } from './userProfile';
 
 export type HomeStackParamList = {
   Home: undefined;
-  ClassesList: undefined;
+  ClassesList: {
+    bookingType?: 'class' | 'consultation';
+  };
+  ProfessionalsList: {
+    bookingType?: 'class' | 'consultation';
+    categoryId?: string;
+    searchQuery?: string;
+    categoryName?: string;
+  };
   ProfessionalProfile: { 
     professionalId: string; 
     refresh?: boolean;  // Optional refresh flag to trigger data reload
@@ -26,10 +34,8 @@ export type HomeStackParamList = {
   EditProfile: {
     currentUser: UserProfileData;
   };
-  PrescriptionsList: undefined;
   PrescriptionDetail: { prescriptionId: string };
-  ChatList: undefined;
-  ChatScreen: { chatId: string; title?: string; receiverId?: string };
+  ChatScreen: { chatId: string; appointmentId: string; title?: string; receiverId?: string };
 };
 
 export type ClassesListScreenNavigationProp = StackNavigationProp<
@@ -46,7 +52,6 @@ export type ProfessionalProfileScreenNavigationProp = StackNavigationProp<
 export type MainTabParamList = {
   Home: undefined;
   Appointments: undefined;
-  ChatList: undefined;
   Profile: undefined;
 };
 

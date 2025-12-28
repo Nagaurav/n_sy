@@ -358,54 +358,34 @@ const BookingConfirmationScreen = () => {
         yogaPlanId: bookingData.yogaPlanId
       });
 
-      // Determine desired duration early (used for slot resolution)
+      // Determine desired duration early
       const duration = typeof bookingData.duration === 'string' 
         ? parseInt(bookingData.duration, 10) 
         : bookingData.duration || 60;
 
-      // Ensure slotId is numeric as required by the API; if not, try to resolve from availability API
-      let slotId: number | undefined;
-      const numericSlotId = Number(bookingData.slot_id);
-      if (Number.isFinite(numericSlotId) && numericSlotId > 0) {
-        slotId = numericSlotId;
-      } else {
-        console.log('Slot ID missing; attempting to resolve from availability API...');
-        const allSlots = await apiService.getAllAvailableSlots(bookingData.professionalId);
-        const targetDateIso = (bookingData.date || bookingData.startDate) as string | undefined;
-        const targetDate = targetDateIso ? new Date(targetDateIso).toISOString().split('T')[0] : undefined;
-
-        const filterByDate = (s: any) => !targetDate || (new Date(s.date).toISOString().split('T')[0] === targetDate);
-        const filterByDuration = (s: any) => (
-          (duration === 15 && s.slot_duration_15min) ||
-          (duration === 30 && s.slot_duration_30min) ||
-          (duration === 60 && s.slot_duration_60min) ||
-          // fallback: if flags not available, accept the slot
-          (s.slot_duration_15min === undefined && s.slot_duration_30min === undefined && s.slot_duration_60min === undefined)
-        );
-
-        let candidate: any = allSlots
-          .filter(filterByDate)
-          .filter(filterByDuration)
-          // Prefer online slots if session mode suggests online
-          .sort((a: any, b: any) => Number(b.is_online) - Number(a.is_online))
-          [0];
-
-        // If exact startTime provided, try to match it more precisely
-        if (!candidate && bookingData.startTime) {
-          const targetTime = bookingData.startTime?.slice(0,5); // HH:MM
-          candidate = allSlots
-            .filter(filterByDate)
-            .filter(filterByDuration)
-            .find((s: any) => new Date(s.start_time).toISOString().slice(11,16) === targetTime);
-        }
-
-        if (candidate?.id) {
-          slotId = Number(candidate.id);
-          console.log('Resolved slot from availability API:', candidate);
-        } else {
-          throw new Error('No available slot found for the selected date/time. Please pick a different time.');
-        }
+      // CRITICAL: Slot resolution must be handled by backend, not frontend
+      // Frontend guessing slots is a security/authenticity hazard
+      // Require slot_id to be present and valid - fail if missing
+      const rawSlotId = bookingData.slot_id;
+      const numericSlotId = Number(rawSlotId);
+      
+      if (!rawSlotId || !Number.isFinite(numericSlotId) || numericSlotId <= 0) {
+        const errorMsg = 'Slot ID is required for booking. Please go back and select a time slot.';
+        console.error('❌ [BookingConfirmation] Slot resolution hazard prevented:', {
+          slot_id: rawSlotId,
+          numericSlotId,
+          bookingData: {
+            date: bookingData.date,
+            startDate: bookingData.startDate,
+            time: bookingData.time,
+            startTime: bookingData.startTime,
+          }
+        });
+        throw new Error(errorMsg);
       }
+      
+      const slotId = numericSlotId;
+      console.log('✅ [BookingConfirmation] Using validated slot_id:', slotId);
       
       const serviceType = bookingData.serviceType || 'yoga_class';
       const serviceId = bookingData.serviceId || 

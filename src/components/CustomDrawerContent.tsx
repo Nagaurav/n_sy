@@ -16,10 +16,32 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { theme as defaultTheme } from '../theme';
 
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const { user, signOut } = useAuth();
-  const { theme } = useTheme();
+  let theme;
+  try {
+    const themeContext = useTheme();
+    theme = themeContext?.theme || defaultTheme;
+    
+    // Safety check
+    if (!theme || !theme.colors) {
+      console.error('❌ [CustomDrawerContent] Theme is invalid:', theme);
+      console.log('🔧 [CustomDrawerContent] Using default theme');
+      theme = defaultTheme;
+    }
+    
+    console.log('🎨 [CustomDrawerContent] Theme loaded:', {
+      hasTheme: !!theme,
+      hasColors: !!theme?.colors,
+      hasPrimary: !!theme?.colors?.primary,
+    });
+  } catch (error) {
+    console.error('❌ [CustomDrawerContent] Error getting theme:', error);
+    console.log('🔧 [CustomDrawerContent] Falling back to default theme');
+    theme = defaultTheme;
+  }
 
   const getUserInitials = (firstName?: string, lastName?: string) => {
     const first = firstName?.charAt(0).toUpperCase() || '';

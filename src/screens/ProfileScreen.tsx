@@ -99,17 +99,6 @@ const ProfileScreen = () => {
         <TouchableOpacity style={styles.retryButton} onPress={() => fetchProfile()}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.editButton, { marginTop: 12 }]}
-          onPress={() =>
-            (navigation as any).navigate('HomeStack', {
-              screen: 'PrescriptionsList',
-            })
-          }
-        >
-          <Text style={styles.editButtonText}>View Prescriptions</Text>
-        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -219,17 +208,6 @@ const ProfileScreen = () => {
           }}
         >
           <Text style={styles.editButtonText}>Edit Profile</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.editButton, { marginTop: 8 }]}
-          onPress={() =>
-            (navigation as any).navigate('HomeStack', {
-              screen: 'PrescriptionsList',
-            })
-          }
-        >
-          <Text style={styles.editButtonText}>View Prescriptions</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

@@ -16,11 +16,34 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { apiService } from '../services/apiService';
 import { ConsultationBooking } from '../types/booking';
-import { theme } from '../theme';
+import { theme as defaultTheme } from '../theme';
 
-const AppointmentsScreen = ({ navigation }: any) => {
+const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigation, route }) => {
   const { user, signOut, isLoading: authLoading } = useAuth();
-  const { theme } = useTheme();
+  const { theme: themeHook } = useTheme();
+  const theme = themeHook || defaultTheme;
+  
+  // Set up header with back button
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      headerTitle: 'My Appointments',
+      headerTitleAlign: 'center',
+      headerLeft: () => (
+        <TouchableOpacity 
+          onPress={() => navigation.goBack()}
+          style={{
+            marginLeft: 16,
+            padding: 8,
+            borderRadius: 20,
+            backgroundColor: 'rgba(0,0,0,0.05)'
+          }}
+        >
+          <Ionicons name="arrow-back" size={24} color={theme.colors.primary} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, theme.colors.primary]);
   const [appointments, setAppointments] = useState<ConsultationBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -132,6 +155,7 @@ const AppointmentsScreen = ({ navigation }: any) => {
   }, [user?._id]);
 
   const handleRefresh = useCallback(() => {
+    console.log('🔄 [AppointmentsScreen] User triggered refresh');
     setIsRefreshing(true);
     setPage(1);
     setHasMore(true);
@@ -140,27 +164,56 @@ const AppointmentsScreen = ({ navigation }: any) => {
 
   const handleLoadMore = useCallback(() => {
     if (isLoadingMore || isLoading || !hasMore) {
+      console.log('⏸️ [AppointmentsScreen] Load more skipped:', {
+        isLoadingMore,
+        isLoading,
+        hasMore,
+      });
       return;
     }
+    console.log('📄 [AppointmentsScreen] Loading more appointments, page:', page + 1);
     fetchAppointments(page + 1);
   }, [fetchAppointments, page, isLoadingMore, isLoading, hasMore]);
 
   const handleViewPrescription = useCallback(
     async (bookingId: number | string) => {
+      const numericId = Number(bookingId);
+      console.log('💊 [AppointmentsScreen] View prescription pressed:', {
+        bookingId,
+        numericId,
+      });
+      
       try {
-        const numericId = Number(bookingId);
+        console.log('📡 [AppointmentsScreen] Fetching prescription for booking:', numericId);
         const response = await apiService.getBookingPrescription(numericId);
+        console.log('📡 [AppointmentsScreen] Prescription API response:', {
+          hasData: !!response?.data,
+          prescriptionId: response?.data?.id,
+          prescriptionType: response?.data?.prescriptionType,
+        });
+        
         if (response?.data?.id) {
+          console.log('🚀 [AppointmentsScreen] Navigating to PrescriptionDetail:', {
+            prescriptionId: response.data.id,
+          });
           navigation.navigate('HomeStack', {
             screen: 'PrescriptionDetail',
             params: { prescriptionId: response.data.id },
           });
         } else {
+          console.log('ℹ️ [AppointmentsScreen] No prescription found');
           Alert.alert('No prescription uploaded yet.');
         }
       } catch (error: any) {
         const status = error?.response?.status;
+        console.error('❌ [AppointmentsScreen] Error fetching prescription:', {
+          status,
+          error: error?.message,
+          bookingId: numericId,
+        });
+        
         if (status === 404) {
+          console.log('ℹ️ [AppointmentsScreen] Prescription not found (404)');
           Alert.alert('No prescription uploaded yet.');
         } else {
           Alert.alert('Error', 'Failed to fetch prescription. Please try again later.');
@@ -260,10 +313,89 @@ const AppointmentsScreen = ({ navigation }: any) => {
     const status = (item.booking_status || item.status || '').toLowerCase();
     const statusBadgeStyle = getStatusBadgeStyle(status);
     const bookingId = item.booking_id || item._id;
+    const appointmentId = item.appointment_id || bookingId?.toString();
     const timeDisplay = item.time; // Already formatted as "09:00 - 09:15"
 
+    const handleAppointmentPress = () => {
+      // Log the full item to see available fields
+      console.log('🔍 [AppointmentsScreen] Full appointment item:', JSON.stringify(item, null, 2));
+      
+      // Extract professional ID with multiple fallbacks
+      const professionalId = String(
+        item.professional_id || 
+        item.professionalId || 
+        (item.professional && (item.professional.id || item.professional._id)) ||
+        (item.professional_data && (item.professional_data.id || item.professional_data._id)) ||
+        (item.professionalInfo && (item.professionalInfo.id || item.professionalInfo._id)) ||
+        ''
+      );
+      
+      // Extract current user ID with multiple fallbacks
+      const currentUserId = String(
+        (user as any)?.user_id || 
+        user?._id || 
+        (user as any)?.id || 
+        ''
+      );
+      
+      // Get professional name with fallbacks
+      const professionalName = 
+        item.professional_name ||
+        (item.professional && (item.professional.name || item.professional.fullName)) ||
+        (item.professional_data && item.professional_data.name) ||
+        (item.professionalInfo && item.professionalInfo.name) ||
+        'Unknown Professional';
+      
+      console.log('👆 [AppointmentsScreen] Appointment card pressed:', {
+        appointmentId,
+        bookingId,
+        professionalId: professionalId || 'NOT FOUND',
+        professionalName,
+        userId: currentUserId || 'NOT FOUND',
+        date: item.date,
+        status,
+        hasProfessionalId: !!professionalId,
+        itemKeys: Object.keys(item)
+      });
+      
+      if (appointmentId && currentUserId) {
+        console.log('🚀 [AppointmentsScreen] Navigating to AppointmentDetail:', { 
+          appointmentId, 
+          professionalId, 
+          userId: currentUserId,
+          professionalName
+        });
+        navigation.navigate('HomeStack', {
+          screen: 'AppointmentDetail',
+          params: {
+            appointmentId,
+            professionalId: professionalId || 'unknown',
+            userId: currentUserId,
+            professionalName,
+            appointmentData: item // Pass the complete appointment data
+          }
+        });
+      } else {
+        const missingFields = [];
+        if (!appointmentId) missingFields.push('appointmentId');
+        if (!currentUserId) missingFields.push('userId');
+        
+        console.error('❌ [AppointmentsScreen] Missing required parameters:', { 
+          appointmentId, 
+          professionalId, 
+          userId: currentUserId,
+          missingFields
+        });
+        
+        Alert.alert(
+          'Missing Information', 
+          `Unable to open appointment details. Missing: ${missingFields.join(', ')}`
+        );
+      }
+    };
+
     return (
-      <View style={styles.appointmentCard}>
+      <TouchableOpacity style={styles.appointmentCard} onPress={handleAppointmentPress}>
         <View style={styles.cardHeader}>
           <View style={styles.dateTimeContainer}>
             {/* Professional Name */}
@@ -364,7 +496,7 @@ const AppointmentsScreen = ({ navigation }: any) => {
             )}
           </View>
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -503,7 +635,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E88E5',
     paddingHorizontal: 16,
     paddingVertical: 16,
-    paddingTop: StatusBar.currentHeight ? StatusBar.currentHeight + 16 : 40,
+    paddingTop: (StatusBar.currentHeight || 0) + 16,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -641,10 +773,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   appointmentCard: {
-    backgroundColor: theme.colors.background.surface,
+    backgroundColor: defaultTheme.colors.background.surface,
     borderRadius: 16,
     marginBottom: 16,
-    ...theme.shadows.card,
+    ...defaultTheme.shadows.card,
     overflow: 'hidden',
   },
   cardHeader: {
@@ -765,12 +897,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 8,
     borderWidth: 1,
-    borderColor: theme.colors.primary,
+    borderColor: defaultTheme.colors.primary,
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
   },
   secondaryActionButtonText: {
-    color: theme.colors.primary,
+    color: defaultTheme.colors.primary,
     fontSize: 14,
     fontWeight: '600',
   },

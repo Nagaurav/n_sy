@@ -5,11 +5,17 @@
     "strict": true,
     "jsx": "react",
     "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "*": ["src/types/*", "node_modules/*"]
+    },
     "allowJs": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "noEmit": true
+    "noEmit": true,
+    "resolveJsonModule": true
   },
-  "include": ["src", "App.tsx", "index.js"]
+  "include": ["src/**/*", "App.tsx", "index.js"],
+  "exclude": ["node_modules"]
 }

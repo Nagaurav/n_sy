@@ -7,7 +7,6 @@ import { MainTabParamList } from '../types/navigation';
 // Import your screen components
 import HomeScreen from '../screens/HomeScreen';
 import AppointmentsScreen from '../screens/AppointmentsScreen';
-import ChatListScreen from '../screens/ChatListScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -28,9 +27,6 @@ export const MainTabNavigator: React.FC = () => {
             case 'Appointments':
               iconName = focused ? 'calendar' : 'calendar-outline';
               break;
-            case 'ChatList':
-              iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
-              break;
             case 'Profile':
               iconName = focused ? 'person' : 'person-outline';
               break;
@@ -41,15 +37,14 @@ export const MainTabNavigator: React.FC = () => {
           return <Ionicons name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: theme.colors.text.secondary,
+        tabBarInactiveTintColor: '#6B7280',
         tabBarStyle: {
-          backgroundColor: theme.colors.background.surface,
-          borderTopColor: theme.colors.text.secondary,
+          backgroundColor: '#FFFFFF',
+          borderTopColor: '#E5E7EB',
           borderTopWidth: 1,
           paddingBottom: 8,
           paddingTop: 8,
           height: 60,
-          ...theme.shadows.card,
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -70,13 +65,6 @@ export const MainTabNavigator: React.FC = () => {
         component={AppointmentsScreen}
         options={{
           tabBarLabel: 'Appointments',
-        }}
-      />
-      <Tab.Screen 
-        name="ChatList" 
-        component={ChatListScreen}
-        options={{
-          tabBarLabel: 'Chat',
         }}
       />
       <Tab.Screen 

@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config';
 import { store } from '../store';
 import { signOutAsync } from '../store/authSlice';
@@ -33,9 +34,30 @@ const api: AxiosInstance = axios.create({
 // --- REQUEST INTERCEPTOR: Dynamically inject token from Redux store ---
 api.interceptors.request.use(
   async (config) => {
-    // CRITICAL: Only read from Redux State - single source of truth
-    const state = store.getState();
-    const token = state.auth.token;
+    // CRITICAL: Handle auth token race condition - Redux store might not be rehydrated yet
+    // Try Redux store first (fastest), fallback to AsyncStorage if not available
+    let token: string | null = null;
+    
+    try {
+      const state = store.getState();
+      token = state.auth?.token;
+      
+      // If Redux store doesn't have token yet (not rehydrated), try AsyncStorage
+      if (!token) {
+        try {
+          const storedToken = await AsyncStorage.getItem('@Auth:token');
+          if (storedToken) {
+            token = storedToken;
+            console.log('⚠️ [apiService] Token not in Redux yet, using AsyncStorage fallback');
+          }
+        } catch (storageError) {
+          console.warn('⚠️ [apiService] Failed to read token from AsyncStorage:', storageError);
+        }
+      }
+    } catch (error) {
+      console.error('❌ [apiService] Error reading token:', error);
+      // Continue without token - will fail with 401 if auth is required
+    }
 
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -140,6 +162,24 @@ export const apiService = {
       };
     } catch (error: any) {
       console.error('Error in GET request:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
+  // Generic POST wrapper
+  post: async <T = any>(
+    endpoint: string,
+    data?: any,
+    config?: any,
+  ): Promise<{ success: boolean; data?: T; error?: string }> => {
+    try {
+      const response = await api.post<T>(endpoint, data, config);
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: any) {
+      console.error('Error in POST request:', error);
       return buildApiErrorResponse(error);
     }
   },

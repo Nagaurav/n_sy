@@ -27,9 +27,7 @@ import PaymentGatewayScreen from './src/screens/PaymentGatewayScreen';
 import BookingSuccessScreen from './src/screens/BookingSuccessScreen';
 import BookingFailedScreen from './src/screens/BookingFailedScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
-import PrescriptionsListScreen from './src/screens/PrescriptionsListScreen';
 import PrescriptionDetailScreen from './src/screens/PrescriptionDetailScreen';
-import ChatListScreen from './src/screens/ChatListScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import AppointmentsScreen from './src/screens/AppointmentsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -67,6 +65,12 @@ export type HomeStackParamList = {
     refresh?: boolean;  // Optional refresh flag to trigger data reload
   };
   ClassesList: undefined;
+  AppointmentDetail: { 
+    appointmentId: string;
+    professionalId: string;
+    userId: string;
+    professionalName?: string;
+  };
   DateTimeSelection: { 
     professionalId: string;
     professionalName: string;
@@ -113,15 +117,15 @@ export type HomeStackParamList = {
   EditProfile: {
     currentUser: import('./src/types/userProfile').UserProfileData;
   };
-  ChatList: undefined;
   ChatScreen: {
     chatId: string;
+    appointmentId: string;
     title?: string;
     receiverId?: string;
   };
-  PrescriptionsList: undefined;
   PrescriptionDetail: {
     prescriptionId: string;
+    appointmentId?: string;
   };
 };
 
@@ -140,6 +144,7 @@ import HelpSupportScreen from './src/screens/HelpSupportScreen';
 import ProfessionalsListScreen from './src/screens/ProfessionalsListScreen';
 import ProfessionalProfileScreen from './src/screens/ProfessionalProfileScreen';
 import ClassesListScreen from './src/screens/ClassesListScreen';
+import AppointmentDetailScreen from './src/screens/AppointmentDetailScreen';
 
 // Home Stack Navigator
 const HomeStackNavigator = () => (
@@ -153,6 +158,7 @@ const HomeStackNavigator = () => (
     <HomeStack.Screen name="ProfessionalsList" component={ProfessionalsListScreen} />
     <HomeStack.Screen name="ProfessionalProfile" component={ProfessionalProfileScreen} />
     <HomeStack.Screen name="ClassesList" component={ClassesListScreen} />
+    <HomeStack.Screen name="AppointmentDetail" component={AppointmentDetailScreen} />
     <HomeStack.Screen name="DateTimeSelection" component={DateTimeSelectionScreen} />
     <HomeStack.Screen name="BookingConfirmation" component={BookingConfirmationScreen} />
     <HomeStack.Screen 
@@ -177,9 +183,7 @@ const HomeStackNavigator = () => (
       }}
     />
     <HomeStack.Screen name="EditProfile" component={EditProfileScreen} />
-    <HomeStack.Screen name="ChatList" component={ChatListScreen} />
     <HomeStack.Screen name="ChatScreen" component={ChatScreen} />
-    <HomeStack.Screen name="PrescriptionsList" component={PrescriptionsListScreen} />
     <HomeStack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
   </HomeStack.Navigator>
 );
@@ -341,20 +345,27 @@ const AppNavigator = () => {
 };
 
 const App = () => {
-  return (
-    <Provider store={store}>
-      <ThemeProvider>
-        <AuthProvider>
-          <SafeAreaProvider>
-            <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-            <NavigationContainer>
-              <AppNavigator />
-            </NavigationContainer>
-          </SafeAreaProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </Provider>
-  );
+  console.log('🚀 [App] Application starting...');
+  
+  try {
+    return (
+      <Provider store={store}>
+        <ThemeProvider>
+          <AuthProvider>
+            <SafeAreaProvider>
+              <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+              <NavigationContainer>
+                <AppNavigator />
+              </NavigationContainer>
+            </SafeAreaProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </Provider>
+    );
+  } catch (error) {
+    console.error('❌ [App] Fatal error during app initialization:', error);
+    throw error;
+  }
 };
 
 export default App;

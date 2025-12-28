@@ -20,7 +20,6 @@ import { Alert } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { theme } from '../theme';
 import Card from '../components/Card';
-import ServiceEntryCard from '../components/ServiceEntryCard';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { apiService } from '../services/apiService';
@@ -215,52 +214,88 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  fab: {
-    position: 'absolute',
-    bottom: 40,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
+  bookingOptions: {
+    marginTop: 24,
   },
-  prescriptionCard: {
-    padding: 16,
-  },
-  prescriptionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  prescriptionIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#E3F2FD', // Light blue background matching primary theme
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  prescriptionTextContainer: {
-    flex: 1,
-  },
-  prescriptionTitle: {
-    fontSize: 18,
+  bookingOptionsTitle: {
+    fontSize: 20,
     fontWeight: '600',
     color: '#111827',
+    marginBottom: 16,
+  },
+  bookingOptionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  bookingOptionCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  bookingOptionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  bookingOptionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    textAlign: 'center',
     marginBottom: 4,
   },
-  prescriptionSubtitle: {
-    fontSize: 14,
+  bookingOptionSubtitle: {
+    fontSize: 12,
     color: '#6B7280',
+    textAlign: 'center',
+  },
+  // Quick Actions Styles
+  quickActionsContainer: {
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  quickActionCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  quickActionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  quickActionTextContainer: {
+    flex: 1,
+    marginLeft: 16,
+    marginRight: 8,
+  },
+  quickActionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  quickActionSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.9)',
   },
 });
 
@@ -277,6 +312,19 @@ const HomeScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nextAppointment, setNextAppointment] = useState<NextAppointment | null>(null);
+
+  // Debug: Component mount
+  useEffect(() => {
+    console.log('🏠 [HomeScreen] Component mounted');
+    console.log('👤 [HomeScreen] User:', {
+      userId: (user as any)?.user_id || user?._id,
+      userName: user?.first_name || user?.firstName,
+      hasUser: !!user,
+    });
+    return () => {
+      console.log('🏠 [HomeScreen] Component unmounting');
+    };
+  }, []);
 
   // Fetch next appointment data
   const fetchNextAppointment = async () => {
@@ -326,23 +374,18 @@ const HomeScreen = () => {
   }, [(user as any)?.user_id || user?._id]);
 
   const onRefresh = useCallback(() => {
+    console.log('🔄 [HomeScreen] User triggered refresh');
     setRefreshing(true);
     fetchNextAppointment();
   }, []);
 
-  const navigateToPrescriptions = () => {
-    navigation.navigate('PrescriptionsList');
-  };
-
   const openDrawer = () => {
+    console.log('📂 [HomeScreen] Opening drawer menu');
     navigation.dispatch(DrawerActions.openDrawer());
   };
 
-  const navigateToChat = () => {
-    navigation.navigate('ChatList');
-  };
-
   const navigateToAppointments = () => {
+    console.log('📅 [HomeScreen] Navigating to Appointments screen');
     navigation.getParent()?.navigate('Appointments');
   };
 
@@ -360,8 +403,14 @@ const HomeScreen = () => {
 
   const handleJoinSession = () => {
     if (nextAppointment?.session_link) {
-      // Open the session link in a webview or browser
+      console.log('🎥 [HomeScreen] Joining session:', {
+        appointmentId: nextAppointment.id,
+        sessionLink: nextAppointment.session_link,
+        professionalName: nextAppointment.professional_name,
+      });
       Linking.openURL(nextAppointment.session_link);
+    } else {
+      console.warn('⚠️ [HomeScreen] No session link available for appointment:', nextAppointment?.id);
     }
   };
 
@@ -462,7 +511,10 @@ const HomeScreen = () => {
               <Text style={styles.noDataText}>No upcoming sessions</Text>
               <TouchableOpacity 
                 style={[styles.actionButton, { marginTop: 16, backgroundColor: theme.colors.primary }]}
-                onPress={() => navigation.navigate('ProfessionalsList', {})}
+                onPress={() => {
+                  console.log('📖 [HomeScreen] Navigating to ProfessionalsList to book session');
+                  navigation.navigate('ProfessionalsList', {});
+                }}
                 activeOpacity={0.7}
               >
                 <Text style={styles.actionButtonText}>Book a Session</Text>
@@ -470,40 +522,49 @@ const HomeScreen = () => {
             </Card>
           )}
           
-          {/* Prescriptions Section */}
-          <Text style={styles.sectionTitle}>My Prescriptions</Text>
-          <Card style={styles.appointmentCard}>
-            <TouchableOpacity
-              style={styles.prescriptionCard}
-              onPress={navigateToPrescriptions}
-              activeOpacity={0.7}
+          {/* Quick Actions Section */}
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.quickActionsContainer}>
+            {/* Book Consultation Card */}
+            <TouchableOpacity 
+              style={[styles.quickActionCard, { backgroundColor: theme.colors.primary }]}
+              onPress={() => {
+                console.log('👨‍⚕️ [HomeScreen] Navigating to Book Consultation');
+                navigation.navigate('ProfessionalsList', { bookingType: 'consultation' });
+              }}
+              activeOpacity={0.9}
             >
-              <View style={styles.prescriptionContent}>
-                <View style={styles.prescriptionIconContainer}>
-                  <Ionicons name="medical-outline" size={32} color={theme.colors.primary} />
+              <View style={styles.quickActionContent}>
+                <Ionicons name="medical" size={32} color="#FFFFFF" />
+                <View style={styles.quickActionTextContainer}>
+                  <Text style={styles.quickActionTitle}>Book Consultation</Text>
+                  <Text style={styles.quickActionSubtitle}>1:1 session with an expert</Text>
                 </View>
-                <View style={styles.prescriptionTextContainer}>
-                  <Text style={styles.prescriptionTitle}>View Prescriptions</Text>
-                  <Text style={styles.prescriptionSubtitle}>Access your medical records</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
+                <Ionicons name="chevron-forward" size={24} color="#FFFFFF" />
               </View>
             </TouchableOpacity>
-          </Card>
-          
-          {/* Service Entry Card */}
-          <ServiceEntryCard />
+
+            {/* Join Class Card */}
+            <TouchableOpacity 
+              style={[styles.quickActionCard, { backgroundColor: theme.colors.secondary }]}
+              onPress={() => {
+                console.log('🧘 [HomeScreen] Navigating to Join Class');
+                navigation.navigate('ClassesList', { bookingType: 'class' });
+              }}
+              activeOpacity={0.9}
+            >
+              <View style={styles.quickActionContent}>
+                <Ionicons name="people" size={32} color="#FFFFFF" />
+                <View style={styles.quickActionTextContainer}>
+                  <Text style={styles.quickActionTitle}>Join a Class</Text>
+                  <Text style={styles.quickActionSubtitle}>Group yoga and wellness sessions</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
-      
-      {/* Floating Action Button */}
-      <TouchableOpacity 
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-        onPress={navigateToChat}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="chatbubbles" size={24} color="#FFFFFF" />
-      </TouchableOpacity>
     </SafeAreaView>
   );
 };

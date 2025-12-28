@@ -4,15 +4,16 @@ import { useRoute, RouteProp, useNavigation, useIsFocused } from '@react-navigat
 import type { StackNavigationProp } from '@react-navigation/stack';
 import { GiftedChat, IMessage, Bubble } from 'react-native-gifted-chat';
 import { useAuth } from '../contexts/AuthContext';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
 import { apiService } from '../services/apiService';
 import { socketService } from '../services/socketService';
 import type { HomeStackParamList } from '../../App';
 import type { MessageStatus } from '../types/chat';
 
 interface ChatScreenParams {
-  chatId: string;
+  appointmentId: string;
   title?: string;
-  receiverId?: string;
 }
 
 type ChatScreenRouteProp = RouteProp<Record<'ChatScreen', ChatScreenParams>, 'ChatScreen'>;
@@ -23,18 +24,30 @@ const ChatScreen: React.FC = () => {
   const navigation = useNavigation<ChatScreenNavigationProp>();
   const { user, token, isAuthReady } = useAuth();
   const isFocused = useIsFocused();
-
-  // CRITICAL: Ensure chatId is always a string (UUID format from backend)
-  const { chatId: rawChatId, title } = route.params;
-  const chatId = String(rawChatId || ''); // Explicitly convert to string
   
-  // Log chatId for debugging
+  // Get appointment data from Redux store
+  const currentAppointment = useSelector((state: RootState) => state.appointment.currentAppointment);
+
+  // Use appointmentId as the room ID
+  const { appointmentId: rawAppointmentId, title } = route.params;
+  const appointmentId = String(rawAppointmentId || '');
+  const chatId = appointmentId; // Use appointmentId as chatId for room identification
+  
+  // Get professional name from Redux store
+  const professionalName = currentAppointment?.professional_name || title || 'Professional';
+  
+  // Log chatId and appointmentId for debugging
   useEffect(() => {
-    console.log('🔍 ChatScreen mounted with chatId:', chatId, 'Type:', typeof chatId);
+    console.log('🔍 ChatScreen mounted with chatId:', chatId, 'appointmentId:', appointmentId);
     if (!chatId || chatId === 'undefined' || chatId === 'null') {
-      console.error('❌ Invalid chatId received:', rawChatId);
+      console.error('❌ Invalid chatId received:', chatId);
     }
-  }, [chatId, rawChatId]);
+    if (!appointmentId || appointmentId === 'undefined' || appointmentId === 'null') {
+      console.error('❌ Invalid appointmentId received:', rawAppointmentId);
+      // Navigate back if no appointmentId - chat should only be accessible via appointment
+      navigation.goBack();
+    }
+  }, [chatId, rawAppointmentId, appointmentId, navigation]);
 
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -46,18 +59,34 @@ const ChatScreen: React.FC = () => {
   // Track which messages have been marked as read to avoid duplicate receipts
   const readMessagesRef = useRef<Set<string>>(new Set());
 
-  // CRITICAL: Derive userId once and keep it stable to prevent re-connections
-  const currentUserId = useRef<string>(
-    (user as any)?.user_id || (user as any)?._id || (user as any)?.id || 'me'
-  );
+  // CRITICAL: Use single canonical user_id source to prevent socket registration failures
+  // The User type defines user_id as the primary key (number), so we use that exclusively
+  const getCanonicalUserId = useCallback((): string => {
+    if (!user) {
+      console.error('❌ [ChatScreen] User object is null/undefined');
+      return '';
+    }
+    // Use user_id as the single source of truth (primary key from API)
+    const userId = (user as any)?.user_id;
+    if (!userId && userId !== 0) {
+      console.error('❌ [ChatScreen] user_id is missing from user object:', user);
+      return '';
+    }
+    return String(userId);
+  }, [user]);
+
+  const currentUserId = useRef<string>(getCanonicalUserId());
   
   // Update userId ref when user changes, but don't trigger re-connection
   useEffect(() => {
-    const newUserId = (user as any)?.user_id || (user as any)?._id || (user as any)?.id || 'me';
-    if (newUserId !== currentUserId.current) {
+    const newUserId = getCanonicalUserId();
+    if (newUserId && newUserId !== currentUserId.current) {
+      console.log('🔄 [ChatScreen] User ID updated:', { old: currentUserId.current, new: newUserId });
       currentUserId.current = newUserId;
+    } else if (!newUserId) {
+      console.error('❌ [ChatScreen] Cannot update userId: invalid user_id');
     }
-  }, [user]);
+  }, [user, getCanonicalUserId]);
 
   useEffect(() => {
     if (title) {
@@ -194,8 +223,7 @@ const ChatScreen: React.FC = () => {
     // Cleanup: Only disconnect if chatId or token changes (not on every re-render)
     return () => {
       console.log('🧹 Running cleanup: Removing chat listeners (not disconnecting socket)');
-      // Note: We don't disconnect the socket here because ChatListScreen may still be using it
-      // We only remove the chat-specific listeners
+      // Cleanup: Remove chat-specific listeners
     };
   }, [isAuthReady, token, chatId]); // CRITICAL: Only token and chatId trigger re-connection
 

@@ -2,13 +2,10 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface User {
-  user_id: number; // API returns user_id as number
-  _id?: string; // Keep for backward compatibility
+  id: number; // Standardized single ID field
   phone: string;
   first_name: string; // API uses snake_case
   last_name: string; // API uses snake_case
-  firstName?: string; // Keep for backward compatibility
-  lastName?: string; // Keep for backward compatibility
   email: string;
   password?: string;
   dob?: string;
