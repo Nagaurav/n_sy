@@ -58,12 +58,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   headerContent: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  menuButton: {
+  headerIconsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  iconButton: {
     padding: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 8,
@@ -180,6 +188,7 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 40,
+    opacity: 0, // Keep for layout consistency
   },
   notificationButton: {
     padding: 8,
@@ -384,6 +393,16 @@ const HomeScreen = () => {
     navigation.dispatch(DrawerActions.openDrawer());
   };
 
+  const navigateToChat = () => {
+    console.log('💬 [HomeScreen] Navigating to Chat screen');
+    navigation.navigate('ChatScreen', {
+      chatId: 'general-chat',
+      appointmentId: 'general',
+      title: 'Support Chat',
+      receiverId: 'support'
+    });
+  };
+
   const navigateToAppointments = () => {
     console.log('📅 [HomeScreen] Navigating to Appointments screen');
     navigation.getParent()?.navigate('Appointments');
@@ -441,13 +460,17 @@ const HomeScreen = () => {
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
         <View style={styles.headerContent}>
-          <TouchableOpacity onPress={openDrawer} style={styles.menuButton} activeOpacity={0.7}>
-            <Ionicons name="menu-outline" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          
-          <Text style={styles.appTitle}>SAMYAYOG</Text>
-
-          <View style={styles.placeholder} />
+          <View style={styles.headerIconsContainer}>
+            <TouchableOpacity onPress={openDrawer} style={styles.iconButton} activeOpacity={0.7}>
+              <Ionicons name="menu-outline" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            
+            <Text style={styles.appTitle}>SAMYAYOG</Text>
+            
+            <TouchableOpacity onPress={navigateToChat} style={styles.iconButton} activeOpacity={0.7}>
+              <Ionicons name="chatbubble-ellipses-outline" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
       

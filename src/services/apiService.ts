@@ -80,9 +80,10 @@ api.interceptors.response.use(
         headers: error.response.headers,
       });
 
-      // CRITICAL: Only logout on 401 (Unauthorized), not 403 (Forbidden)
-      // 403 can mean permission denied for a specific resource, not auth failure
-      const isAuthError = error.response.status === 401;
+      // Handle both 401 (Unauthorized) and 403 (Forbidden) with 'Invalid token' message
+      const isAuthError = error.response.status === 401 || 
+                         (error.response.status === 403 && 
+                          error.response.data?.message?.includes('Invalid token'));
       
       // Handle authentication errors (401 Unauthorized only)
       if (isAuthError) {

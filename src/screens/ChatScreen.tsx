@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Text, Alert } from 'react-native';
+import { store } from '../store';
+import { signOutAsync } from '../store/authSlice';
 import { useRoute, RouteProp, useNavigation, useIsFocused } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import { GiftedChat, IMessage, Bubble } from 'react-native-gifted-chat';
@@ -92,6 +94,35 @@ const ChatScreen: React.FC = () => {
     if (title) {
       navigation.setOptions({ headerTitle: title } as any);
     }
+    
+    // Listen for authentication errors from socket
+    const handleAuthError = (error: any) => {
+      console.error('🔒 Authentication error in chat:', error);
+      // You can show an alert or navigate to login screen
+      Alert.alert(
+        'Session Expired',
+        'Your session has expired. Please log in again.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Dispatch logout action
+              store.dispatch(signOutAsync() as any);
+              // Navigate to login screen - using the correct navigation action
+              // @ts-ignore - We know this navigation is valid in your stack
+              navigation.navigate('Auth', { screen: 'Login' });
+            },
+          },
+        ]
+      );
+    };
+    
+    const socket = socketService.instance;
+    socket?.on('auth_error', handleAuthError);
+    
+    return () => {
+      socket?.off('auth_error', handleAuthError);
+    };
   }, [navigation, title]);
 
   const mapBackendMessageToGifted = useCallback(
@@ -139,6 +170,21 @@ const ChatScreen: React.FC = () => {
   const loadMessages = useCallback(
     async (pageToLoad: number, append: boolean = false) => {
       const limit = 20;
+      
+      // Validate token before making the request
+      if (!token) {
+        console.error('❌ Cannot load messages: No authentication token');
+        setMessages([]);
+        return;
+      }
+      
+      // Validate chatId
+      if (!chatId || chatId === 'undefined' || chatId === 'null') {
+        console.error('❌ Cannot load messages: Invalid chatId', chatId);
+        setMessages([]);
+        return;
+      }
+      
       try {
         if (append) {
           setIsLoadingEarlier(true);
@@ -148,8 +194,10 @@ const ChatScreen: React.FC = () => {
 
         // CRITICAL: Ensure chatId is passed as string to API
         const chatIdStr = String(chatId);
-        console.log('📡 Fetching messages for chatId:', chatIdStr, 'Type:', typeof chatIdStr);
+        console.log('📡 Fetching messages for chatId:', chatIdStr, 'Page:', pageToLoad, 'Token present:', !!token);
+        
         const response = await apiService.getChatMessages(chatIdStr, pageToLoad, limit);
+        
         if (response.success && response.data) {
           const mapped = response.data.map(mapBackendMessageToGifted);
           const normalized = mapped.reverse();
@@ -161,22 +209,38 @@ const ChatScreen: React.FC = () => {
             append ? GiftedChat.prepend(previous, normalized) : normalized,
           );
         } else if (response.error) {
-          // Handle permission errors gracefully (403, 404, etc.)
-          console.warn('⚠️ Failed to load messages:', response.error);
-          // Don't show error for 403/404 - just show empty chat
-          // The user might not have permission or chat might not exist yet
-          if (!append) {
-            setMessages([]);
+          // Handle specific error cases
+          if (response.error.toLowerCase().includes('token') || response.error.toLowerCase().includes('auth')) {
+            console.error('❌ Authentication error:', response.error);
+            // Consider triggering a token refresh or logout flow here
+          } else if (response.error.includes('404')) {
+            console.log('ℹ️ Chat not found, starting with empty chat');
+            if (!append) setMessages([]);
+          } else if (response.error.includes('403')) {
+            console.warn('⚠️ Permission denied for chat:', chatId);
+            if (!append) setMessages([]);
+          } else {
+            console.warn('⚠️ Failed to load messages:', response.error);
           }
+          
           if (append) {
             setHasMore(false);
+          } else {
+            setMessages([]);
           }
         } else if (append) {
           setHasMore(false);
         }
-      } catch (error) {
-        console.error('Failed to load chat messages:', error);
-        // On error, just show empty messages (don't break the UI)
+      } catch (error: any) {
+        console.error('❌ Error loading chat messages:', error);
+        
+        // Handle specific error cases
+        if (error?.response?.status === 401 || error?.message?.includes('token')) {
+          console.error('❌ Authentication failed - token may be invalid or expired');
+          // Consider triggering a token refresh or logout flow here
+        }
+        
+        // On error, show empty messages (don't break the UI)
         if (!append) {
           setMessages([]);
         }
@@ -197,44 +261,129 @@ const ChatScreen: React.FC = () => {
   // CRITICAL: Isolated socket connection - only depends on token and chatId
   // This prevents unnecessary re-connections when other state changes
   useEffect(() => {
-    // Validate chatId is a valid non-empty string (UUID format)
-    if (!isAuthReady || !token || !chatId || chatId === 'undefined' || chatId === 'null' || !currentUserId.current) {
-      if (!chatId || chatId === 'undefined' || chatId === 'null') {
-        console.error('❌ Cannot connect socket: Invalid chatId', chatId);
+    let socket: any = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 3;
+    let reconnectTimeout: NodeJS.Timeout;
+
+    const connectSocket = () => {
+      // Validate chatId is a valid non-empty string (UUID format)
+      if (!isAuthReady || !token || !chatId || chatId === 'undefined' || chatId === 'null' || !currentUserId.current) {
+        if (!chatId || chatId === 'undefined' || chatId === 'null') {
+          console.error('❌ Cannot connect socket: Invalid chatId', chatId);
+        } else if (!token) {
+          console.error('❌ Cannot connect socket: No authentication token found');
+          // Consider redirecting to login or refreshing token here
+        }
+        return null;
       }
-      return;
-    }
+      
+      // Validate token format (basic check)
+      if (typeof token !== 'string' || token.split('.').length !== 3) {
+        console.error('❌ Invalid token format');
+        return null;
+      }
 
-    console.log('🔌 Attempting stable socket connection...', { 
-      hasToken: !!token, 
-      chatId, 
-      userId: currentUserId.current 
-    });
+      console.log('🔌 Attempting socket connection...', { 
+        hasToken: !!token, 
+        chatId, 
+        userId: currentUserId.current,
+        reconnectAttempts
+      });
 
-    // Connect socket with token, userId, and userType - registration is automatic
-    const socket = socketService.connect(token, String(currentUserId.current), 'patient');
-    socketRef.current = socket;
+      try {
+        // Connect socket with token, userId, and userType - registration is automatic
+        const newSocket = socketService.connect(token, String(currentUserId.current), 'patient');
+        
+        // Set up connection error handler
+        newSocket.on('connect_error', (error: any) => {
+          console.error('❌ Socket connection error:', error.message);
+          
+          // Handle authentication errors
+          if (error.message.includes('auth') || error.message.includes('token')) {
+            console.error('❌ Authentication failed - token may be invalid or expired');
+            // Consider triggering a token refresh or logout flow here
+            return;
+          }
+          
+          // Implement exponential backoff for reconnection
+          if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Max 30s delay
+            console.log(`⏳ Reconnecting in ${delay}ms (attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
+            
+            reconnectTimeout = setTimeout(() => {
+              reconnectAttempts++;
+              connectSocket();
+            }, delay);
+          } else {
+            console.error(`❌ Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached`);
+          }
+        });
+        
+        // Handle successful connection
+        newSocket.on('connect', () => {
+          console.log('✅ Socket connected successfully');
+          reconnectAttempts = 0; // Reset reconnect counter on successful connection
+          
+          // Join the specific chat room - ensure chatId is string
+          const chatIdStr = String(chatId);
+          console.log('🔌 Joining chat room:', chatIdStr);
+          socketService.joinChat(chatIdStr, String(currentUserId.current));
+        });
+        
+        return newSocket;
+      } catch (error) {
+        console.error('❌ Error connecting socket:', error);
+        return null;
+      }
+    };
     
-    // Join the specific chat room - ensure chatId is string
-    const chatIdStr = String(chatId);
-    console.log('🔌 Joining chat room:', chatIdStr);
-    socketService.joinChat(chatIdStr, String(currentUserId.current));
+    // Initial connection
+    socket = connectSocket();
+    socketRef.current = socket;
 
-    // Cleanup: Only disconnect if chatId or token changes (not on every re-render)
+    // Cleanup function
     return () => {
-      console.log('🧹 Running cleanup: Removing chat listeners (not disconnecting socket)');
-      // Cleanup: Remove chat-specific listeners
+      console.log('🧹 Cleaning up socket connection');
+      clearTimeout(reconnectTimeout);
+      
+      // Only disconnect if we have a valid socket
+      if (socket) {
+        try {
+          socket.off('connect_error');
+          socket.off('connect');
+          if (socket.connected) {
+            console.log('🔌 Disconnecting socket');
+            socket.disconnect();
+          }
+        } catch (error) {
+          console.error('Error during socket cleanup:', error);
+        }
+      }
     };
   }, [isAuthReady, token, chatId]); // CRITICAL: Only token and chatId trigger re-connection
 
   // Separate effect for loading messages (depends on auth and chatId)
   useEffect(() => {
-    // Validate chatId is a valid non-empty string before loading messages
-    if (isAuthReady && token && chatId && chatId !== 'undefined' && chatId !== 'null') {
-      loadMessages(1, false);
-    } else if (chatId === 'undefined' || chatId === 'null') {
-      console.error('❌ Cannot load messages: Invalid chatId', chatId);
+    // Validate chatId and token before loading messages
+    if (!isAuthReady) {
+      console.log('🔄 Auth not ready yet, waiting...');
+      return;
     }
+    
+    if (!token) {
+      console.error('❌ Cannot load messages: No authentication token');
+      // Consider redirecting to login or refreshing token here
+      return;
+    }
+    
+    if (!chatId || chatId === 'undefined' || chatId === 'null') {
+      console.error('❌ Cannot load messages: Invalid chatId', chatId);
+      return;
+    }
+    
+    // Only proceed if we have all required data
+    loadMessages(1, false);
   }, [isAuthReady, token, chatId, loadMessages]);
 
   // Separate effect for socket event listeners (depends on chatId and isFocused)

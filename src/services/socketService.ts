@@ -63,6 +63,16 @@ class SocketService {
     // Handle connection errors
     this.socket.on('connect_error', (error) => {
       console.error('❌ Socket.IO connection error:', error);
+      
+      // Handle authentication errors specifically
+      if (error.message.includes('jwt') || error.message.includes('token') || error.message.includes('auth')) {
+        console.error('🔒 Authentication error in socket connection:', error.message);
+        // Emit an event that can be handled by the app to trigger a logout
+        this.socket?.emit('auth_error', { 
+          code: 'AUTH_ERROR', 
+          message: 'Authentication failed. Please log in again.' 
+        });
+      }
     });
 
     // Handle disconnection

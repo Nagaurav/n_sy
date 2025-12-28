@@ -32,6 +32,7 @@ import {
 const { width } = Dimensions.get('window');
 
 interface RouteParams {
+  bookingType?: 'class' | 'consultation';
   categoryId?: string;
   searchQuery?: string;
   categoryName?: string;
