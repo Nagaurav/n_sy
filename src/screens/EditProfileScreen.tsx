@@ -19,6 +19,8 @@ import apiService from '../services/apiService';
 import type { UserProfileData } from '../types/userProfile';
 import { useAuth } from '../contexts/AuthContext';
 import { FloatingLabelInput } from '../components/FloatingLabelInput';
+import { theme } from '../theme';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
 type EditProfileRouteProp = RouteProp<HomeStackParamList, 'EditProfile'>;
 type EditProfileNavigationProp = StackNavigationProp<HomeStackParamList, 'EditProfile'>;
@@ -163,10 +165,10 @@ const EditProfileScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#1E88E5" barStyle="light-content" />
+      <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>{'<'} Back</Text>
+          <Ionicons name="arrow-back" size={20} color={theme.colors.background.surface} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>
       </View>
@@ -387,7 +389,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    backgroundColor: '#1E88E5',
+    backgroundColor: theme.colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -398,14 +400,10 @@ const styles = StyleSheet.create({
     padding: 8,
     marginRight: 8,
   },
-  backButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-  },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: theme.colors.background.surface,
   },
   formContainer: {
     padding: 16,
@@ -413,7 +411,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: theme.colors.text.primary,
     marginBottom: 12,
   },
   fieldGroup: {
@@ -421,25 +419,25 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
     marginBottom: 4,
   },
   input: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.background.surface,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
-    color: '#111827',
+    color: theme.colors.text.primary,
   },
   multilineInput: {
     minHeight: 80,
     textAlignVertical: 'top',
   },
   dropdown: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.background.surface,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E5E7EB',
@@ -448,14 +446,14 @@ const styles = StyleSheet.create({
   },
   dropdownText: {
     fontSize: 16,
-    color: '#111827',
+    color: theme.colors.text.primary,
   },
   dropdownOptionsContainer: {
     marginTop: 4,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.background.surface,
   },
   dropdownOption: {
     paddingHorizontal: 12,
@@ -465,10 +463,10 @@ const styles = StyleSheet.create({
   },
   dropdownOptionText: {
     fontSize: 16,
-    color: '#111827',
+    color: theme.colors.text.primary,
   },
   saveButton: {
-    backgroundColor: '#1E88E5',
+    backgroundColor: theme.colors.primary,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -479,7 +477,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   saveButtonText: {
-    color: '#FFFFFF',
+    color: theme.colors.background.surface,
     fontSize: 16,
     fontWeight: '600',
   },

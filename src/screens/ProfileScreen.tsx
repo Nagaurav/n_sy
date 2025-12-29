@@ -16,6 +16,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../contexts/AuthContext';
 import apiService from '../services/apiService';
 import { UserProfileData, UserHealthProfile } from '../types/userProfile';
+import { theme } from '../theme';
 
 // Simple inline SVG avatar fallback to avoid missing local asset
 const DEFAULT_AVATAR =
@@ -105,7 +106,7 @@ const ProfileScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#1E88E5" barStyle="light-content" />
+      <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
       
       {/* Header */}
       <View style={styles.header}>
@@ -113,7 +114,7 @@ const ProfileScreen = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Profile</Text>
       </View>
@@ -244,19 +245,19 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
     marginTop: 16,
     textAlign: 'center',
     marginBottom: 20,
   },
   retryButton: {
-    backgroundColor: '#1E88E5',
+    backgroundColor: theme.colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
   },
   retryButtonText: {
-    color: '#FFFFFF',
+    color: theme.colors.background.surface,
     fontWeight: '600',
     fontSize: 16,
   },
@@ -265,7 +266,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   header: {
-    backgroundColor: '#1E88E5',
+    backgroundColor: theme.colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -279,11 +280,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: theme.colors.background.surface,
     flex: 1,
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.background.surface,
     borderRadius: 12,
     padding: 20,
     marginBottom: 16,
@@ -303,7 +304,7 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 40,
     marginRight: 16,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: theme.colors.background.surface,
   },
   profileInfo: {
     flex: 1,
@@ -311,22 +312,22 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#111827',
+    color: theme.colors.text.primary,
     marginBottom: 4,
   },
   userEmail: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
     marginBottom: 2,
   },
   userPhone: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: theme.colors.text.primary,
     marginBottom: 16,
     paddingBottom: 8,
     borderBottomWidth: 1,
@@ -342,20 +343,20 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 15,
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
     fontWeight: '500',
     flex: 1,
   },
   value: {
     fontSize: 15,
-    color: '#111827',
+    color: theme.colors.text.primary,
     fontWeight: '500',
     flex: 1,
     textAlign: 'right',
     marginLeft: 16,
   },
   editButton: {
-    backgroundColor: '#1E88E5',
+    backgroundColor: theme.colors.primary,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -363,7 +364,7 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   editButtonText: {
-    color: '#FFFFFF',
+    color: theme.colors.background.surface,
     fontSize: 16,
     fontWeight: '600',
   },

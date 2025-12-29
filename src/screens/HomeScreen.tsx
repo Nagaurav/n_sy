@@ -89,30 +89,36 @@ const styles = StyleSheet.create({
   },
   greetingText: {
     fontSize: 16,
-    color: '#4B5563',
+    color: theme.colors.text.secondary,
     marginBottom: 4,
   },
   userNameText: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#111827',
+    color: theme.colors.text.primary,
     marginBottom: 8,
   },
   welcomeMessage: {
     fontSize: 16,
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
     marginBottom: 8,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#111827',
+    color: theme.colors.text.primary,
     marginBottom: 16,
   },
   appointmentCard: {
+    backgroundColor: theme.colors.background.surface,
     borderRadius: 16,
     padding: 20,
     marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   appointmentHeader: {
     flexDirection: 'row',
@@ -123,17 +129,17 @@ const styles = StyleSheet.create({
   appointmentTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: theme.colors.text.primary,
   },
   professionalName: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#111827',
+    color: theme.colors.text.primary,
     marginBottom: 4,
   },
   speciality: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
     marginBottom: 8,
   },
   appointmentDateTime: {
@@ -143,18 +149,19 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   actionButton: {
-    backgroundColor: '#1E88E5',
+    backgroundColor: theme.colors.primary,
     padding: 12,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 8,
   },
   actionButtonText: {
-    color: '#FFFFFF',
+    color: theme.colors.background.surface,
     fontSize: 16,
     fontWeight: '600',
   },
   noDataContainer: {
+    backgroundColor: theme.colors.background.surface,
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
@@ -163,7 +170,7 @@ const styles = StyleSheet.create({
   },
   noDataText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
     marginTop: 12,
     textAlign: 'center',
     fontWeight: '500',
@@ -176,11 +183,11 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 16,
-    color: '#4B5563',
+    color: theme.colors.text.secondary,
     fontSize: 16,
   },
   appTitle: {
-    color: 'white',
+    color: theme.colors.background.surface,
     fontSize: 18,
     fontWeight: 'bold',
     flex: 1,

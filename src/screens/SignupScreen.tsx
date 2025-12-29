@@ -27,6 +27,7 @@ import { RootStackParamList } from '../../App';
 import { useAuth } from '../contexts/AuthContext';
 import { FloatingLabelInput } from '../components/FloatingLabelInput';
 import { useTheme } from '../contexts/ThemeContext';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
 type Gender = 'male' | 'female' | 'other' | '';
 
@@ -80,7 +81,7 @@ const styles = StyleSheet.create<Styles>({
     backgroundColor: theme.colors.background.primary,
   },
   header: {
-    backgroundColor: '#1E88E5',
+    backgroundColor: theme.colors.primary,
     paddingVertical: 16,
     paddingHorizontal: 16,
   },
@@ -95,13 +96,13 @@ const styles = StyleSheet.create<Styles>({
   },
   backButtonText: {
     fontSize: 24,
-    color: '#FFFFFF',
+    color: theme.colors.background.surface,
     fontWeight: 'bold',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: theme.colors.background.surface,
     textAlign: 'center',
     flex: 1,
     marginRight: 24,
@@ -117,7 +118,7 @@ const styles = StyleSheet.create<Styles>({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: theme.colors.text.primary,
     textAlign: 'center',
     marginBottom: 12,
   },
@@ -532,7 +533,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.backButtonText}>←</Text>
+            <Ionicons name="chevron-back" size={24} color={theme.colors.background.surface} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Create Account</Text>
         </View>

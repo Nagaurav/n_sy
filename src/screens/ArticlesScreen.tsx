@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { theme } from '../theme';
 
 // TypeScript Interface for Article
 interface Article {
@@ -150,9 +151,9 @@ const ArticlesScreen = () => {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar backgroundColor="#1E88E5" barStyle="light-content" />
+        <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#1E88E5" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>Loading articles...</Text>
         </View>
       </SafeAreaView>
@@ -161,12 +162,12 @@ const ArticlesScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#1E88E5" barStyle="light-content" />
+      <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
       
       {/* Fixed Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.menuButton} onPress={openDrawer}>
-          <Ionicons name="menu" size={24} color="#FFFFFF" />
+          <Ionicons name="menu" size={24} color={theme.colors.background.surface} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Wellness Articles</Text>
         <View style={styles.placeholder} />
@@ -202,7 +203,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
   },
   header: {
-    backgroundColor: '#1E88E5',
+    backgroundColor: theme.colors.primary,
     paddingTop: StatusBar.currentHeight || 40,
     paddingBottom: 16,
     paddingHorizontal: 16,
@@ -222,7 +223,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: theme.colors.background.surface,
     flex: 1,
     textAlign: 'center',
   },
@@ -233,7 +234,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   articleCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.background.surface,
     borderRadius: 12,
     marginBottom: 16,
     overflow: 'hidden',
@@ -253,7 +254,7 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     fontSize: 12,
-    color: '#1E88E5',
+    color: theme.colors.primary,
     fontWeight: '600',
     textTransform: 'uppercase',
     marginBottom: 8,
@@ -261,12 +262,12 @@ const styles = StyleSheet.create({
   articleTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1F2937',
+    color: theme.colors.text.primary,
     marginBottom: 8,
   },
   articleExcerpt: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
     lineHeight: 20,
     marginBottom: 12,
   },
@@ -284,20 +285,20 @@ const styles = StyleSheet.create({
   },
   authorText: {
     fontSize: 12,
-    color: '#1F2937',
+    color: theme.colors.text.primary,
     fontWeight: '500',
     marginBottom: 2,
   },
   dateText: {
     fontSize: 11,
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
   },
   footerRight: {
     marginLeft: 8,
   },
   readingTimeText: {
     fontSize: 12,
-    color: '#1E88E5',
+    color: theme.colors.primary,
     fontWeight: '600',
   },
   loadingContainer: {
@@ -308,18 +309,18 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
   },
   errorContainer: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: theme.colors.feedback.error,
     borderRadius: 8,
     padding: 16,
     margin: 16,
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: theme.colors.feedback.error,
   },
   errorText: {
-    color: '#EF4444',
+    color: theme.colors.background.surface,
     fontSize: 14,
     textAlign: 'center',
   },
@@ -331,7 +332,7 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
     marginTop: 16,
   },
 });

@@ -17,6 +17,7 @@ import { StackScreenProps } from '@react-navigation/stack';
 import { apiService } from '../services/apiService';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { theme } from '../theme';
 import { FloatingLabelInput } from '../components/FloatingLabelInput';
 
 type LoginScreenProps = StackScreenProps<any, 'Login'>;
@@ -196,7 +197,7 @@ const styles = StyleSheet.create<Styles>({
     backgroundColor: '#F3F4F6',
   },
   header: {
-    backgroundColor: '#008272', // Using primary color directly for now
+    backgroundColor: theme.colors.primary,
     paddingVertical: 40,
     paddingBottom: 60,
     borderBottomLeftRadius: 20,
@@ -235,7 +236,7 @@ const styles = StyleSheet.create<Styles>({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: theme.colors.text.primary,
     textAlign: 'center',
     marginBottom: 12,
   },

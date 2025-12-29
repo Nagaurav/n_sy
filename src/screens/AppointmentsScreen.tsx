@@ -16,12 +16,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { apiService } from '../services/apiService';
 import { ConsultationBooking } from '../types/booking';
-import { theme as defaultTheme } from '../theme';
+import { theme } from '../theme';
 
 const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigation, route }) => {
   const { user, signOut, isLoading: authLoading } = useAuth();
   const { theme: themeHook } = useTheme();
-  const theme = themeHook || defaultTheme;
+  const appTheme = themeHook || theme;
   
   // Set up header with back button
   React.useLayoutEffect(() => {
@@ -39,11 +39,11 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
             backgroundColor: 'rgba(0,0,0,0.05)'
           }}
         >
-          <Ionicons name="arrow-back" size={24} color={theme.colors.primary} />
+          <Ionicons name="arrow-back" size={24} color={appTheme.colors.primary} />
         </TouchableOpacity>
       ),
     });
-  }, [navigation, theme.colors.primary]);
+  }, [navigation, appTheme.colors.primary]);
   const [appointments, setAppointments] = useState<ConsultationBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -632,7 +632,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1E88E5',
+    backgroundColor: theme.colors.primary,
     paddingHorizontal: 16,
     paddingVertical: 16,
     paddingTop: (StatusBar.currentHeight || 0) + 16,
@@ -645,7 +645,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: theme.colors.background.surface,
   },
   logoutButton: {
     flexDirection: 'row',
@@ -657,12 +657,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   logoutText: {
-    color: '#FFFFFF',
+    color: theme.colors.background.surface,
     fontWeight: '600',
     fontSize: 14,
   },
   userInfo: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.background.surface,
     padding: 16,
     marginBottom: 8,
     elevation: 2,
@@ -691,7 +691,7 @@ const styles = StyleSheet.create({
   welcomeText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1F2937',
+    color: theme.colors.text.primary,
     marginBottom: 4,
   },
   phoneRow: {
@@ -701,7 +701,7 @@ const styles = StyleSheet.create({
   },
   userPhone: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
   },
   statsRow: {
     flexDirection: 'row',
@@ -716,12 +716,12 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1E88E5',
+    color: theme.colors.primary,
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
     textTransform: 'uppercase',
   },
   statDivider: {
@@ -773,10 +773,14 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   appointmentCard: {
-    backgroundColor: defaultTheme.colors.background.surface,
+    backgroundColor: theme.colors.background.surface,
     borderRadius: 16,
     marginBottom: 16,
-    ...defaultTheme.shadows.card,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
     overflow: 'hidden',
   },
   cardHeader: {
@@ -897,12 +901,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 8,
     borderWidth: 1,
-    borderColor: defaultTheme.colors.primary,
+    borderColor: theme.colors.primary,
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
   },
   secondaryActionButtonText: {
-    color: defaultTheme.colors.primary,
+    color: theme.colors.primary,
     fontSize: 14,
     fontWeight: '600',
   },

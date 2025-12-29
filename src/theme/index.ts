@@ -11,6 +11,7 @@ export type ColorPalette = {
   };
   background: {
     primary: string;     // Off-White for screen backgrounds
+    secondary: string;   // Light gray for alternative backgrounds (was #F3F4F6)
     surface: string;     // Pure white for cards/modals
     white: string;       // Pure white for text/icons
   };
@@ -133,6 +134,7 @@ export const theme: Theme = {
     },
     background: {
       primary: '#F7F9FC',     // Off-White for screen backgrounds
+      secondary: '#F3F4F6',   // Light gray for alternative backgrounds
       surface: '#FFFFFF',     // Pure white for cards/modals
       white: '#FFFFFF',       // Pure white for text/icons
     },
@@ -244,10 +246,43 @@ export const commonStyles = {
     flex: 1,
     padding: theme.spacing.m,
   },
+  // Standardized header styles
+  header: {
+    backgroundColor: theme.colors.primary,
+    paddingTop: 40, // Will be overridden with StatusBar.currentHeight
+    paddingBottom: theme.spacing.m,
+    paddingHorizontal: theme.spacing.m,
+  },
+  headerContent: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+  headerTitle: {
+    ...theme.typography.h2,
+    color: theme.colors.background.surface,
+    fontWeight: '600',
+  },
+  // Standardized card styles
   card: {
     backgroundColor: theme.colors.background.surface,
     borderRadius: theme.borderRadius.l,
     padding: theme.spacing.m,
+    ...theme.shadows.card,
+  },
+  appointmentCard: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: theme.borderRadius.l,
+    padding: theme.spacing.l,
+    marginBottom: theme.spacing.l,
+    ...theme.shadows.card,
+  },
+  surfaceCard: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.m,
+    marginBottom: theme.spacing.s,
     ...theme.shadows.card,
   },
   floatingCard: {
@@ -256,6 +291,7 @@ export const commonStyles = {
     padding: theme.spacing.m,
     ...theme.shadows.float,
   },
+  // Standardized typography
   heading: {
     ...theme.typography.h2,
     color: theme.colors.text.primary,
@@ -263,9 +299,30 @@ export const commonStyles = {
   },
   subheading: {
     ...theme.typography.h3,
-    color: theme.colors.text.secondary,
+    color: theme.colors.text.primary,
     marginBottom: theme.spacing.m,
   },
+  sectionTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.text.primary,
+    fontWeight: '600',
+    marginBottom: theme.spacing.m,
+  },
+  cardTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.text.primary,
+    fontWeight: '600',
+    marginBottom: theme.spacing.s,
+  },
+  body: {
+    ...theme.typography.body,
+    color: theme.colors.text.primary,
+  },
+  caption: {
+    ...theme.typography.caption,
+    color: theme.colors.text.secondary,
+  },
+  // Standardized button styles
   button: {
     backgroundColor: theme.colors.primary,
     paddingVertical: theme.spacing.m,
