@@ -72,32 +72,48 @@ const AppointmentDetailScreen: React.FC = () => {
 
   // Calculate time until chat becomes available (15 minutes before appointment)
   const calculateTimeUntilChat = useCallback(() => {
-    if (!currentAppointment) {
-      console.log('⏰ [AppointmentDetail] No appointment data for chat calculation');
+    if (!currentAppointment || !currentAppointment.date || !currentAppointment.time) {
+      console.log(' [AppointmentDetail] No appointment data for chat calculation');
       return null;
     }
     
-    const appointmentTime = new Date(`${currentAppointment.date} ${currentAppointment.time}`);
-    const chatStartTime = new Date(appointmentTime.getTime() - 15 * 60 * 1000); // 15 minutes before
-    const now = new Date();
-    
-    const diff = chatStartTime.getTime() - now.getTime();
-    const minutesUntilChat = diff <= 0 ? 0 : Math.floor(diff / (1000 * 60));
-    
-    console.log('⏰ [AppointmentDetail] Chat availability:', {
-      appointmentTime: appointmentTime.toISOString(),
-      chatStartTime: chatStartTime.toISOString(),
-      now: now.toISOString(),
-      minutesUntilChat,
-      isAvailable: minutesUntilChat === 0,
-    });
-    
-    return minutesUntilChat;
+    try {
+      // Handle both ISO time strings and formatted time strings
+      let appointmentDate: Date;
+      
+      if (currentAppointment.time.includes('T')) {
+        // ISO time string - parse directly
+        appointmentDate = new Date(currentAppointment.time);
+      } else {
+        // Formatted time string - combine with date
+        const [hours, minutes] = currentAppointment.time.split(':').map(Number);
+        appointmentDate = new Date(currentAppointment.date || '');
+        appointmentDate.setHours(hours, minutes, 0, 0);
+      }
+      
+      const now = new Date();
+      
+      const diff = appointmentDate.getTime() - now.getTime();
+      const minutesUntilChat = diff <= 0 ? 0 : Math.floor(diff / (1000 * 60));
+      
+      console.log(' [AppointmentDetail] Chat availability:', {
+        appointmentTime: appointmentDate.toISOString(),
+        chatStartTime: new Date(appointmentDate.getTime() - 15 * 60 * 1000).toISOString(),
+        now: now.toISOString(),
+        minutesUntilChat,
+        isAvailable: minutesUntilChat === 0,
+      });
+      
+      return minutesUntilChat;
+    } catch (error) {
+      console.error(' [AppointmentDetail] Error calculating chat time:', error);
+      return null;
+    }
   }, [currentAppointment]);
 
   // Check appointment status and permissions
   const checkAppointmentAccess = useCallback(async () => {
-    console.log('🔐 [AppointmentDetail] Checking appointment access:', { appointmentId });
+    console.log(' [AppointmentDetail] Checking appointment access:', { appointmentId });
     try {
       const authToken = await getAuthToken();
       const appointmentToken = await getAppointmentToken(appointmentId);
@@ -149,12 +165,12 @@ const AppointmentDetailScreen: React.FC = () => {
 
   // Enhanced session feature availability check (15 minutes before appointment)
   const isSessionFeatureAvailable = useCallback((type: 'chat' | 'video' = 'chat') => {
-    if (!currentAppointment) return false;
+    if (!currentAppointment || !currentAppointment.time) return false;
     
     try {
       // Parse appointment date and time
       const [hours, minutes] = currentAppointment.time.split(':').map(Number);
-      const appointmentDate = new Date(currentAppointment.date);
+      const appointmentDate = new Date(currentAppointment.date || '');
       appointmentDate.setHours(hours, minutes, 0, 0);
       
       const now = new Date();
@@ -183,8 +199,9 @@ const AppointmentDetailScreen: React.FC = () => {
     }
     
     if (!isSessionFeatureAvailable('chat')) {
+      if (!currentAppointment.time) return 'Chat time not available';
       const [hours, minutes] = currentAppointment.time.split(':').map(Number);
-      const appointmentDate = new Date(currentAppointment.date);
+      const appointmentDate = new Date(currentAppointment.date || '');
       appointmentDate.setHours(hours, minutes, 0, 0);
       const now = new Date();
       
@@ -280,8 +297,9 @@ const AppointmentDetailScreen: React.FC = () => {
     }
     
     if (!isSessionFeatureAvailable('video')) {
+      if (!currentAppointment.time) return 'Video call time not available';
       const [hours, minutes] = currentAppointment.time.split(':').map(Number);
-      const appointmentDate = new Date(currentAppointment.date);
+      const appointmentDate = new Date(currentAppointment.date || '');
       appointmentDate.setHours(hours, minutes, 0, 0);
       const now = new Date();
       
@@ -343,6 +361,12 @@ const AppointmentDetailScreen: React.FC = () => {
   // Fetch prescription data for the appointment
   const fetchPrescriptionData = useCallback(async () => {
     if (!currentAppointment) return;
+    
+    // Validate that we have required booking data before proceeding
+    if (!currentAppointment.booking_id && !currentAppointment.appointment_id) {
+      console.error('❌ [AppointmentDetail] No valid booking ID found in appointment data');
+      return;
+    }
     
     setPrescriptionLoading(true);
     try {

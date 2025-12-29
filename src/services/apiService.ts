@@ -959,7 +959,19 @@ export const apiService = {
       throw new Error(errorMessage);
     }
   },
-  
+
+  // Get booking details by ID (for AppointmentDetailScreen)
+  getBookingDetails: async (bookingId: string | number): Promise<any> => {
+    try {
+      const response = await api.get(`/user/consultation-booking/details/${bookingId}`);
+      console.log('📋 Booking details response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error fetching booking details for ID ${bookingId}:`, error);
+      throw error;
+    }
+  },
+
   // Get payment status for a booking
   getBookingPaymentStatus: async (bookingId: string | number) => {
     try {

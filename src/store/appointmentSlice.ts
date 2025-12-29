@@ -1,23 +1,39 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { apiService } from '../services/apiService';
 
-// Types
+// Types - Updated to match actual API response structure
 export interface Appointment {
   booking_id: number;
   appointment_id: string;
   user_id: number;
   professional_id: number;
-  professional_name: string;
-  time: string;
-  date: string;
+  professional?: {
+    name: string;
+    speciality?: string;
+  };
+  slot?: {
+    date: string;
+    start_time: string;
+    end_time: string;
+  };
+  amounts?: {
+    original: number;
+    final: number;
+    discount?: number;
+  };
   mode: 'online' | 'offline';
-  amount: number;
   booking_status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
   payment_status: 'PENDING' | 'COMPLETED';
   chat_enabled: boolean;
   video_enabled: boolean;
   prescription_count?: number;
   chat_id?: string; // Chat ID associated with this appointment
+  
+  // Backward compatibility properties
+  professional_name?: string; // Computed from professional.name
+  date?: string; // Computed from slot.date
+  time?: string; // Computed from slot.start_time
+  amount?: number; // Computed from amounts.final
 }
 
 export interface AppointmentState {
@@ -29,14 +45,36 @@ export interface AppointmentState {
   videoCallActive: boolean;
 }
 
+// Transform API response to match UI expectations
+const transformAppointmentData = (apiData: any): Appointment => {
+  return {
+    ...apiData,
+    // Map nested API data to flat UI properties for backward compatibility
+    professional_name: apiData.professional?.name || '',
+    date: apiData.slot?.date || '',
+    time: apiData.slot?.start_time || '',
+    amount: apiData.amounts?.final || 0,
+  };
+};
+
 // Async thunks
 export const fetchAppointmentById = createAsyncThunk(
   'appointment/fetchById',
   async (appointmentId: string, { rejectWithValue }) => {
     try {
-      // Use consultation-booking endpoint with booking_id
-      const response = await apiService.get(`/user/consultation-booking/${appointmentId}`);
-      return response.data;
+      // Use the correct details endpoint
+      const response = await apiService.getBookingDetails(appointmentId);
+      console.log('📋 [fetchAppointmentById] API response:', response);
+      
+      // Extract the actual appointment data from nested response
+      const appointmentData = response.data?.data || response.data;
+      console.log('📋 [fetchAppointmentById] Extracted appointment data:', appointmentData);
+      
+      // Transform to match UI expectations
+      const transformedData = transformAppointmentData(appointmentData);
+      console.log('📋 [fetchAppointmentById] Transformed appointment data:', transformedData);
+      
+      return transformedData;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to fetch appointment');
     }
