@@ -17,6 +17,8 @@ import { apiService } from '../services/apiService';
 import { setCurrentAppointment, setChatActive, fetchAppointmentById } from '../store/appointmentSlice';
 import { getAuthToken, getAppointmentToken } from '../utils/secureStorage';
 import { VideoPlaceholder, PrescriptionViewer } from '../components';
+import { useTheme } from '../contexts/ThemeContext';
+import { theme } from '../theme';
 
 const { width } = Dimensions.get('window');
 
@@ -31,6 +33,7 @@ const AppointmentDetailScreen: React.FC = () => {
   const route = useRoute();
   const navigation = useNavigation();
   const dispatch = useDispatch();
+  const { theme } = useTheme();
   const { appointmentId, professionalId, userId, appointmentData } = route.params as RouteParams;
   
   console.log('📋 [AppointmentDetail] Screen mounted with appointmentId:', appointmentId, 'professionalId:', professionalId, 'userId:', userId);
@@ -236,10 +239,13 @@ const AppointmentDetailScreen: React.FC = () => {
 
   // Handle chat navigation
   const handleChatPress = async () => {
+    // Use professional_id from fetched appointment data as primary source
+    const effectiveProfessionalId = currentAppointment?.professional_id || professionalId;
+    
     console.log('💬 [AppointmentDetail] Chat button pressed:', {
       appointmentId,
       chatActive,
-      professionalId: currentAppointment?.professional_id,
+      professionalId: effectiveProfessionalId,
       professionalName: currentAppointment?.professional_name,
       bookingStatus: currentAppointment?.booking_status,
     });
@@ -279,7 +285,7 @@ const AppointmentDetailScreen: React.FC = () => {
       chatId,
       appointmentId,
       title: currentAppointment?.professional_name || 'Chat',
-      receiverId: professionalId,
+      receiverId: effectiveProfessionalId,
     });
   };
 
@@ -401,9 +407,9 @@ const AppointmentDetailScreen: React.FC = () => {
     }
   }, [currentAppointment]);
 
-  // Fetch prescription when appointment is loaded
+  // Fetch prescription when appointment is loaded and status is COMPLETED
   useEffect(() => {
-    if (currentAppointment) {
+    if (currentAppointment && currentAppointment.booking_status === 'COMPLETED') {
       fetchPrescriptionData();
     }
   }, [currentAppointment, fetchPrescriptionData]);
@@ -445,7 +451,7 @@ const AppointmentDetailScreen: React.FC = () => {
   if (error && !currentAppointment) {
     return (
       <View style={styles.centerContainer}>
-        <Icon name="alert-circle-outline" size={60} color="#EF4444" />
+        <Icon name="alert-circle-outline" size={60} color={theme.colors.feedback.error} />
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={refreshAppointment}>
           <Text style={styles.retryButtonText}>Retry</Text>
@@ -457,7 +463,7 @@ const AppointmentDetailScreen: React.FC = () => {
   if (!currentAppointment) {
     return (
       <View style={styles.centerContainer}>
-        <Icon name="document-outline" size={60} color="#1A202C" />
+        <Icon name="document-outline" size={60} color={theme.colors.text.primary} />
         <Text style={styles.errorText}>Appointment not found</Text>
       </View>
     );
@@ -475,7 +481,7 @@ const AppointmentDetailScreen: React.FC = () => {
             }} 
             style={styles.backButton}
           >
-            <Icon name="arrow-back" size={24} color="#1A202C" />
+            <Icon name="arrow-back" size={24} color={theme.colors.background.surface} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Appointment Details</Text>
           <TouchableOpacity 
@@ -498,7 +504,7 @@ const AppointmentDetailScreen: React.FC = () => {
       {/* Appointment Info Card */}
       <View style={styles.card}>
         <View style={styles.statusBadge}>
-          <Text style={[styles.statusText, { color: getStatusColor(currentAppointment.booking_status) }]}>
+          <Text style={[styles.statusText, { color: getStatusColor(currentAppointment.booking_status, theme) }]}>
             {currentAppointment.booking_status}
           </Text>
         </View>
@@ -593,7 +599,7 @@ const AppointmentDetailScreen: React.FC = () => {
                 });
               }}
             >
-              <Icon name="download" size={20} color="#3B82F6" />
+              <Icon name="download" size={20} color={theme.colors.primary} />
               <Text style={styles.downloadButtonText}>View Details</Text>
             </TouchableOpacity>
           )}
@@ -610,7 +616,7 @@ const AppointmentDetailScreen: React.FC = () => {
 
       {/* Security Info */}
       <View style={styles.securityInfo}>
-        <Icon name="shield-checkmark" size={20} color="#4CAF50" />
+        <Icon name="shield-checkmark" size={20} color={theme.colors.success} />
         <Text style={styles.securityText}>
           This appointment is secured with end-to-end encryption
         </Text>
@@ -620,25 +626,25 @@ const AppointmentDetailScreen: React.FC = () => {
 };
 
 // Helper function to get status color
-const getStatusColor = (status: string): string => {
+const getStatusColor = (status: string, theme: any): string => {
   switch (status) {
     case 'CONFIRMED':
-      return '#4CAF50';
+      return theme.colors.success;
     case 'PENDING':
-      return '#FF9800';
+      return theme.colors.warning;
     case 'COMPLETED':
-      return '#3B82F6';
+      return theme.colors.primary;
     case 'CANCELLED':
-      return '#EF4444';
+      return theme.colors.feedback.error;
     default:
-      return '#1A202C';
+      return theme.colors.text.primary;
   }
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7F9FC',
+    backgroundColor: '#F3F4F6', // Temporarily hardcoded due to theme structure
   },
   centerContainer: {
     flex: 1,
@@ -647,10 +653,10 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   header: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: theme.colors.primary,
     paddingTop: 60,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
   },
   headerContent: {
     flexDirection: 'row',
@@ -670,12 +676,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#fff',
+    color: theme.colors.background.surface,
   },
   card: {
     margin: 16,
     padding: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.background.surface,
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -698,23 +704,23 @@ const styles = StyleSheet.create({
   professionalName: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1A202C',
+    color: theme.colors.text.primary,
     marginBottom: 8,
   },
   appointmentDate: {
     fontSize: 16,
-    color: '#1A202C',
+    color: theme.colors.text.primary,
     marginBottom: 4,
   },
   appointmentTime: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1A202C',
+    color: theme.colors.text.primary,
     marginBottom: 8,
   },
   appointmentMode: {
     fontSize: 16,
-    color: '#1A202C',
+    color: theme.colors.text.primary,
     marginBottom: 8,
     flexDirection: 'row',
     alignItems: 'center',
@@ -722,7 +728,7 @@ const styles = StyleSheet.create({
   appointmentAmount: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#3B82F6',
+    color: theme.colors.primary,
     marginBottom: 16,
   },
   actionButtons: {
@@ -739,29 +745,29 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginHorizontal: 8,
-    backgroundColor: '#3B82F6',
+    backgroundColor: theme.colors.primary,
   },
   disabledButton: {
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#E5E7EB', // Temporarily hardcoded due to theme structure
   },
   actionButtonText: {
-    color: '#fff',
+    color: theme.colors.background.surface,
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
   },
   disabledButtonText: {
-    color: '#1A202C',
+    color: theme.colors.text.secondary,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#1A202C',
+    color: theme.colors.text.secondary,
   },
   errorText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#EF4444',
+    color: theme.colors.feedback.error,
     textAlign: 'center',
   },
   countdownText: {

@@ -50,10 +50,12 @@ const transformAppointmentData = (apiData: any): Appointment => {
   return {
     ...apiData,
     // Map nested API data to flat UI properties for backward compatibility
-    professional_name: apiData.professional?.name || '',
-    date: apiData.slot?.date || '',
-    time: apiData.slot?.start_time || '',
-    amount: apiData.amounts?.final || 0,
+    professional_name: apiData.professional?.name || apiData.professional_name || '',
+    date: apiData.slot?.date || apiData.date || '',
+    time: apiData.slot?.start_time || apiData.time || '',
+    amount: apiData.amounts?.final || apiData.amount || 0,
+    // Ensure professional_id is properly mapped from nested structure
+    professional_id: apiData.professional?.id || apiData.professional_id || apiData.professional_id,
   };
 };
 

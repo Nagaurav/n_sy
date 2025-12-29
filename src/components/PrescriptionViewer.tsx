@@ -11,28 +11,16 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { apiService } from '../services/apiService';
+import { Prescription } from '../types/medical';
 
 const { width } = Dimensions.get('window');
-
-interface Prescription {
-  id: string;
-  appointment_id: string;
-  professional_id: number;
-  professional_name: string;
-  patient_name: string;
-  date: string;
-  medicines: Medicine[];
-  notes: string;
-  digital_signature: string;
-  verified: boolean;
-}
 
 interface Medicine {
   name: string;
   dosage: string;
   frequency: string;
   duration: string;
-  instructions: string;
+  instructions?: string;
 }
 
 interface PrescriptionViewerProps {
@@ -54,15 +42,16 @@ const PrescriptionViewer: React.FC<PrescriptionViewerProps> = ({ appointmentId }
       setLoading(true);
       setError(null);
       
-      // This endpoint needs to be implemented in apiService
-      const response = await apiService.get(`/user/prescriptions/appointment/${appointmentId}`);
+      // Use the correct endpoint for booking prescriptions
+      const response = await apiService.getBookingPrescription(Number(appointmentId));
       
-      if (response.success) {
-        setPrescriptions(response.data || []);
+      if (response && response.data) {
+        setPrescriptions([response.data]); // Wrap single prescription in array
       } else {
-        setError(response.error || 'Failed to load prescriptions');
+        setPrescriptions([]); // No prescriptions found
       }
     } catch (err: any) {
+      console.error('Error fetching prescription for appointment:', err);
       setError(err.message || 'An error occurred while fetching prescriptions');
     } finally {
       setLoading(false);
@@ -91,9 +80,10 @@ const PrescriptionViewer: React.FC<PrescriptionViewerProps> = ({ appointmentId }
     const prescription = prescriptions.find(p => p.id === prescriptionId);
     if (!prescription) return;
 
+    const professionalName = `${prescription.professional.first_name} ${prescription.professional.last_name}`;
     Alert.alert(
       'Digital Signature Details',
-      `Signed by: ${prescription.professional_name}\nDate: ${prescription.date}\nSignature ID: ${prescription.digital_signature.substring(0, 8)}...\n\nThis prescription is cryptographically signed and cannot be tampered with.`,
+      `Signed by: Dr. ${professionalName}\nDate: ${prescription.prescriptionDate}\nPrescription ID: ${prescription.prescriptionId}\n\nThis prescription is cryptographically signed and cannot be tampered with.`,
       [{ text: 'OK' }]
     );
   };
@@ -150,17 +140,15 @@ const PrescriptionViewer: React.FC<PrescriptionViewerProps> = ({ appointmentId }
             onPress={() => handlePrescriptionPress(prescription.id)}
           >
             <View style={styles.prescriptionInfo}>
-              <Text style={styles.prescriptionDate}>{prescription.date}</Text>
-              <Text style={styles.professionalName}>Dr. {prescription.professional_name}</Text>
-              <Text style={styles.patientName}>Patient: {prescription.patient_name}</Text>
+              <Text style={styles.prescriptionDate}>{prescription.prescriptionDate}</Text>
+              <Text style={styles.professionalName}>Dr. {prescription.professional.first_name} {prescription.professional.last_name}</Text>
+              <Text style={styles.patientName}>Booking ID: {prescription.booking?.id || 'N/A'}</Text>
             </View>
             <View style={styles.headerRight}>
-              {prescription.verified && (
-                <View style={styles.verifiedBadge}>
-                  <Icon name="checkmark-circle" size={16} color="#4CAF50" />
-                  <Text style={styles.verifiedText}>Verified</Text>
-                </View>
-              )}
+              <View style={styles.verifiedBadge}>
+                <Icon name="checkmark-circle" size={16} color="#4CAF50" />
+                <Text style={styles.verifiedText}>Verified</Text>
+              </View>
               <Icon
                 name={expandedPrescription === prescription.id ? "chevron-up" : "chevron-down"}
                 size={20}

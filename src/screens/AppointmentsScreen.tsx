@@ -320,13 +320,13 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
       // Log the full item to see available fields
       console.log('🔍 [AppointmentsScreen] Full appointment item:', JSON.stringify(item, null, 2));
       
-      // Extract professional ID with multiple fallbacks
+      // Extract professional ID with multiple fallbacks for nested API structure
       const professionalId = String(
         item.professional_id || 
         item.professionalId || 
-        (item.professional && (item.professional.id || item.professional._id)) ||
-        (item.professional_data && (item.professional_data.id || item.professional_data._id)) ||
-        (item.professionalInfo && (item.professionalInfo.id || item.professionalInfo._id)) ||
+        (item.professional && (item.professional.id || item.professional._id || item.professional.professional_id)) ||
+        (item.professional_data && (item.professional_data.id || item.professional_data._id || item.professional_data.professional_id)) ||
+        (item.professionalInfo && (item.professionalInfo.id || item.professionalInfo._id || item.professionalInfo.professional_id)) ||
         ''
       );
       
