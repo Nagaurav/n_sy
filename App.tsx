@@ -1,12 +1,11 @@
 // App.tsx
 import 'react-native-gesture-handler';
 import React, { useEffect, useState } from 'react';
-import { AppRegistry } from 'react-native';
+import { AppRegistry, StatusBar, View, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StatusBar } from 'react-native';
 import { Provider } from 'react-redux';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { store } from './src/store';
@@ -21,7 +20,7 @@ import PhoneNumberScreen from './src/screens/PhoneNumberScreen';
 import OTPScreen from './src/screens/OTPScreen';
 import SignupScreen from './src/screens/SignupScreen';
 import HomeScreen from './src/screens/HomeScreen';
-import DateTimeSelectionScreen from './src/screens/DateTimeSelectionScreen';
+import SelectTimeScreen from './src/screens/SelectTimeScreen';
 import BookingConfirmationScreen from './src/screens/BookingConfirmationScreen';
 import PaymentGatewayScreen from './src/screens/PaymentGatewayScreen';
 import BookingSuccessScreen from './src/screens/BookingSuccessScreen';
@@ -52,84 +51,27 @@ export type DrawerParamList = {
   HelpSupport: undefined;
 };
 
+import { HomeStackParamList } from './src/types/navigation';
+
 // Combined root navigation types
 export type RootStackParamList = AuthStackParamList & 
   Omit<DrawerParamList, keyof AuthStackParamList> & 
-  Omit<HomeStackParamList, keyof AuthStackParamList | keyof DrawerParamList>;
-
-export type HomeStackParamList = {
-  Home: undefined;
-  ProfessionalsList: { categoryId?: string; searchQuery?: string; categoryName?: string };
-  ProfessionalProfile: { 
-    professionalId: string;
-    refresh?: boolean;  // Optional refresh flag to trigger data reload
-  };
-  ClassesList: undefined;
-  AppointmentDetail: { 
-    appointmentId: string;
-    professionalId: string;
-    userId: string;
-    professionalName?: string;
-  };
-  DateTimeSelection: { 
-    professionalId: string;
-    professionalName: string;
-    serviceId?: string; 
-    serviceName?: string; 
-    price?: number; 
-    duration?: number;
-    serviceDetails?: {
-      id: string;
-      name: string;
-      duration: number;
-      price: number;
+  Omit<HomeStackParamList, keyof AuthStackParamList | keyof DrawerParamList> & {
+    MainDrawer: undefined;
+    SelectTime: {
+      professionalId: string;
+      professionalName: string;
+      serviceDetails?: {
+        id: string;
+        name: string;
+        duration: number;
+        price: number;
+      };
     };
   };
-  BookingConfirmation: { 
-    bookingData: any;
-    onGoBack?: () => void;
-  };
-  PaymentGateway: {
-    paymentUrl: string;
-    bookingId: string;
-    paymentId: string;
-    amount: number;
-    customerId: string;
-    customerEmail: string;
-    customerPhone: string;
-    merchantId?: string;
-  };
-  BookingSuccess: {
-    bookingId: string;
-    paymentId: string;
-    amount: number;
-    bookingDetails?: {
-      professionalName?: string;
-      serviceName?: string;
-      date?: string;
-      time?: string;
-    };
-  };
-  BookingFailed: {
-    bookingId?: string;
-    error?: string;
-  };
-  EditProfile: {
-    currentUser: import('./src/types/userProfile').UserProfileData;
-  };
-  ChatScreen: {
-    chatId: string;
-    appointmentId: string;
-    title?: string;
-    receiverId?: string;
-  };
-  PrescriptionDetail: {
-    prescriptionId: string;
-    appointmentId?: string;
-  };
-};
 
 const AuthStack = createStackNavigator<AuthStackParamList>();
+const RootStack = createStackNavigator<RootStackParamList>();
 const Drawer = createDrawerNavigator<DrawerParamList>();
 const HomeStack = createStackNavigator<HomeStackParamList>();
 
@@ -146,47 +88,58 @@ import ProfessionalProfileScreen from './src/screens/ProfessionalProfileScreen';
 import ClassesListScreen from './src/screens/ClassesListScreen';
 import AppointmentDetailScreen from './src/screens/AppointmentDetailScreen';
 
-// Home Stack Navigator
-const HomeStackNavigator = () => (
-  <HomeStack.Navigator
-    screenOptions={{
-      headerShown: false,
-      cardStyle: { backgroundColor: '#FFFFFF' } 
-    }}
-  >
-    <HomeStack.Screen name="Home" component={HomeScreen} />
-    <HomeStack.Screen name="ProfessionalsList" component={ProfessionalsListScreen} />
-    <HomeStack.Screen name="ProfessionalProfile" component={ProfessionalProfileScreen} />
-    <HomeStack.Screen name="ClassesList" component={ClassesListScreen} />
-    <HomeStack.Screen name="AppointmentDetail" component={AppointmentDetailScreen} />
-    <HomeStack.Screen name="DateTimeSelection" component={DateTimeSelectionScreen} />
-    <HomeStack.Screen name="BookingConfirmation" component={BookingConfirmationScreen} />
-    <HomeStack.Screen 
-      name="PaymentGateway" 
-      component={PaymentGatewayScreen} 
-      options={{
-        gestureEnabled: false,
-      }}
-    />
-    <HomeStack.Screen 
-      name="BookingSuccess" 
-      component={BookingSuccessScreen} 
-      options={{
-        gestureEnabled: false,
-      }}
-    />
-    <HomeStack.Screen 
-      name="BookingFailed" 
-      component={BookingFailedScreen}
-      options={{
-        gestureEnabled: true,
-      }}
-    />
-    <HomeStack.Screen name="EditProfile" component={EditProfileScreen} />
-    <HomeStack.Screen name="ChatScreen" component={ChatScreen} />
-    <HomeStack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
-  </HomeStack.Navigator>
+// Temporary test component to verify navigation
+const RedTestScreen = () => (
+  <View style={{ flex: 1, backgroundColor: '#FF0000' }}>
+    <Text style={{ marginTop: 100, textAlign: 'center', color: '#FFF', fontSize: 20, fontWeight: 'bold' }}>
+      RED TEST SCREEN
+    </Text>
+  </View>
 );
+
+// Home Stack Navigator
+const HomeStackNavigator = () => {
+  console.log('🧭 HomeStackNavigator rendering');
+  return (
+    <HomeStack.Navigator
+      screenOptions={{
+        headerShown: false,
+        cardStyle: { backgroundColor: '#FFFFFF' } 
+      }}
+    >
+      <HomeStack.Screen name="Home" component={HomeScreen} />
+      <HomeStack.Screen name="ProfessionalsList" component={ProfessionalsListScreen} />
+      <HomeStack.Screen name="ProfessionalProfile" component={ProfessionalProfileScreen} />
+      <HomeStack.Screen name="ClassesList" component={ClassesListScreen} />
+      <HomeStack.Screen name="AppointmentDetail" component={AppointmentDetailScreen} />
+      <HomeStack.Screen name="BookingConfirmation" component={BookingConfirmationScreen} />
+      <HomeStack.Screen 
+        name="PaymentGateway" 
+        component={PaymentGatewayScreen} 
+        options={{
+          gestureEnabled: false,
+        }}
+      />
+      <HomeStack.Screen 
+        name="BookingSuccess" 
+        component={BookingSuccessScreen} 
+        options={{
+          gestureEnabled: false,
+        }}
+      />
+      <HomeStack.Screen 
+        name="BookingFailed" 
+        component={BookingFailedScreen}
+        options={{
+          gestureEnabled: true,
+        }}
+      />
+      <HomeStack.Screen name="EditProfile" component={EditProfileScreen} />
+      <HomeStack.Screen name="ChatScreen" component={ChatScreen} />
+      <HomeStack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
+    </HomeStack.Navigator>
+  );
+};
 
 // Custom Drawer Content Component
 import CustomDrawerContent from './src/components/CustomDrawerContent';
@@ -323,7 +276,27 @@ const AppNavigator = () => {
 
   if (isAuthenticated) {
     console.log('✅ User authenticated, showing main app');
-    return <MainDrawerNavigator />;
+    return (
+      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        {/* The Home Tabs (Base Layer) */}
+        <RootStack.Screen 
+          name="MainDrawer" 
+          component={MainDrawerNavigator} 
+        />
+        
+        {/* ✅ THE FIX: SelectTime sits on TOP LAYER */}
+        <RootStack.Screen
+          name="SelectTime"
+          component={SelectTimeScreen}
+          options={{
+            headerShown: false,
+            presentation: 'card',
+            animation: 'slide_from_right',
+            gestureEnabled: false,
+          }}
+        />
+      </RootStack.Navigator>
+    );
   } else {
     console.log('❌ User not authenticated, showing auth screens');
     return (

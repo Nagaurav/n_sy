@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,14 +9,12 @@ import {
   ActivityIndicator,
   Image,
   StatusBar,
-  Dimensions,
-  Alert,
   Platform,
+  Alert,
   ImageStyle,
   ViewStyle,
   TextStyle,
-  Animated,
-  RefreshControl,
+  Dimensions,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -33,7 +31,8 @@ import {
   ProfessionalRole,
   Service
 } from '../types';
-import type { HomeStackParamList } from '../types';
+import type { HomeStackParamList } from '../types/navigation';
+import type { RootStackParamList } from '../../App';
 
 // Theme
 import { theme } from '../theme';
@@ -44,23 +43,7 @@ const { width } = Dimensions.get('window');
 
 // Navigation Types
 type ProfessionalProfileRouteProp = RouteProp<HomeStackParamList, 'ProfessionalProfile'>;
-type ProfessionalProfileNavigationProp = StackNavigationProp<HomeStackParamList, 'ProfessionalProfile'>;
-
-// Service Types
-interface BookingService extends Service {
-  id: string;
-  name: string;
-  duration: number;
-  price: number;
-  description: string;
-  is_online: boolean;
-  price_online_15min: number;
-  price_online_30min: number;
-  price_online_60min: number;
-  price_offline_15min: number;
-  price_offline_30min: number;
-  price_offline_60min: number;
-}
+type ProfessionalProfileNavigationProp = StackNavigationProp<RootStackParamList>;
 
 // Component Props
 interface ProfessionalProfileScreenProps {
@@ -103,29 +86,16 @@ const formatRole = (role?: string): string => {
     .join(' ');
 };
 
-// Skeleton Component
-const SkeletonLoader = ({ style }: { style: ViewStyle }) => (
-  <View style={[styles.skeleton, style]}>
-    <View style={styles.shimmer} />
-  </View>
-);
-
-const ProfessionalProfileScreen = ({ route, navigation }: ProfessionalProfileScreenProps) => {
+const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({ 
+  route, 
+  navigation 
+}) => {
   const { professionalId } = route.params;
   const [profileData, setProfileData] = useState<ProfessionalAuthProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Start fade in animation when data is loaded
-  const startFadeIn = useCallback(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  }, [fadeAnim]);
-
+  // Fetch professional profile data
   const fetchProfessionalProfile = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -133,7 +103,6 @@ const ProfessionalProfileScreen = ({ route, navigation }: ProfessionalProfileScr
 
       console.log('🔍 Fetching profile for professional ID:', professionalId);
       
-      // Use the getProfessionalProfile method to fetch the professional data
       const response = await apiService.getProfessionalProfile(professionalId);
       
       console.log('📦 API Response received:', response);
@@ -186,7 +155,6 @@ const ProfessionalProfileScreen = ({ route, navigation }: ProfessionalProfileScr
 
       setProfileData(profileData);
       setError(null);
-      startFadeIn();
     } catch (error) {
       console.error('❌ Error fetching professional profile:', error);
       setError('Failed to load professional profile. Please try again.');
@@ -195,6 +163,7 @@ const ProfessionalProfileScreen = ({ route, navigation }: ProfessionalProfileScr
     }
   }, [professionalId]);
 
+  // Handle book appointment button press
   const handleBookAppointment = useCallback(async () => {
     console.log('📅 Book Appointment button pressed');
     
@@ -228,136 +197,101 @@ const ProfessionalProfileScreen = ({ route, navigation }: ProfessionalProfileScr
     const navigationParams = {
       professionalId: String(profileData.professional_id),
       professionalName: `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim(),
-      serviceId: defaultService.id,
-      serviceName: defaultService.name,
-      price: defaultService.price,
-      duration: defaultService.duration,
-      serviceDetails: defaultService
+      serviceDetails: {
+        id: defaultService.id,
+        name: defaultService.name,
+        duration: defaultService.duration,
+        price: defaultService.price
+      }
     };
     
     console.log('🚀 Navigation params prepared:', navigationParams);
     
     try {
-      console.log('🚀 Attempting to navigate to DateTimeSelection...');
-      navigation.navigate('DateTimeSelection', navigationParams);
+      console.log('🚀 Attempting to navigate to SelectTime...');
+      
+      // Navigate to SelectTime using parent navigation
+      navigation.getParent()?.navigate('SelectTime', navigationParams);
       console.log('✅ Navigation called successfully');
       
-      // Add a small delay to check if navigation actually happens
-      setTimeout(() => {
-        console.log('🔍 Navigation check - 500ms after navigate call');
-      }, 500);
     } catch (error) {
       console.error('❌ Navigation error:', error);
       Alert.alert('Error', 'Unable to proceed with booking. Please try again.');
     }
   }, [navigation, profileData]);
 
+  // Load data on component mount
   useEffect(() => {
     fetchProfessionalProfile();
   }, [fetchProfessionalProfile]);
 
-  // Skeleton Loader UI
+  // Loading state
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-        <ScrollView style={styles.scrollView}>
-          {/* Header Skeleton */}
-          <View style={styles.headerSkeleton}>
-            <SkeletonLoader style={styles.avatarSkeleton} />
-            <View style={styles.headerTextSkeleton}>
-              <SkeletonLoader style={styles.nameSkeleton} />
-              <SkeletonLoader style={styles.specialtySkeleton} />
-            </View>
-          </View>
-          
-          {/* About Section Skeleton */}
-          <View style={styles.section}>
-            <SkeletonLoader style={styles.sectionTitleSkeleton} />
-            <SkeletonLoader style={styles.aboutSkeleton} />
-            <SkeletonLoader style={styles.aboutSkeleton} />
-            <View style={styles.aboutSkeleton}>
-              <View style={[styles.skeleton, { width: '60%', height: 16, borderRadius: 8 }]}>
-                <View style={styles.shimmer} />
-              </View>
-            </View>
-          </View>
-          
-          {/* Services Section Skeleton */}
-          <View style={styles.section}>
-            <SkeletonLoader style={styles.sectionTitleSkeleton} />
-            <View style={styles.servicesContainer}>
-              {[1, 2, 3].map((item) => (
-                <SkeletonLoader key={item} style={styles.serviceCardSkeleton} />
-              ))}
-            </View>
-          </View>
-        </ScrollView>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
       </SafeAreaView>
     );
   }
 
+  // Error state
   if (error || !profileData) {
     return (
-      <SafeAreaView style={styles.errorContainer}>
-        <Ionicons 
-          name="alert-circle-outline" 
-          size={48} 
-          color={theme.colors.error || '#FF3B30'} 
-        />
-        <Text style={styles.errorText}>{error || 'Failed to load professional profile'}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={fetchProfessionalProfile}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+        <View style={styles.errorContainer}>
+          <Ionicons 
+            name="alert-circle-outline" 
+            size={48} 
+            color={theme.colors.error || '#FF3B30'} 
+          />
+          <Text style={styles.errorText}>{error || 'Failed to load professional profile'}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={fetchProfessionalProfile}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
-
-  // This check is redundant since we already check profileData in the error state
-  // and show a loading indicator in the loading state
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      <Animated.ScrollView 
-        style={[styles.scrollView, { opacity: fadeAnim }]}
-        contentContainerStyle={styles.scrollViewContent}>
-        
-        {/* Header with back button */}
-        <View style={styles.header}>
-        <TouchableOpacity
+      
+      {/* Header with back button */}
+      <View style={styles.headerContainer}>
+        <TouchableOpacity 
           style={styles.backButton}
           onPress={() => navigation.goBack()}
-          accessibilityLabel="Go back"
-          accessibilityRole="button"
+          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
         >
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
-
+        
         <Text style={styles.headerTitle} numberOfLines={1}>
           {profileData.first_name} {profileData.last_name}
         </Text>
-
+        
         <View style={styles.headerRight} />
       </View>
 
-      {/* Profile Header */}
-        <View style={styles.profileHeader}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Profile Header Card */}
+        <View style={styles.profileHeaderCard}>
           <View style={styles.profileImageContainer}>
             <Image
               source={{ uri: profileData.photo_url || DEFAULT_AVATAR }}
               style={styles.profileImage}
               resizeMode="cover"
               defaultSource={{ uri: DEFAULT_AVATAR }}
-              accessibilityLabel={`${profileData.first_name}'s profile picture`}
-              onError={(e) => {
-                console.log('Error loading profile image:', e.nativeEvent.error);
-                console.log('Falling back to default avatar for:', profileData.first_name);
-                // Force fallback to default avatar
-                e.currentTarget.setNativeProps({ 
-                  source: { uri: DEFAULT_AVATAR } 
-                });
-              }}
             />
           </View>
 
@@ -372,97 +306,90 @@ const ProfessionalProfileScreen = ({ route, navigation }: ProfessionalProfileScr
               </Text>
             )}
 
-            <View style={styles.detailItem}>
-              <Ionicons name="briefcase-outline" size={16} color="#666" />
-              <Text style={styles.detailText}>
-                {formatWorkArrangement(profileData.work_arrangement)}
-              </Text>
-            </View>
-
-            <View style={styles.detailItem}>
-              <Ionicons name="language-outline" size={16} color="#666" />
-              <Text style={styles.detailText}>
-                Speaks {profileData.language || 'English'}
-              </Text>
-            </View>
-
-            {(profileData.city || profileData.state) && (
+            <View style={styles.detailsContainer}>
               <View style={styles.detailItem}>
-                <Ionicons name="location-outline" size={16} color="#666" />
-                <Text style={styles.detailText} numberOfLines={2}>
-                  {[profileData.city, profileData.state, profileData.pin_code]
-                    .filter(Boolean)
-                    .join(', ')}
+                <Ionicons name="briefcase-outline" size={16} color={theme.colors.primary} />
+                <Text style={styles.detailText}>
+                  {formatWorkArrangement(profileData.work_arrangement)}
                 </Text>
               </View>
-            )}
+
+              <View style={styles.detailItem}>
+                <Ionicons name="language-outline" size={16} color={theme.colors.primary} />
+                <Text style={styles.detailText}>
+                  {profileData.language || 'English'}
+                </Text>
+              </View>
+
+              {(profileData.city || profileData.state) && (
+                <View style={styles.detailItem}>
+                  <Ionicons name="location-outline" size={16} color={theme.colors.primary} />
+                  <Text style={styles.detailText} numberOfLines={1}>
+                    {[profileData.city, profileData.state]
+                      .filter(Boolean)
+                      .join(', ')}
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
         </View>
 
         {/* About Section */}
-        {profileData.about ? (
-          <View style={styles.section}>
+        {profileData.about && (
+          <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>About</Text>
-            <View style={styles.sectionContent}>
-              <Text style={styles.aboutText}>
-                {profileData.about}
-              </Text>
-            </View>
+            <Text style={styles.aboutText}>
+              {profileData.about}
+            </Text>
           </View>
-        ) : null}
+        )}
 
         {/* Contact Information Section */}
-        <View style={styles.section}>
+        <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Contact Information</Text>
-          <View style={styles.sectionContent}>
-            {profileData.email ? (
-              <View style={styles.contactItem}>
-                <Ionicons name="mail-outline" size={20} color={theme.colors.primary} />
-                <Text style={styles.contactText} numberOfLines={1} ellipsizeMode="tail">
-                  {profileData.email}
-                </Text>
-              </View>
-            ) : null}
+          
+          {profileData.email && (
+            <View style={styles.contactItem}>
+              <Ionicons name="mail-outline" size={20} color={theme.colors.primary} />
+              <Text style={styles.contactText} numberOfLines={1} ellipsizeMode="tail">
+                {profileData.email}
+              </Text>
+            </View>
+          )}
 
-            {profileData.phone_number ? (
-              <View style={styles.contactItem}>
-                <Ionicons name="call-outline" size={20} color={theme.colors.primary} />
-                <Text style={styles.contactText}>
-                  {profileData.phone_number}
-                </Text>
-              </View>
-            ) : null}
+          {profileData.phone_number && (
+            <View style={styles.contactItem}>
+              <Ionicons name="call-outline" size={20} color={theme.colors.primary} />
+              <Text style={styles.contactText}>
+                {profileData.phone_number}
+              </Text>
+            </View>
+          )}
 
-            {profileData.address ? (
-              <View style={styles.contactItem}>
-                <Ionicons name="location-outline" size={20} color={theme.colors.primary} />
-                <Text style={styles.contactText} numberOfLines={2}>
-                  {[profileData.address, profileData.city, profileData.state, profileData.pin_code]
-                    .filter(Boolean)
-                    .join(', ')}
-                </Text>
-              </View>
-            ) : null}
-          </View>
+          {profileData.address && (
+            <View style={styles.contactItem}>
+              <Ionicons name="location-outline" size={20} color={theme.colors.primary} />
+              <Text style={styles.contactText} numberOfLines={2}>
+                {[profileData.address, profileData.city, profileData.state, profileData.pin_code]
+                  .filter(Boolean)
+                  .join(', ')}
+              </Text>
+            </View>
+          )}
         </View>
-      </Animated.ScrollView>
+
+        {/* Bottom spacing for button */}
+        <View style={styles.bottomSpacing} />
+      </ScrollView>
 
       {/* Fixed Book Button */}
       <View style={styles.footer}>
         <TouchableOpacity
           style={styles.bookButton}
-          onPress={() => {
-            console.log('🔘 TouchableOpacity pressed');
-            console.log('Profile Data:', !!profileData);
-            console.log('Professional ID:', profileData?.professional_id);
-            handleBookAppointment();
-          }}
+          onPress={handleBookAppointment}
           activeOpacity={0.8}
-          disabled={false}
-          accessibilityRole="button"
-          accessibilityLabel="Book a consultation"
-          accessibilityHint="Double tap to book a consultation with this professional"
-          hitSlop={{top: 10, bottom: 10, left: 10, right: 10}} // Increase touchable area
+          hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
         >
           <Text style={styles.bookButtonText}>Book Consultation</Text>
         </TouchableOpacity>
@@ -474,37 +401,25 @@ const ProfessionalProfileScreen = ({ route, navigation }: ProfessionalProfileScr
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background.white,
-    paddingBottom: 100, // Add padding to prevent content from being hidden behind the fixed button
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 8,
-      },
-    }),
+    backgroundColor: '#f5f7fa',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 16,
     fontSize: 16,
-    color: theme.colors.text.secondary,
+    color: '#6B7280',
+    fontFamily: 'System',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    backgroundColor: theme.colors.background.white,
+    backgroundColor: '#fff',
   },
   errorText: {
     marginTop: 16,
@@ -512,6 +427,7 @@ const styles = StyleSheet.create({
     color: theme.colors.error || '#FF3B30',
     textAlign: 'center',
     marginBottom: 24,
+    fontFamily: 'System',
   },
   retryButton: {
     backgroundColor: theme.colors.primary,
@@ -523,299 +439,233 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '600',
     fontSize: 16,
+    fontFamily: 'System',
   },
-  sectionContent: {
-    padding: 16,
-    backgroundColor: theme.colors.background.white,
-    borderRadius: 8,
-    marginBottom: 16,
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    backgroundColor: '#fff',
+    borderBottomWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  backButton: {
+    padding: 12,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    borderRadius: 24,
+    width: 48,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: 20,
+    fontFamily: 'System',
+  },
+  headerRight: {
+    width: 40,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollViewContent: {
+    paddingBottom: 120,
+  },
+  profileHeaderCard: {
+    backgroundColor: '#fff',
+    margin: 20,
+    padding: 32,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+    borderWidth: 0,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  profileImageContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  profileImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 4,
+    borderColor: theme.colors.primary,
+    backgroundColor: '#f8f9fa',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  } as ImageStyle,
+  profileInfo: {
+    alignItems: 'center',
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#1a1a1a',
+    marginBottom: 8,
+    textAlign: 'center',
+    letterSpacing: 0.5,
+    fontFamily: 'System',
+  },
+  profession: {
+    fontSize: 18,
+    color: theme.colors.primary,
+    marginBottom: 20,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    fontFamily: 'System',
+    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  detailsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 8,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  detailText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#475569',
+    fontWeight: '600',
+    fontFamily: 'System',
+  },
+  sectionCard: {
+    backgroundColor: '#fff',
+    margin: 20,
+    marginTop: 0,
+    padding: 24,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 4,
+    borderWidth: 0,
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 20,
+    letterSpacing: 0.3,
+    borderBottomWidth: 3,
+    borderBottomColor: theme.colors.primary,
+    paddingBottom: 12,
+    fontFamily: 'System',
+    position: 'relative',
   },
   aboutText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: theme.colors.text.primary,
+    fontSize: 16,
+    lineHeight: 28,
+    color: '#475569',
+    letterSpacing: 0.2,
+    fontFamily: 'System',
+    textAlign: 'justify',
   },
   contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 16,
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   contactText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: theme.colors.text.primary,
+    marginLeft: 14,
+    fontSize: 16,
+    color: '#1a1a1a',
+    fontWeight: '600',
+    fontFamily: 'System',
   },
   footer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 16,
+    padding: 20,
     backgroundColor: 'transparent',
-    zIndex: 1000,
-    elevation: 10,
+    zIndex: 1,
+    elevation: 1,
   },
   bookButton: {
     backgroundColor: theme.colors.primary,
-    paddingVertical: 16,
-    borderRadius: 8,
+    paddingVertical: 20,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 10,
+    marginHorizontal: 20,
+    marginBottom: 20,
+    position: 'relative',
+    overflow: 'hidden',
   },
   bookButtonText: {
-    color: theme.colors.background.white,
-    fontSize: 16,
-    fontWeight: '600',
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '800',
     textAlign: 'center',
+    letterSpacing: 0.8,
+    fontFamily: 'System',
+    textTransform: 'uppercase',
   },
-  scrollView: {
-    flex: 1,
-    paddingBottom: 90, // Match this with container's paddingBottom
-  },
-  scrollViewContent: {
-    paddingBottom: 100, // Space for the fixed footer button
-  },
-  // Skeleton Loader Styles
-  skeleton: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 4,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  shimmer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#f8f8f8',
-  },
-  // Skeleton Layout
-  headerSkeleton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  avatarSkeleton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-  },
-  headerTextSkeleton: {
-    marginLeft: 16,
-    flex: 1,
-  },
-  nameSkeleton: {
-    width: '60%',
-    height: 24,
-    marginBottom: 8,
-    borderRadius: 4,
-  },
-  specialtySkeleton: {
-    width: '80%',
-    height: 16,
-    borderRadius: 4,
-  },
-  section: {
-    padding: 16,
-    marginBottom: 16,
-    marginHorizontal: 16,
-  },
-  sectionTitleSkeleton: {
-    width: '40%',
-    height: 20,
-    marginBottom: 16,
-    borderRadius: 4,
-  },
-  aboutSkeleton: {
-    width: '100%',
-    height: 16,
-    marginBottom: 8,
-    borderRadius: 8,
-  },
-  servicesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  serviceCardSkeleton: {
-    width: '48%',
-    height: 100,
-    marginBottom: 16,
-    borderRadius: 8,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    ...Platform.select({
-      ios: {
-        paddingTop: 10,
-      },
-      android: {
-        paddingTop: StatusBar.currentHeight,
-      },
-    }),
-  },
-  backButton: {
-    padding: 8,
-    marginLeft: -8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  headerRight: {
-    width: 40, // Same as back button for balance
-  },
-  profileHeader: {
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    margin: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  profileImageContainer: {
-    position: 'relative',
-    marginBottom: 16,
-  },
-  profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 2,
-    borderColor: theme.colors.primary,
-    backgroundColor: '#f0f0f0',
-  } as ImageStyle,
-  profileInfo: {
-    flex: 1,
-    marginLeft: 16,
-  },
-  profileName: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 4,
-  },
-  profession: {
-    fontSize: 16,
-    color: theme.colors.primary,
-    marginBottom: 8,
-    fontWeight: '500',
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  detailText: {
-    marginLeft: 6,
-    fontSize: 14,
-    color: '#666',
-  },
-  sectionTitle: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  serviceHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  serviceName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    flex: 1,
-  },
-  servicePrice: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1E88E5',
-  },
-  serviceDuration: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  serviceDescription: {
-    fontSize: 14,
-    color: '#6B7280',
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  selectServiceButton: {
-    backgroundColor: '#1E88E5',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  selectServiceButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  reviewsSummary: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  averageRatingText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginLeft: 12,
-  },
-  // Review related styles
-  reviewDate: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  } as TextStyle,
-  reviewRating: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  } as ViewStyle,
-  reviewComment: {
-    fontSize: 14,
-    color: '#6B7280',
-    lineHeight: 20,
-  } as TextStyle,
-  
-  // Layout helpers
   bottomSpacing: {
-    height: 100,
-  } as ViewStyle,
-  
+    height: 20,
+  },
 });
 
 export default ProfessionalProfileScreen;

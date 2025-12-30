@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
-import type { HomeStackParamList } from '../../App';
+import type { HomeStackParamList } from '../types/navigation';
 import { Alert } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { theme } from '../theme';
@@ -333,8 +333,8 @@ const HomeScreen = () => {
   useEffect(() => {
     console.log('🏠 [HomeScreen] Component mounted');
     console.log('👤 [HomeScreen] User:', {
-      userId: (user as any)?.user_id || user?._id,
-      userName: user?.first_name || user?.firstName,
+      userId: user?.id || (user as any)?.user_id || (user as any)?._id,
+      userName: user?.first_name,
       hasUser: !!user,
     });
     return () => {
@@ -345,7 +345,7 @@ const HomeScreen = () => {
   // Fetch next appointment data
   const fetchNextAppointment = async () => {
     // Check for user_id (primary) or _id (fallback)
-    const userId = (user as any)?.user_id || user?._id;
+    const userId = user?.id || (user as any)?.user_id || (user as any)?._id;
     if (!userId) {
       console.log('❌ No user ID found, skipping appointment fetch');
       setIsLoading(false);
@@ -378,16 +378,9 @@ const HomeScreen = () => {
 
   useEffect(() => {
     fetchNextAppointment();
-    
-    // Fallback timeout to prevent infinite loading
-    const timeout = setTimeout(() => {
-      console.log('⚠️ HomeScreen loading timeout, forcing completion');
-      setIsLoading(false);
-      setError('Loading took too long. Please try refreshing.');
-    }, 10000);
-    
-    return () => clearTimeout(timeout);
-  }, [(user as any)?.user_id || user?._id]);
+    // Removed fallback timeout to avoid forcing loading false prematurely
+    return undefined;
+  }, [user?.id, (user as any)?.user_id, (user as any)?._id]);
 
   const onRefresh = useCallback(() => {
     console.log('🔄 [HomeScreen] User triggered refresh');
@@ -498,7 +491,7 @@ const HomeScreen = () => {
           <View style={styles.greetingSection}>
             <Text style={styles.greetingText}>Good {getGreetingTime()}</Text>
             <Text style={styles.userNameText}>
-              {user?.first_name || user?.firstName || 'Welcome back'}
+              {user?.first_name || 'Welcome back'}
             </Text>
             <Text style={styles.welcomeMessage}>What would you like to do today?</Text>
           </View>

@@ -3,18 +3,18 @@ import { useAppSelector, useAppDispatch } from '../store';
 import { signInAsync, signOutAsync, updateUserAsync, rehydrateAuthAsync, rehydrateAuth } from '../store/authSlice';
 import { apiService } from '../services/apiService';
 
-import { User } from '../types/auth';
+import type { User as StoreUser } from '../store/authSlice';
 
 type AuthContextData = {
-  user: User | null;
+  user: StoreUser | null;
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   // Critical flag to prevent premature API calls - true when auth state is ready
   isAuthReady: boolean;
-  signIn: (userData: { user: User; token: string }) => Promise<void>;
+  signIn: (userData: { user: StoreUser; token: string }) => Promise<void>;
   signOut: () => Promise<void>;
-  updateUser: (userData: Partial<User>) => Promise<void>;
+  updateUser: (userData: Partial<StoreUser>) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
@@ -36,23 +36,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     console.log('🚀 AuthProvider mounting, starting rehydration...');
-    
     // Rehydrate auth state from AsyncStorage on app start
     dispatch(rehydrateAuthAsync() as any);
-    
-    // Fallback timeout to prevent infinite loading
-    const timeout = setTimeout(() => {
-      console.log('⚠️ Auth rehydration timeout, forcing loading to false');
-      dispatch(rehydrateAuth(null));
-    }, 10000); // 10 second timeout for AsyncStorage rehydration
-    
-    return () => clearTimeout(timeout);
   }, [dispatch]);
 
   // Token is now managed entirely by Redux - the interceptor reads it automatically
   // No need to manually sync token with apiService
 
-  async function signIn({ user, token }: { user: User; token: string }) {
+  async function signIn({ user, token }: { user: StoreUser; token: string }) {
     try {
       // Token is stored in Redux, and the interceptor will automatically use it
       await dispatch(signInAsync({ user, token }) as any);
@@ -72,7 +63,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
-  async function updateUser(userData: Partial<User>) {
+  async function updateUser(userData: Partial<StoreUser>) {
     try {
       await dispatch(updateUserAsync(userData) as any);
     } catch (error) {

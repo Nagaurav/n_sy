@@ -508,16 +508,16 @@ export const apiService = {
     }
   },
 
-  // Fetch support tickets for a user
-  getUserSupportTickets: async (userId: string | number) => {
+  // Next appointment for a user (use POST per backend requirement)
+  getNextAppointment: async (userId: string | number) => {
     try {
-      const response = await api.get(`/user/customer-support/${userId}`);
+      const response = await api.post('/user/consultation-booking/next', { user_id: userId });
       return {
         success: true,
         data: response.data,
       };
     } catch (error: any) {
-      console.error('Error fetching support tickets:', error);
+      console.error('Error fetching next appointment:', error);
       return buildApiErrorResponse(error);
     }
   },
@@ -532,28 +532,6 @@ export const apiService = {
       };
     } catch (error: any) {
       console.error('Error fetching FAQs:', error);
-      return buildApiErrorResponse(error);
-    }
-  },
-
-  // Next appointment for a user
-  getNextAppointment: async (userId: string | number) => {
-    try {
-      const response = await api.get(`/user/consultation-booking/next/${userId}`);
-      return {
-        success: true,
-        data: response.data,
-      };
-    } catch (error: any) {
-      // 404 is not an error - it just means user has no upcoming appointments
-      if (error.response?.status === 404) {
-        console.log('ℹ️ No upcoming appointments found (404)');
-        return {
-          success: true,
-          data: null, // Return null instead of nested object
-        };
-      }
-      console.error('Error fetching next appointment:', error);
       return buildApiErrorResponse(error);
     }
   },
