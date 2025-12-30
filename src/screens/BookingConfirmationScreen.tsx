@@ -105,9 +105,15 @@ const BookingConfirmationScreen = () => {
   const route = useRoute<BookingConfirmationRouteProp>();
   const { bookingData } = route.params;
 
+  // Debug: Log received booking data
+  console.log('📦 BookingConfirmationScreen received bookingData:', bookingData);
+
   // Get auth state from Redux
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAppSelector((state: any) => state.auth);
   const userId = user?.user_id || user?._id;
+  
+  // Debug: Log user info
+  console.log('👤 User info:', { userId, isAuthenticated, user: { email: user?.email, phone: user?.phone } });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const { checkPaymentStatus, initiatePayment, isProcessing: isPaymentProcessing, paymentStatus, paymentError, resetPaymentState } = usePayment();
@@ -314,17 +320,21 @@ const BookingConfirmationScreen = () => {
 
   // Handle booking confirmation
   const handleConfirmBooking = useCallback(async () => {
+    console.log('🚀 BookingConfirmationScreen: Confirm booking button pressed');
+    
     if (!userId) {
+      console.log('❌ No userId found');
       setError('Please sign in to continue with booking');
       return;
     }
 
+    console.log('✅ User authenticated, proceeding with booking');
     setIsLoading(true);
     setError('');
 
     try {
       // Log the booking data for debugging
-      console.log('Booking data:', {
+      console.log('📋 Booking data:', {
         bookingData,
         priceDetails,
         userId
@@ -425,6 +435,16 @@ const BookingConfirmationScreen = () => {
 
       // If we have a payment URL, open it in the WebView
       if (paymentResponse?.payment_url) {
+        console.log('💳 Payment URL received, navigating to PaymentGateway:', paymentResponse.payment_url);
+        console.log('📦 Payment data:', {
+          bookingId: paymentResponse.booking_id,
+          paymentId: paymentResponse.data?.payment_id,
+          amount: paymentResponse.data?.final_amount,
+          customerId: userId,
+          customerEmail: user?.email,
+          customerPhone: user?.phone,
+        });
+        
         navigation.navigate('PaymentGateway', {
           paymentUrl: paymentResponse.payment_url,
           bookingId: paymentResponse.booking_id?.toString() || '',
@@ -435,7 +455,10 @@ const BookingConfirmationScreen = () => {
           customerPhone: user?.phone || '',
           merchantId: Config.PHONEPE_MERCHANT_ID || 'PGTESTPAYUAT' // Fallback to test ID if not set
         });
+        
+        console.log('✅ Navigation to PaymentGateway called');
       } else {
+        console.log('❌ No payment URL received from API');
         throw new Error('No payment URL received');
       }
     } catch (err) {
@@ -726,7 +749,7 @@ const styles = StyleSheet.create({
   cancelButton: {
     backgroundColor: theme.colors.background.white,
     borderWidth: 1,
-    borderColor: theme.colors.background.light,
+    borderColor: '#f0f0f0',
     marginRight: 8,
     borderRadius: 8,
     paddingVertical: 12,

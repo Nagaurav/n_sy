@@ -950,13 +950,34 @@ export const apiService = {
     }
   },
 
-  // Get payment status for a booking
+  // Get payment status for a booking - CRITICAL for payment verification
+  // This endpoint should verify payment status with the payment gateway (PhonePe)
+  // and return the actual status, not just cached database status
   getBookingPaymentStatus: async (bookingId: string | number) => {
     try {
+      // This endpoint should ideally trigger a status check with PhonePe
+      // to get the real-time payment status, not just return cached data
+      // Consider changing to: '/user/consultation-booking/verify-payment/${bookingId}'
+      // if your backend has a manual verification endpoint
+      
+      console.log(`🔍 Checking payment status for booking: ${bookingId}`);
       const response = await api.get(`/user/consultation-booking/payment-status/${bookingId}`);
+      
+      console.log('📊 Payment status response:', response.data);
+      
+      // Expected response format:
+      // {
+      //   success: true,
+      //   data: {
+      //     status: 'SUCCESS' | 'FAILED' | 'PENDING',
+      //     amount: 1000,
+      //     bookingDetails: { ... }
+      //   }
+      // }
+      
       return response.data;
     } catch (error: any) {
-      console.error('Error getting booking payment status:', {
+      console.error('❌ Error getting booking payment status:', {
         error: error.response?.data || error.message,
         status: error.response?.status,
         config: {
@@ -964,7 +985,7 @@ export const apiService = {
           method: error.config?.method,
         }
       });
-      throw new Error(error.response?.data?.message || 'Failed to get booking payment status');
+      throw new Error(error.response?.data?.message || 'Failed to verify payment status');
     }
   },
 

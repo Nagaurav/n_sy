@@ -389,21 +389,12 @@ const HomeScreen = () => {
   }, []);
 
   const openDrawer = () => {
-    console.log('📂 [HomeScreen] Opening drawer menu');
+    console.log(' [HomeScreen] Opening drawer menu');
     navigation.dispatch(DrawerActions.openDrawer());
   };
 
-  const navigateToChat = () => {
-    console.log('💬 [HomeScreen] Navigating to Chat screen');
-    navigation.navigate('ChatScreen', {
-      chatId: 'general-chat',
-      appointmentId: 'general',
-      title: 'Support Chat',
-      receiverId: 'support'
-    });
-  };
-
   const navigateToAppointments = () => {
+    console.log(' [HomeScreen] Navigating to Appointments screen');
     console.log('📅 [HomeScreen] Navigating to Appointments screen');
     navigation.getParent()?.navigate('Appointments');
   };
@@ -467,9 +458,7 @@ const HomeScreen = () => {
             
             <Text style={styles.appTitle}>SAMYAYOG</Text>
             
-            <TouchableOpacity onPress={navigateToChat} style={styles.iconButton} activeOpacity={0.7}>
-              <Ionicons name="chatbubble-ellipses-outline" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
+            <View style={styles.iconButton} />
           </View>
         </View>
       </View>

@@ -1,7 +1,7 @@
 // App.tsx
 import 'react-native-gesture-handler';
 import React, { useEffect, useState } from 'react';
-import { AppRegistry, StatusBar, View, Text } from 'react-native';
+import { AppRegistry, StatusBar, View, Text, Linking } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createDrawerNavigator } from '@react-navigation/drawer';
@@ -327,7 +327,29 @@ const App = () => {
           <AuthProvider>
             <SafeAreaProvider>
               <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-              <NavigationContainer>
+              <NavigationContainer
+                linking={{
+                  prefixes: ['samyayog://'],
+                  config: {
+                    initialRouteName: 'RootStack',
+                    screens: {
+                      RootStack: {
+                        screens: {
+                          MainDrawer: {
+                            screens: {
+                              HomeStack: {
+                                screens: {
+                                  BookingSuccess: 'payment/confirmation/:bookingId',
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }}
+              >
                 <AppNavigator />
               </NavigationContainer>
             </SafeAreaProvider>

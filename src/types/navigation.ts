@@ -70,6 +70,8 @@ export type HomeStackParamList = {
     bookingId: string;
     paymentId: string;
     amount: number;
+    status?: string;
+    message?: string;
     bookingDetails?: {
       professionalName?: string;
       serviceName?: string;

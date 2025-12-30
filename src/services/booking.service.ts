@@ -123,7 +123,7 @@ async function generatePhonePePaymentUrl(params: {
     merchantTransactionId: params.transactionId,
     merchantUserId: `USER_${params.userId}`,
     amount: params.amount,
-    redirectUrl: `${process.env.FRONTEND_URL}/booking/confirmation/${params.bookingId}`,
+    redirectUrl: `samyayog://payment/confirmation/${params.bookingId}`,
     redirectMode: 'POST',
     callbackUrl: `${process.env.BACKEND_URL}/api/v1/bookings/webhook/phonepe`,
     mobileNumber: '',

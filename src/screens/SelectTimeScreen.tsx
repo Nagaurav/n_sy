@@ -10,7 +10,7 @@ import {
   StatusBar,
   Alert
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, CommonActions } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { format, parseISO } from 'date-fns';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -149,8 +149,22 @@ const SelectTimeScreen = () => {
     if (!selectedSlot || !serviceDetails) return;
     const duration = getSlotDuration(selectedSlot.start_time, selectedSlot.end_time);
     
-    navigation.getParent()?.getParent()?.navigate('BookingConfirmation', {
-      bookingData: {
+    console.log('🚀 SelectTimeScreen: Attempting to navigate to BookingConfirmation');
+    console.log('📦 Navigation data:', {
+      professionalId,
+      professionalName,
+      slot_id: selectedSlot.id,
+      date: selectedSlot.date,
+      startTime: selectedSlot.start_time,
+      endTime: selectedSlot.end_time,
+      duration,
+      price: priceDetails?.final_amount || 0,
+      isOnline: selectedSlot.is_online,
+    });
+    
+    try {
+      console.log('🚀 SelectTimeScreen: Attempting to navigate to BookingConfirmation');
+      console.log('📦 Navigation data:', {
         professionalId,
         professionalName,
         slot_id: selectedSlot.id,
@@ -160,9 +174,43 @@ const SelectTimeScreen = () => {
         duration,
         price: priceDetails?.final_amount || 0,
         isOnline: selectedSlot.is_online,
-        serviceDetails: { ...serviceDetails, price: priceDetails?.final_amount || 0 }
+      });
+      
+      // SelectTime is at RootStack level, so we need to navigate to MainDrawer -> HomeStack -> BookingConfirmation
+      const rootNav = navigation;
+      console.log('🧭 Root navigation object:', rootNav);
+      console.log('🧭 Root navigation methods:', Object.getOwnPropertyNames(rootNav || {}));
+      
+      if (rootNav) {
+        (rootNav as any).navigate('MainDrawer', {
+          screen: 'HomeStack',
+          params: {
+            screen: 'BookingConfirmation',
+            params: {
+              bookingData: {
+                professionalId,
+                professionalName,
+                slot_id: selectedSlot.id,
+                date: selectedSlot.date,
+                startTime: selectedSlot.start_time,
+                endTime: selectedSlot.end_time,
+                duration,
+                price: priceDetails?.final_amount || 0,
+                isOnline: selectedSlot.is_online,
+                serviceDetails: { ...serviceDetails, price: priceDetails?.final_amount || 0 }
+              }
+            }
+          }
+        });
+        console.log('✅ SelectTimeScreen: Navigation called successfully');
+      } else {
+        console.log('❌ No root navigation found');
+        throw new Error('No navigation available');
       }
-    });
+    } catch (error) {
+      console.error('❌ SelectTimeScreen: Navigation error:', error);
+      Alert.alert('Error', 'Unable to proceed with booking confirmation. Please try again.');
+    }
   };
 
   // --- RENDER ---
@@ -237,39 +285,78 @@ const SelectTimeScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  container: { flex: 1, backgroundColor: '#f5f7fa' },
   header: { 
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', 
-    padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#eee',
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 20) + 10 : 50
+    paddingHorizontal: 20, paddingVertical: 20, backgroundColor: '#fff', 
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 20) + 20 : 60,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8,
+    elevation: 4,
+    borderBottomWidth: 0,
   },
-  headerTitle: { fontSize: 18, fontWeight: '600' },
-  backButton: { padding: 8 },
-  content: { flex: 1 },
-  center: { alignItems: 'center', marginTop: 50 },
-  errorText: { color: 'red', marginBottom: 20 },
-  retryBtn: { backgroundColor: theme.colors.primary, padding: 10, borderRadius: 8 },
-  sectionHeader: { backgroundColor: '#f8f9fa', padding: 12 },
-  sectionTitle: { fontWeight: '600', color: '#555' },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#1a1a1a', letterSpacing: 0.3 },
+  backButton: { 
+    padding: 12, backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 24,
+    width: 48, height: 48, justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4,
+    elevation: 2,
+  },
+  content: { flex: 1, paddingHorizontal: 20 },
+  center: { alignItems: 'center', marginTop: 80, paddingHorizontal: 20 },
+  errorText: { color: '#dc2626', marginBottom: 24, fontSize: 16, textAlign: 'center', fontWeight: '500' },
+  retryBtn: { 
+    backgroundColor: theme.colors.primary, paddingVertical: 12, paddingHorizontal: 24, 
+    borderRadius: 16, shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 
+  },
+  sectionHeader: { 
+    backgroundColor: '#fff', paddingVertical: 16, paddingHorizontal: 20, marginTop: 20,
+    borderRadius: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.08, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: '#f0f0f0'
+  },
+  sectionTitle: { 
+    fontWeight: '700', color: '#1a1a1a', fontSize: 18, letterSpacing: 0.2 
+  },
   slotItem: { 
-    padding: 16, margin: 8, borderWidth: 1, borderColor: '#eee', borderRadius: 8,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'
+    padding: 20, marginHorizontal: 0, marginVertical: 8, borderWidth: 2, borderColor: '#e5e7eb', 
+    borderRadius: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
-  slotSelected: { backgroundColor: '#e3f2fd', borderColor: theme.colors.primary },
-  slotText: { fontSize: 16 },
-  slotTextSelected: { color: theme.colors.primary, fontWeight: '600' },
-  durationText: { color: '#888', fontSize: 12 },
+  slotSelected: { 
+    backgroundColor: 'rgba(79, 70, 229, 0.08)', borderColor: theme.colors.primary, 
+    shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.2, shadowRadius: 12, elevation: 4,
+  },
+  slotText: { fontSize: 16, fontWeight: '600', color: '#1a1a1a' },
+  slotTextSelected: { color: theme.colors.primary, fontWeight: '700' },
+  durationText: { 
+    color: '#6b7280', fontSize: 14, fontWeight: '500', backgroundColor: '#f3f4f6', 
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 
+  },
   footer: { 
     position: 'absolute', bottom: 0, left: 0, right: 0, 
-    padding: 16, backgroundColor: '#fff', borderTopWidth: 1, borderColor: '#eee' 
+    padding: 20, backgroundColor: '#fff', borderTopWidth: 0,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 12,
+    elevation: 8,
   },
   confirmBtn: { 
-    backgroundColor: theme.colors.primary, padding: 16, borderRadius: 12,
-    flexDirection: 'row', justifyContent: 'space-between'
+    backgroundColor: theme.colors.primary, paddingVertical: 20, paddingHorizontal: 24, borderRadius: 20,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 8 }, 
+    shadowOpacity: 0.4, shadowRadius: 16, elevation: 10,
   },
-  disabledBtn: { backgroundColor: '#ccc' },
-  confirmText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  priceText: { color: '#fff', fontWeight: 'bold', fontSize: 16 }
+  disabledBtn: { 
+    backgroundColor: '#d1d5db', shadowColor: 'transparent', shadowOffset: { width: 0, height: 0 }, 
+    shadowOpacity: 0, shadowRadius: 0, elevation: 0 
+  },
+  confirmText: { 
+    color: '#fff', fontWeight: '700', fontSize: 18, letterSpacing: 0.3 
+  },
+  priceText: { 
+    color: '#fff', fontWeight: '800', fontSize: 20, backgroundColor: 'rgba(255,255,255,0.2)', 
+    paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 
+  },
 });
 
 export default SelectTimeScreen;

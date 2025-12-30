@@ -58,7 +58,7 @@ const ProfileScreen = () => {
 
   const fetchProfile = async () => {
     try {
-      const userId = user?.user_id || user?._id;
+      const userId = (user as any)?.user_id || user?._id || (user as any)?.id;
       if (!userId) {
         throw new Error('User ID not found');
       }

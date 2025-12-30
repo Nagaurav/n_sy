@@ -48,8 +48,8 @@ const PaymentGatewayScreen = () => {
   const [retryCount, setRetryCount] = useState(0);
   const [verifyingText, setVerifyingText] = useState('Verifying Payment...');
   
-  const maxRetries = 5;
-  const retryInterval = 2000; // 2 seconds
+  const maxRetries = 10; // Try for 30 seconds (10 retries x 3 seconds)
+  const retryInterval = 3000; // 3 seconds
 
   // Handle Android back button
   useEffect(() => {
@@ -82,21 +82,39 @@ const PaymentGatewayScreen = () => {
 
   // Handle navigation state changes in WebView
   const handleNavigationStateChange = async (navState: WebViewNavigation) => {
-    const { url, loading, title } = navState;
+    const { url } = navState;
     
     // Skip processing if URL is undefined or about:blank
-    if (!url || url === 'about:blank') {
-      console.log('WebView: Blank or undefined URL, skipping...');
-      return;
-    }
+    if (!url || url === 'about:blank') return;
     
-    console.log('WebView navigation:', {
-      url,
-      loading,
-      title: title || 'No title',
-      canGoBack: navState.canGoBack,
-      canGoForward: navState.canGoForward
-    });
+    console.log('WebView navigation:', { url });
+    
+    // 1. INTERCEPT: Check for the Callback URL (Localhost or your Success URL)
+    // This catches the moment PhonePe tries to redirect you back
+    const isCallback = 
+      url.includes('localhost') || 
+      url.includes('127.0.0.1') || 
+      url.includes('payment/callback') || 
+      url.includes('payment/success');
+
+    if (isCallback) {
+      console.log(' Payment callback detected. Intercepting and Verifying:', url);
+      
+      // A. Stop the WebView from trying to load the page (which might fail on localhost)
+      webViewRef.current?.stopLoading();
+      
+      // B. Show the "Verifying..." overlay
+      setIsVerifying(true);
+      setVerifyingText('Confirming payment with bank...');
+
+      // C. TRIGGER BACKEND VERIFICATION
+      // We wait 2 seconds to give the bank time to sync, then we ask your Backend to check.
+      setTimeout(() => {
+        verifyPaymentStatus(); 
+      }, 2000);
+      
+      return; // Stop execution here
+    }
     
     // Check if the navigation is to the payment completion callback URL
     const isPaymentCompletionUrl = [
@@ -136,12 +154,21 @@ const PaymentGatewayScreen = () => {
 
       const response: PaymentStatusResponse = wrapped as any;
 
-      if (response.success && response.data) {
-        const { status, amount, bookingDetails } = response.data;
+      // Accept response even if success field is missing, as long as data is present
+      if (response.data || (response.success && response.data)) {
+        const { status, amount, bookingDetails } = response.data || {};
+        
+        console.log('📊 Payment status response processed:', {
+          hasSuccess: !!response.success,
+          hasData: !!response.data,
+          status,
+          amount,
+          hasBookingDetails: !!bookingDetails
+        });
         
         // Navigate to success or failure screen based on payment status
         if (status === 'SUCCESS' || status === 'COMPLETED') {
-          console.log('Payment successful, navigating to success screen');
+          console.log('✅ Payment successful, navigating to success screen');
           navigation.replace('BookingSuccess', {
             bookingId,
             paymentId,
@@ -149,14 +176,14 @@ const PaymentGatewayScreen = () => {
             bookingDetails: bookingDetails || {}
           });
         } else if (status === 'FAILED' || status === 'CANCELLED') {
-          console.log('Payment failed, navigating to failure screen');
+          console.log('❌ Payment failed, navigating to failure screen');
           navigation.replace('BookingFailed', {
             bookingId,
             error: response.error || 'Payment was not completed successfully.'
           });
         } else {
           // Handle pending or other statuses with retry logic
-          console.log(`Payment status: ${status} (attempt ${currentRetry + 1}/${maxRetries})`);
+          console.log(`⏳ Payment status: ${status} (attempt ${currentRetry + 1}/${maxRetries})`);
           
           if (currentRetry < maxRetries - 1) {
             // Update retry count and message
@@ -170,7 +197,7 @@ const PaymentGatewayScreen = () => {
             }, retryInterval);
           } else {
             // Max retries reached, navigate to failed screen
-            console.log('Max retries reached, navigating to failed screen');
+            console.log('⏰ Max retries reached, navigating to failed screen');
             navigation.replace('BookingFailed', {
               bookingId,
               error: `Payment status: ${status}. Verification timed out after ${maxRetries} attempts. Please contact support if amount was deducted.`
@@ -178,7 +205,9 @@ const PaymentGatewayScreen = () => {
           }
         }
       } else {
-        throw new Error(response.error || 'Failed to verify payment status');
+        // No data in response, treat as failure
+        console.log('❌ No payment data received in response:', response);
+        throw new Error(response.error || 'No payment status data received');
       }
     } catch (err: any) {
       console.error(`Payment verification error (attempt ${currentRetry + 1}/${maxRetries}):`, err);

@@ -23,27 +23,6 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
   const { theme: themeHook } = useTheme();
   const appTheme = themeHook || theme;
   
-  // Set up header with back button
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShown: true,
-      headerTitle: 'My Appointments',
-      headerTitleAlign: 'center',
-      headerLeft: () => (
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()}
-          style={{
-            marginLeft: 16,
-            padding: 8,
-            borderRadius: 20,
-            backgroundColor: 'rgba(0,0,0,0.05)'
-          }}
-        >
-          <Ionicons name="arrow-back" size={24} color={appTheme.colors.primary} />
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation, appTheme.colors.primary]);
   const [appointments, setAppointments] = useState<ConsultationBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -155,12 +134,30 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
   }, [user?._id]);
 
   const handleRefresh = useCallback(() => {
-    console.log('🔄 [AppointmentsScreen] User triggered refresh');
+    console.log('🔄 [AppointmentsScreen] User triggered refresh - fetching latest appointment data');
+    console.log('🔄 [AppointmentsScreen] Current appointments count:', appointments.length);
+    
+    // Log current appointment statuses before refresh
+    appointments.forEach((apt, index) => {
+      console.log(`🔄 [AppointmentsScreen] Before refresh - Appointment ${index + 1}:`, {
+        bookingId: apt.booking_id || apt._id,
+        bookingStatus: apt.booking_status || apt.status,
+        paymentStatus: apt.payment_status,
+        professionalName: apt.professional_name
+      });
+    });
+    
     setIsRefreshing(true);
     setPage(1);
     setHasMore(true);
+    setError(null);
+    
+    // Clear current appointments to force fresh fetch
+    setAppointments([]);
+    
+    // Fetch fresh data
     fetchAppointments(1);
-  }, [fetchAppointments]);
+  }, [appointments, fetchAppointments]);
 
   const handleLoadMore = useCallback(() => {
     if (isLoadingMore || isLoading || !hasMore) {
@@ -244,6 +241,59 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     );
   };
 
+  // Set up header with back button and logout
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      headerTitle: 'My Appointments',
+      headerTitleAlign: 'center',
+      headerLeft: () => (
+        <TouchableOpacity 
+          onPress={() => navigation.goBack()}
+          style={{
+            marginLeft: 16,
+            padding: 8,
+            borderRadius: 20,
+            backgroundColor: 'rgba(0,0,0,0.05)'
+          }}
+        >
+          <Ionicons name="arrow-back" size={24} color={appTheme.colors.primary} />
+        </TouchableOpacity>
+      ),
+      headerRight: () => (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity 
+            onPress={handleRefresh}
+            disabled={isRefreshing}
+            style={{
+              marginRight: 8,
+              padding: 8,
+              borderRadius: 20,
+              backgroundColor: isRefreshing ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.1)',
+            }}
+          >
+            <Ionicons 
+              name="refresh" 
+              size={20} 
+              color={isRefreshing ? '#ccc' : appTheme.colors.primary} 
+            />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={handleLogout}
+            style={{
+              marginRight: 16,
+              padding: 8,
+              borderRadius: 20,
+              backgroundColor: 'rgba(0,0,0,0.05)'
+            }}
+          >
+            <Ionicons name="log-out-outline" size={20} color={appTheme.colors.primary} />
+          </TouchableOpacity>
+        </View>
+      ),
+    });
+  }, [navigation, appTheme.colors.primary, handleLogout, handleRefresh, isRefreshing]);
+
   const getStatusBadgeStyle = (status: string) => {
     switch (status.toLowerCase()) {
       case 'confirmed':
@@ -311,9 +361,19 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
   const renderAppointment = ({ item }: { item: any }) => {
     // Handle both API response formats
     const status = (item.booking_status || item.status || '').toLowerCase();
+    const paymentStatus = (item.payment_status || '').toLowerCase();
     const statusBadgeStyle = getStatusBadgeStyle(status);
     const bookingId = item.booking_id || item._id;
     const appointmentId = item.appointment_id || bookingId?.toString();
+    
+    // Debug: Log status information
+    console.log('📅 Appointment Status Debug:', {
+      bookingId,
+      status: item.booking_status || item.status,
+      paymentStatus: item.payment_status,
+      displayStatus: status,
+      professionalName: item.professional_name
+    });
     const timeDisplay = item.time; // Already formatted as "09:00 - 09:15"
 
     const handleAppointmentPress = () => {
@@ -470,7 +530,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
           )}
         </View>
 
-        {(status === 'confirmed' || status === 'completed') && (
+        {status === 'completed' && (
           <View style={styles.actionsRow}>
             <TouchableOpacity
               style={styles.actionButton}
@@ -485,15 +545,30 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
               <Text style={styles.actionButtonText}>View Details</Text>
             </TouchableOpacity>
 
-            {status === 'completed' && (
-              <TouchableOpacity
-                style={styles.secondaryActionButton}
-                onPress={() => handleViewPrescription(bookingId)}
-              >
-                <Ionicons name="medkit-outline" size={20} color={theme.colors.primary} />
-                <Text style={styles.secondaryActionButtonText}>View Prescription</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={styles.secondaryActionButton}
+              onPress={() => handleViewPrescription(bookingId)}
+            >
+              <Ionicons name="medkit-outline" size={20} color={theme.colors.primary} />
+              <Text style={styles.secondaryActionButtonText}>View Prescription</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {status === 'confirmed' && (
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => {
+                Alert.alert(
+                  'Appointment Details',
+                  `Professional: ${item.professional_name}\nDate: ${formatDate(item.date)}\nTime: ${timeDisplay}\nMode: ${item.mode}\nAmount: ₹${item.amount}`,
+                );
+              }}
+            >
+              <Ionicons name="information-circle" size={20} color="#1E88E5" />
+              <Text style={styles.actionButtonText}>View Details</Text>
+            </TouchableOpacity>
           </View>
         )}
       </TouchableOpacity>
@@ -504,9 +579,6 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#1E88E5" />
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>My Appointments</Text>
-        </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#1E88E5" />
           <Text style={styles.loadingText}>
@@ -521,15 +593,6 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1E88E5" />
       
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Appointments</Text>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-          <Ionicons name="log-out-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
-
       {/* User Info Card */}
       <View style={styles.userInfo}>
         <View style={styles.userInfoHeader}>
@@ -627,39 +690,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F3F4F6',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingTop: (StatusBar.currentHeight || 0) + 16,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: theme.colors.background.surface,
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 4,
-  },
-  logoutText: {
-    color: theme.colors.background.surface,
-    fontWeight: '600',
-    fontSize: 14,
   },
   userInfo: {
     backgroundColor: theme.colors.background.surface,

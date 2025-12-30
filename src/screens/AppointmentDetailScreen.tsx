@@ -584,35 +584,37 @@ const AppointmentDetailScreen: React.FC = () => {
         </View>
       )}
 
-      {/* Prescription Viewer - Embedded at bottom */}
-      <View style={styles.card}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Prescriptions</Text>
-          {prescriptionData && (
-            <TouchableOpacity
-              style={styles.downloadButton}
-              onPress={() => {
-                // Navigate to PrescriptionDetail if prescription exists
-                (navigation as any).navigate('PrescriptionDetail', {
-                  prescriptionId: prescriptionData.id,
-                  appointmentId: currentAppointment.appointment_id,
-                });
-              }}
-            >
-              <Icon name="download" size={20} color={theme.colors.primary} />
-              <Text style={styles.downloadButtonText}>View Details</Text>
-            </TouchableOpacity>
+      {/* Prescription Viewer - Only show for COMPLETED appointments */}
+      {currentAppointment.booking_status === 'COMPLETED' && (
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Prescriptions</Text>
+            {prescriptionData && (
+              <TouchableOpacity
+                style={styles.downloadButton}
+                onPress={() => {
+                  // Navigate to PrescriptionDetail if prescription exists
+                  (navigation as any).navigate('PrescriptionDetail', {
+                    prescriptionId: prescriptionData.id,
+                    appointmentId: currentAppointment.appointment_id,
+                  });
+                }}
+              >
+                <Icon name="download" size={20} color={theme.colors.primary} />
+                <Text style={styles.downloadButtonText}>View Details</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {prescriptionLoading ? (
+            <View style={styles.prescriptionLoadingContainer}>
+              <ActivityIndicator size="small" color="#3B82F6" />
+              <Text style={styles.prescriptionLoadingText}>Loading prescription...</Text>
+            </View>
+          ) : (
+            <PrescriptionViewer appointmentId={currentAppointment.appointment_id} />
           )}
         </View>
-        {prescriptionLoading ? (
-          <View style={styles.prescriptionLoadingContainer}>
-            <ActivityIndicator size="small" color="#3B82F6" />
-            <Text style={styles.prescriptionLoadingText}>Loading prescription...</Text>
-          </View>
-        ) : (
-          <PrescriptionViewer appointmentId={currentAppointment.appointment_id} />
-        )}
-      </View>
+      )}
 
       {/* Security Info */}
       <View style={styles.securityInfo}>
