@@ -1,12 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, StatusBar, ViewStyle, TextStyle, Animated, Image, ImageStyle } from 'react-native';
+import { View, StyleSheet, StatusBar, ViewStyle, Animated, Image, ImageStyle } from 'react-native';
 import { theme, commonStyles } from '../theme';
 
 type Styles = {
   container: ViewStyle;
   logoContainer: ViewStyle;
   logoImage: ImageStyle;
-  appName: TextStyle;
 };
 
 const styles = StyleSheet.create<Styles>({
@@ -20,19 +19,9 @@ const styles = StyleSheet.create<Styles>({
     alignItems: 'center',
   },
   logoImage: {
-    width: 180,
-    height: 180,
-    marginBottom: theme.spacing.l,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)', // Add background for debugging
-    borderRadius: 10,
-  },
-  appName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: 2,
-    textAlign: 'center',
-    marginTop: theme.spacing.l,
+    width: 280,
+    height: 280,
+    marginBottom: theme.spacing.s,
   },
 });
 
@@ -71,7 +60,6 @@ const SplashScreen = () => {
           onError={() => console.log('❌ Logo image failed to load')}
           onLoad={() => console.log('✅ Logo image loaded successfully')}
         />
-        <Text style={styles.appName}>SAMYAYOG</Text>
       </Animated.View>
     </View>
   );

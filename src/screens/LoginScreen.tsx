@@ -8,21 +8,25 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  TextInput,
   SafeAreaView,
   ViewStyle,
   TextStyle,
-  ImageStyle,
   Image,
+  ImageStyle,
+  Dimensions,
+  StatusBar,
+  Pressable,
 } from 'react-native';
 import { StackScreenProps } from '@react-navigation/stack';
-import { authService } from '../services';
+import { authService } from '../services'; // Ensure authService is correctly imported
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
 import { theme } from '../theme';
 import { FloatingLabelInput } from '../components/FloatingLabelInput';
 
 type LoginScreenProps = StackScreenProps<any, 'Login'>;
+
+const { width } = Dimensions.get('window');
 
 interface LoginCredentials {
   identifier: string;
@@ -32,25 +36,53 @@ interface LoginCredentials {
 const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   const [identifier, setIdentifier] = useState<string>('');
   const [password, setPassword] = useState<string>('');
-  const [isPasswordLogin, setIsPasswordLogin] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isButtonPressed, setIsButtonPressed] = useState(false);
+  const [errors, setErrors] = useState<{identifier?: string; password?: string}>({});
 
   const { signIn } = useAuth();
   const { theme } = useTheme();
 
-  const handlePasswordLogin = useCallback(async () => {
-    // Basic validation
+  const validateInputs = () => {
+    const newErrors: {identifier?: string; password?: string} = {};
+    
+    // Validate identifier (email or phone)
     if (!identifier.trim()) {
-      Alert.alert('Error', 'Please enter your email or phone number');
-      return;
+      newErrors.identifier = 'Please enter your email or phone number';
+    } else if (!isValidEmail(identifier) && !isValidPhone(identifier)) {
+      newErrors.identifier = 'Please enter a valid email or phone number';
     }
-
+    
+    // Validate password
     if (!password.trim()) {
-      Alert.alert('Error', 'Please enter your password');
+      newErrors.password = 'Please enter your password';
+    } else if (password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+  
+  const isValidEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+  
+  const isValidPhone = (phone: string) => {
+    const phoneRegex = /^[+]?[\d\s\-\(\)]+$/;
+    return phoneRegex.test(phone) && phone.replace(/\D/g, '').length >= 10;
+  };
+  const [isPasswordLogin, setIsPasswordLogin] = useState<boolean>(true);
+  const handlePasswordLogin = useCallback(async () => {
+    setIsButtonPressed(true);
+    
+    if (!validateInputs()) {
       return;
     }
 
-    setIsLoading(true);
+    // Basic validation
+    setIsButtonPressed(true);
 
     try {
       const credentials = {
@@ -69,16 +101,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         // Navigate to main app - the AuthContext will handle the navigation
         navigation.replace('Home');
       } else {
-        Alert.alert('Login Failed', response.error || 'Invalid credentials. Please try again.');
+        Alert.alert(
+          'Login Failed',
+          'The email or password you entered is incorrect. Please try again.'
+        );
       }
+    setIsLoading(true);
+    setIsButtonPressed(false);
     } catch (error) {
-      console.error('Login error:', error);
+      setIsButtonPressed(false);
       Alert.alert(
         'Login Error',
-        'An error occurred during login. Please check your connection and try again.'
+        'Unable to connect. Please check your internet connection and try again.'
       );
     } finally {
       setIsLoading(false);
+      setIsButtonPressed(false);
     }
   }, [identifier, password, signIn, navigation]);
 
@@ -88,16 +126,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   }, [navigation]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      
+      {/* 🟢 MODIFIED HEADER: Full Cover Image */}
       <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
-        <View style={styles.logoContainer}>
-          <Image 
-            source={require('../assets/logo.jpg')} 
-            style={styles.logoImage} 
-            resizeMode="contain" 
-          />
-          <Text style={styles.appName}>SAMYAYOG</Text>
-        </View>
+        <Image 
+          source={require('../assets/logo.jpg')} 
+          style={styles.logoImage} 
+          resizeMode="contain" 
+        />
+        {/* Optional: Dark overlay to make text readable if you add any text on top */}
+        <View style={styles.headerOverlay} />
       </View>
       
       <KeyboardAvoidingView
@@ -115,39 +155,57 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                 <FloatingLabelInput
                   label="Email or Phone Number"
                   value={identifier}
-                  onChangeText={setIdentifier}
+                  onChangeText={(text) => {
+                    setIdentifier(text);
+                    if (errors.identifier) {
+                      setErrors(prev => ({ ...prev, identifier: undefined }));
+                    }
+                  }}
                   keyboardType="default"
                   autoCapitalize="none"
                   autoCorrect={false}
+                  icon="phone"
+                  error={errors.identifier}
                 />
               </View>
 
-              {/* Password Input */}
               {isPasswordLogin && (
                 <View style={styles.inputContainer}>
                   <FloatingLabelInput
                     label="Password"
                     value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
+                    onChangeText={(text) => {
+                      setPassword(text);
+                      if (errors.password) {
+                        setErrors(prev => ({ ...prev, password: undefined }));
+                      }
+                    }}
                     autoCapitalize="none"
                     autoCorrect={false}
+                    icon="lock"
+                    isPassword={true}
+                    error={errors.password}
                   />
                 </View>
               )}
 
               {/* Login Button */}
               {isPasswordLogin && (
-                <TouchableOpacity
-                  style={[styles.button, isLoading && styles.buttonDisabled]}
+                <Pressable
+                  style={[
+                    styles.button, 
+                    isLoading && styles.buttonDisabled,
+                    isButtonPressed && styles.buttonPressed
+                  ]}
                   onPress={handlePasswordLogin}
                   disabled={isLoading}
-                  activeOpacity={0.8}
+                  onPressIn={() => setIsButtonPressed(true)}
+                  onPressOut={() => setIsButtonPressed(false)}
                 >
                   <Text style={styles.buttonText}>
-                    {isLoading ? 'Logging in...' : 'Login'}
+                    {isLoading ? 'Logging in...' : 'Log In'}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               )}
 
               {/* Toggle Button */}
@@ -157,7 +215,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                 activeOpacity={0.7}
               >
                 <Text style={styles.toggleButtonText}>
-                  {isPasswordLogin ? 'Login with OTP Instead' : 'Use Email/Password'}
+                  {isPasswordLogin ? 'Log in using OTP' : 'Use Email/Password'}
                 </Text>
               </TouchableOpacity>
 
@@ -171,16 +229,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 };
 
 type Styles = {
   container: ViewStyle;
   header: ViewStyle;
-  logoContainer: ViewStyle;
+  headerOverlay: ViewStyle;
   logoImage: ImageStyle;
-  appName: TextStyle;
   content: ViewStyle;
   title: TextStyle;
   subtitle: TextStyle;
@@ -189,6 +246,7 @@ type Styles = {
   button: ViewStyle;
   buttonText: TextStyle;
   buttonDisabled: ViewStyle;
+  buttonPressed: ViewStyle;
   toggleButton: ViewStyle;
   toggleButtonText: TextStyle;
   forgotPasswordButton: ViewStyle;
@@ -197,35 +255,31 @@ type Styles = {
 const styles = StyleSheet.create<Styles>({
   container: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
   },
+  // 🟢 NEW HEADER STYLES
   header: {
-    backgroundColor: theme.colors.primary,
-    paddingVertical: 40,
-    paddingBottom: 60,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    alignItems: 'center',
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: 20,
+    height: 160, // Reduced from 240 to make logo less oversized
+    width: '100%',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden', // Ensures image gets clipped to rounded corners
+    position: 'relative',
+    marginTop: 40, // Move header down more
   },
   logoImage: {
-    width: 100,
-    height: 100,
-    marginBottom: 10,
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain', // Changed from cover to contain to prevent overflow
   },
-  appName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: 1,
+  headerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.1)', // Slight overlay for depth (optional)
   },
+  // -------------------
   content: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingTop: 30,
   },
   title: {
     fontSize: 24,
@@ -248,8 +302,8 @@ const styles = StyleSheet.create<Styles>({
   },
   button: {
     backgroundColor: '#008272', // Using primary color directly for now
-    borderRadius: 12,
-    paddingVertical: 16,
+    borderRadius: 16, // More rounded corners (from 12 to 16)
+    paddingVertical: 20, // Increased height (from 16 to 20)
     alignItems: 'center',
     marginBottom: 16,
   },
@@ -258,26 +312,31 @@ const styles = StyleSheet.create<Styles>({
     fontSize: 16,
     fontWeight: '600',
   },
+  buttonPressed: {
+    backgroundColor: '#006B5C', // Darker green for pressed state
+  },
   buttonDisabled: {
     backgroundColor: '#D1D5DB',
   },
   toggleButton: {
     alignItems: 'center',
     paddingVertical: 12,
+    marginBottom: 16, // Reduced spacing from Forgot Password
   },
   toggleButtonText: {
     color: '#008272', // Using primary color directly for now
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '700', // Made bolder (from 500 to 700)
     textDecorationLine: 'underline',
   },
   forgotPasswordButton: {
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 8, // Minimal spacing from toggle button
   },
   forgotPasswordText: {
-    color: '#6B7280',
-    fontSize: 14,
+    color: '#9CA3AF', // Made lighter and less prominent (from #6B7280)
+    fontSize: 12, // Made smaller (from 14 to 12)
+    fontWeight: '400', // Made lighter (from default to 400)
   },
 });
 

@@ -257,7 +257,7 @@ const AppNavigator = () => {
     const timer = setTimeout(() => {
       console.log('🔧 Navigation ready timeout reached');
       setIsNavigationReady(true);
-    }, 8000); // 8 second timeout
+    }, 3000); // 3 second timeout
     
     return () => clearTimeout(timer);
   }, []);
@@ -269,8 +269,8 @@ const AppNavigator = () => {
     isNavigationReady 
   });
 
-  // Show splash screen only if we're still loading and navigation isn't ready
-  if ((isLoading || !isAuthReady) && !isNavigationReady) {
+  // Show splash screen for 8 seconds using navigation timeout only
+  if (!isNavigationReady) {
     console.log('⏳ Showing splash screen...');
     return (
       <AuthStack.Navigator screenOptions={{ headerShown: false }}>
