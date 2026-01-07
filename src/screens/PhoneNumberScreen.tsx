@@ -15,8 +15,9 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { theme } from '../theme';
-import { apiService } from '../services/apiService';
+import { authService } from '../services';
 import { FloatingLabelInput } from '../components/FloatingLabelInput';
+import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
 
 type Styles = {
@@ -214,7 +215,7 @@ const PhoneNumberScreen = ({ navigation }: any) => {
     setError('');
 
     try {
-      const response = await apiService.sendOTP(phoneNumber);
+      const response = await authService.sendOTP(phoneNumber);
 
       if (response.success) {
         navigation.navigate('OTP', { phoneNumber });

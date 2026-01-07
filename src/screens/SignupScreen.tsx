@@ -22,9 +22,9 @@ import { format } from 'date-fns';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { theme } from '../theme';
-import { apiService } from '../services/apiService';
+import { authService } from '../services';
 import { RootStackParamList } from '../../App';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { FloatingLabelInput } from '../components/FloatingLabelInput';
 import { useTheme } from '../contexts/ThemeContext';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -478,7 +478,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
         latitude: formData.latitude,
         longitude: formData.longitude
       };
-      const result = await apiService.signup(payload);
+      const result = await authService.signup(payload);
 
       if (!result.success || !result.data?.token || !result.data?.user) {
         const errorMessage = result.error || 'Failed to sign up. Please try again.';

@@ -15,9 +15,9 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { HomeStackParamList } from '../types/navigation';
-import apiService from '../services/apiService';
+import { apiService, authService } from '../services';
 import type { UserProfileData } from '../types/userProfile';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { FloatingLabelInput } from '../components/FloatingLabelInput';
 import { theme } from '../theme';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -134,7 +134,7 @@ const EditProfileScreen = () => {
       };
 
       const userId = user?.user_id || currentUser.user_id;
-      await apiService.updateUserProfile(userId, payload);
+      await authService.updateProfile(String(userId), payload);
 
       // Update local auth state for immediate UI reflection
       await updateUser({

@@ -14,7 +14,7 @@ import {
   DrawerContentComponentProps,
 } from '@react-navigation/drawer';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
 import { theme as defaultTheme } from '../theme';
 

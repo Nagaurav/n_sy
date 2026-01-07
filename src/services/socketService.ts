@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = 'http://88.222.241.179:7000';
+const SOCKET_URL = 'https://samya-be.oetech.co';
 
 class SocketService {
   private socket: Socket | null = null;

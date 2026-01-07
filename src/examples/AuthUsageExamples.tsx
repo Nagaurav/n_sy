@@ -7,9 +7,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Alert } from 'react-native';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { useAppSelector } from '../store';
-import { apiService } from '../services/apiService';
+import { apiService } from '../services';
 import { ConsultationBooking } from '../types/booking';
 
 // Example 1: Basic Authentication State Access
@@ -54,7 +54,7 @@ export const UserAppointmentsExample = () => {
     try {
       // This API call is automatically scoped to the authenticated user
       // The user_id is retrieved from the global auth state
-      const response = await apiService.getUserAppointments(user._id);
+      const response = await apiService.getUserAppointments(String(user._id || user.user_id || user.id));
       
       if (response.success && response.data) {
         const data: any = response.data;
@@ -189,12 +189,12 @@ export const ErrorHandlingExample = () => {
       // Make API call that requires authentication
       const profile = await apiService.getUserProfile(user._id as any);
       
-      if (!profile || !profile.user) {
+      if (!profile || !profile.data) {
         throw new Error('Request failed');
       }
 
       // Handle successful response
-      console.log('User profile:', response.data?.user);
+      console.log('User profile:', profile.data);
       
     } catch (error: any) {
       console.error('Request error:', error);

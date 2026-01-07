@@ -9,7 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Provider } from 'react-redux';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { store } from './src/store';
-import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { useAuth } from './src/hooks/useAuth';
 import { theme } from './src/theme';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 
@@ -243,7 +243,12 @@ const MainDrawerNavigator = () => {
 
 // Navigation component that handles auth routing
 const AppNavigator = () => {
-  const { isAuthenticated, isLoading, isAuthReady } = useAuth();
+  const { isAuthenticated, isLoading, isAuthReady, initializeAuth } = useAuth();
+  
+  // Initialize auth state on mount
+  React.useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
   
   // Add a timeout to prevent infinite loading
   const [isNavigationReady, setIsNavigationReady] = React.useState(false);
@@ -252,7 +257,7 @@ const AppNavigator = () => {
     const timer = setTimeout(() => {
       console.log('🔧 Navigation ready timeout reached');
       setIsNavigationReady(true);
-    }, 5000); // 5 second timeout
+    }, 8000); // 8 second timeout
     
     return () => clearTimeout(timer);
   }, []);
@@ -324,36 +329,21 @@ const App = () => {
     return (
       <Provider store={store}>
         <ThemeProvider>
-          <AuthProvider>
-            <SafeAreaProvider>
-              <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-              <NavigationContainer
-                linking={{
-                  prefixes: ['samyayog://'],
-                  config: {
-                    initialRouteName: 'RootStack',
-                    screens: {
-                      RootStack: {
-                        screens: {
-                          MainDrawer: {
-                            screens: {
-                              HomeStack: {
-                                screens: {
-                                  BookingSuccess: 'payment/confirmation/:bookingId',
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
+          <SafeAreaProvider>
+            <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+            <NavigationContainer
+              linking={{
+                prefixes: ['samyayog://'],
+                config: {
+                  screens: {
+                    BookingSuccess: 'payment/confirmation/:bookingId',
                   }
-                }}
-              >
-                <AppNavigator />
-              </NavigationContainer>
-            </SafeAreaProvider>
-          </AuthProvider>
+                }
+              }}
+            >
+              <AppNavigator />
+            </NavigationContainer>
+          </SafeAreaProvider>
         </ThemeProvider>
       </Provider>
     );

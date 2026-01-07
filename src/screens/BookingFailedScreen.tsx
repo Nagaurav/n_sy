@@ -9,7 +9,8 @@ import {
   Dimensions,
   StatusBar,
   Alert,
-  Linking
+  Linking,
+  ScrollView
 } from 'react-native';
 import { useNavigation, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -110,158 +111,164 @@ const BookingFailedScreen = ({ route }: BookingFailedScreenProps) => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#DC2626" />
       
-      <View style={styles.content}>
-        {/* Error Icon with Animation */}
-        <Animated.View 
-          style={[
-            styles.iconContainer,
-            {
-              transform: [
-                { scale: scaleValue },
-                { translateX: shakeValue }
-              ],
-              opacity: fadeValue,
-            },
-          ]}
-        >
-          <View style={styles.iconBackground}>
-            <Ionicons name="close-circle" size={100} color="#FFFFFF" />
-          </View>
-        </Animated.View>
-        
-        {/* Error Messages */}
-        <Animated.View 
-          style={[
-            styles.textContainer,
-            {
-              opacity: fadeValue,
-            },
-          ]}
-        >
-          <Text style={styles.title}>Payment Failed</Text>
-          <Text style={styles.subtitle}>
-            {error || 'There was an issue processing your payment. Please try again.'}
-          </Text>
-          
-          {bookingId && (
-            <View style={styles.referenceContainer}>
-              <Ionicons name="receipt-outline" size={16} color="#6b7280" />
-              <Text style={styles.referenceText}>Reference: #{bookingId}</Text>
-            </View>
-          )}
-        </Animated.View>
-        
-        {/* Error Details Card */}
-        <Animated.View 
-          style={[
-            styles.detailsContainer,
-            {
-              opacity: fadeValue,
-            },
-          ]}
-        >
-          <View style={styles.detailsHeader}>
-            <Ionicons name="alert-circle-outline" size={20} color="#DC2626" />
-            <Text style={styles.detailsTitle}>What Happened?</Text>
-          </View>
-          
-          <Text style={styles.detailsText}>
-            {error || 'The payment could not be completed. This could be due to insufficient funds, network issues, or a temporary problem with the payment gateway.'}
-          </Text>
-          
-          <View style={styles.suggestionsList}>
-            <View style={styles.suggestionItem}>
-              <Ionicons name="checkmark-circle" size={16} color="#059669" />
-              <Text style={styles.suggestionText}>Check your account balance</Text>
-            </View>
-            <View style={styles.suggestionItem}>
-              <Ionicons name="checkmark-circle" size={16} color="#059669" />
-              <Text style={styles.suggestionText}>Ensure stable internet connection</Text>
-            </View>
-            <View style={styles.suggestionItem}>
-              <Ionicons name="checkmark-circle" size={16} color="#059669" />
-              <Text style={styles.suggestionText}>Try a different payment method</Text>
-            </View>
-          </View>
-        </Animated.View>
-
-        {/* Action Buttons */}
-        <Animated.View 
-          style={[
-            styles.buttonsContainer,
-            {
-              opacity: fadeValue,
-            },
-          ]}
-        >
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={handleRetry}
-            activeOpacity={0.8}
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.content}>
+          {/* Error Icon with Animation */}
+          <Animated.View 
+            style={[
+              styles.iconContainer,
+              {
+                transform: [
+                  { scale: scaleValue },
+                  { translateX: shakeValue }
+                ],
+                opacity: fadeValue,
+              },
+            ]}
           >
-            <Ionicons name="refresh-outline" size={20} color="#FFFFFF" style={styles.buttonIcon} />
-            <Text style={styles.primaryButtonText}>Try Again</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={handleContactSupport}
-            activeOpacity={0.8}
+            <View style={styles.iconBackground}>
+              <Ionicons name="close-circle" size={width > 380 ? 100 : 80} color="#FFFFFF" />
+            </View>
+          </Animated.View>
+          
+          {/* Error Messages */}
+          <Animated.View 
+            style={[
+              styles.textContainer,
+              {
+                opacity: fadeValue,
+              },
+            ]}
           >
-            <Ionicons name="headset-outline" size={20} color="#DC2626" />
-            <Text style={styles.secondaryButtonText}>Get Help</Text>
-          </TouchableOpacity>
-
-          {/* Expandable Help Section */}
-          {showHelp && (
-            <Animated.View style={styles.helpContainer}>
-              <TouchableOpacity
-                style={styles.helpOption}
-                onPress={handleCallSupport}
-              >
-                <Ionicons name="call-outline" size={18} color="#059669" />
-                <Text style={styles.helpOptionText}>Call Support: 1800-123-4567</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.helpOption}
-                onPress={handleEmailSupport}
-              >
-                <Ionicons name="mail-outline" size={18} color="#059669" />
-                <Text style={styles.helpOptionText}>Email Support</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.helpOption}
-                onPress={handleViewBookings}
-              >
-                <Ionicons name="calendar-outline" size={18} color="#059669" />
-                <Text style={styles.helpOptionText}>Check Booking Status</Text>
-              </TouchableOpacity>
-            </Animated.View>
-          )}
-
-          <View style={styles.secondaryButtonsRow}>
-            <TouchableOpacity
-              style={styles.tertiaryButton}
-              onPress={handleViewBookings}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="calendar-outline" size={16} color="#6b7280" />
-              <Text style={styles.tertiaryButtonText}>My Bookings</Text>
-            </TouchableOpacity>
+            <Text style={styles.title}>Payment Failed</Text>
+            <Text style={styles.subtitle}>
+              {error || 'There was an issue processing your payment. Please try again.'}
+            </Text>
             
+            {bookingId && (
+              <View style={styles.referenceContainer}>
+                <Ionicons name="receipt-outline" size={16} color="#6b7280" />
+                <Text style={styles.referenceText}>Reference: #{bookingId}</Text>
+              </View>
+            )}
+          </Animated.View>
+          
+          {/* Error Details Card */}
+          <Animated.View 
+            style={[
+              styles.detailsContainer,
+              {
+                opacity: fadeValue,
+              },
+            ]}
+          >
+            <View style={styles.detailsHeader}>
+              <Ionicons name="alert-circle-outline" size={20} color="#DC2626" />
+              <Text style={styles.detailsTitle}>What Happened?</Text>
+            </View>
+            
+            <Text style={styles.detailsText}>
+              {error || 'The payment could not be completed. This could be due to insufficient funds, network issues, or a temporary problem with the payment gateway.'}
+            </Text>
+            
+            <View style={styles.suggestionsList}>
+              <View style={styles.suggestionItem}>
+                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Text style={styles.suggestionText}>Check your account balance</Text>
+              </View>
+              <View style={styles.suggestionItem}>
+                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Text style={styles.suggestionText}>Ensure stable internet connection</Text>
+              </View>
+              <View style={styles.suggestionItem}>
+                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Text style={styles.suggestionText}>Try a different payment method</Text>
+              </View>
+            </View>
+          </Animated.View>
+
+          {/* Action Buttons */}
+          <Animated.View 
+            style={[
+              styles.buttonsContainer,
+              {
+                opacity: fadeValue,
+              },
+            ]}
+          >
             <TouchableOpacity
-              style={styles.tertiaryButton}
-              onPress={handleBackToHome}
+              style={styles.primaryButton}
+              onPress={handleRetry}
               activeOpacity={0.8}
             >
-              <Ionicons name="home-outline" size={16} color="#6b7280" />
-              <Text style={styles.tertiaryButtonText}>Home</Text>
+              <Ionicons name="refresh-outline" size={20} color="#FFFFFF" style={styles.buttonIcon} />
+              <Text style={styles.primaryButtonText}>Try Again</Text>
             </TouchableOpacity>
-          </View>
-        </Animated.View>
-      </View>
+
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={handleContactSupport}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="headset-outline" size={20} color="#DC2626" />
+              <Text style={styles.secondaryButtonText}>Get Help</Text>
+            </TouchableOpacity>
+
+            {/* Expandable Help Section */}
+            {showHelp && (
+              <Animated.View style={styles.helpContainer}>
+                <TouchableOpacity
+                  style={styles.helpOption}
+                  onPress={handleCallSupport}
+                >
+                  <Ionicons name="call-outline" size={18} color="#059669" />
+                  <Text style={styles.helpOptionText}>Call Support: 1800-123-4567</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={styles.helpOption}
+                  onPress={handleEmailSupport}
+                >
+                  <Ionicons name="mail-outline" size={18} color="#059669" />
+                  <Text style={styles.helpOptionText}>Email Support</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={styles.helpOption}
+                  onPress={handleViewBookings}
+                >
+                  <Ionicons name="calendar-outline" size={18} color="#059669" />
+                  <Text style={styles.helpOptionText}>Check Booking Status</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+
+            <View style={styles.secondaryButtonsRow}>
+              <TouchableOpacity
+                style={styles.tertiaryButton}
+                onPress={handleViewBookings}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="calendar-outline" size={16} color="#6b7280" />
+                <Text style={styles.tertiaryButtonText}>My Bookings</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.tertiaryButton}
+                onPress={handleBackToHome}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="home-outline" size={16} color="#6b7280" />
+                <Text style={styles.tertiaryButtonText}>Home</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -271,11 +278,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fef2f2',
   },
-  content: {
+  scrollView: {
     flex: 1,
-    padding: 24,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  content: {
+    padding: width > 380 ? 24 : 16,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingBottom: 40,
   },
   // Icon styles
   iconContainer: {
@@ -283,9 +296,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   iconBackground: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
+    width: width > 380 ? 160 : 120,
+    height: width > 380 ? 160 : 120,
+    borderRadius: width > 380 ? 80 : 60,
     backgroundColor: '#DC2626',
     justifyContent: 'center',
     alignItems: 'center',
@@ -301,7 +314,7 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   title: {
-    fontSize: 28,
+    fontSize: width > 380 ? 28 : 24,
     fontWeight: '800',
     color: '#1a1a1a',
     marginBottom: 8,

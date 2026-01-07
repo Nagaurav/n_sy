@@ -10,8 +10,8 @@ import {
 } from 'react-native';
 import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
-import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../services/apiService';
+import { useAuth } from '../hooks/useAuth';
+import { medicalService } from '../services';
 import type { HomeStackParamList } from '../types/navigation';
 import type { Prescription } from '../types/medical';
 import Card from '../components/Card';
@@ -49,10 +49,10 @@ const PrescriptionDetailScreen: React.FC = () => {
     setError(null);
     try {
       // API call to the specific detail endpoint
-      const response = await apiService.getPrescriptionById(prescriptionId);
+      const response = await medicalService.getPrescription(prescriptionId);
       
       // Data structure: { msg: "Prescription fetched successfully", data: prescription }
-      setPrescription(response.data);
+      setPrescription(response.data?.data || null);
     } catch (err: any) {
       console.error('Prescription detail fetch error:', err.message);
       setError(err.message || 'Failed to load prescription details.');
@@ -138,7 +138,7 @@ const PrescriptionDetailScreen: React.FC = () => {
   const doctorName = `${prescription.professional?.first_name ?? ''} ${
     prescription.professional?.last_name ?? ''
   }`.trim() || 'Doctor';
-  const doctorQualification = prescription.practitionerQualification || prescription.professional?.speciality_new?.name;
+  const doctorQualification = prescription.professional?.speciality_new?.name || 'N/A';
   const type = prescription.prescriptionType || 'Consultation';
 
   const vitals = prescription.vitals || {};
@@ -146,9 +146,9 @@ const PrescriptionDetailScreen: React.FC = () => {
   const weight = vitals.weight;
   const pulse = vitals.pulse || vitals.heartRate;
 
-  const patientName = prescription.patientName || vitals.patientName || vitals.name;
-  const patientAge = prescription.patientAge || vitals.age;
-  const patientGender = prescription.patientGender || vitals.gender;
+  const patientName = vitals.patientName || vitals.name || 'Patient';
+  const patientAge = vitals.patientAge || 'N/A';
+  const patientGender = vitals.patientGender || 'N/A';
 
   return (
     <ScrollView style={styles.container}>

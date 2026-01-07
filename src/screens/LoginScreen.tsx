@@ -12,10 +12,12 @@ import {
   SafeAreaView,
   ViewStyle,
   TextStyle,
+  ImageStyle,
+  Image,
 } from 'react-native';
 import { StackScreenProps } from '@react-navigation/stack';
-import { apiService } from '../services/apiService';
-import { useAuth } from '../contexts/AuthContext';
+import { authService } from '../services';
+import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
 import { theme } from '../theme';
 import { FloatingLabelInput } from '../components/FloatingLabelInput';
@@ -56,7 +58,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         password: password.trim(),
       };
 
-      const response = await apiService.login(credentials);
+      const response = await authService.login(credentials);
 
       if (response.success && response.data) {
         const { user, token } = response.data;
@@ -89,9 +91,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
       <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
         <View style={styles.logoContainer}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>SY</Text>
-          </View>
+          <Image 
+            source={require('../assets/logo.jpg')} 
+            style={styles.logoImage} 
+            resizeMode="contain" 
+          />
           <Text style={styles.appName}>SAMYAYOG</Text>
         </View>
       </View>
@@ -175,8 +179,7 @@ type Styles = {
   container: ViewStyle;
   header: ViewStyle;
   logoContainer: ViewStyle;
-  logoCircle: ViewStyle;
-  logoText: TextStyle;
+  logoImage: ImageStyle;
   appName: TextStyle;
   content: ViewStyle;
   title: TextStyle;
@@ -208,19 +211,10 @@ const styles = StyleSheet.create<Styles>({
     alignItems: 'center',
     marginTop: 20,
   },
-  logoCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  logoImage: {
+    width: 100,
+    height: 100,
     marginBottom: 10,
-  },
-  logoText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
   },
   appName: {
     fontSize: 20,

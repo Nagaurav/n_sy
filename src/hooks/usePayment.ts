@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
-import apiService from '../services/apiService';
-import { useAuth } from '../contexts/AuthContext';
+import { apiService } from '../services';
+import { useAuth } from '../hooks/useAuth';
 
 type PaymentParams = {
   amount: number;
@@ -79,23 +79,23 @@ export const usePayment = () => {
             userId,
             professionalId: params.professionalId,
             slotId: params.slotId,
-            serviceType,
-            serviceId,
+            // serviceType, // Remove this as it's not in the interface
+            // serviceId, // Remove this as it's not in the interface
             couponCode: params.couponCode,
             duration: params.duration,
             metadata: params.metadata
           });
 
           console.log('Payment initiation response:', {
-            hasPaymentUrl: !!response?.payment_url,
-            bookingId: response?.booking_id,
+            hasPaymentUrl: !!response?.data?.payment_url,
+            bookingId: response?.data?.booking_id,
             responseKeys: response ? Object.keys(response) : 'No response'
           });
 
-          if (response?.payment_url) {
+          if (response?.data?.payment_url) {
             return {
               ...response,
-              paymentUrl: response.payment_url // Ensure consistent property name
+              paymentUrl: response.data.payment_url // Ensure consistent property name
             };
           }
 
@@ -148,7 +148,7 @@ export const usePayment = () => {
         throw new Error('Invalid response from server');
       }
       
-      const status = response.status || 'unknown';
+      const status = response.data?.status || 'unknown';
       setPaymentStatus(status);
       return response;
     } catch (error: any) {
@@ -174,7 +174,7 @@ export const usePayment = () => {
         throw new Error('Invalid verification response');
       }
       
-      const status = response.status || 'unknown';
+      const status = response.data?.status || 'unknown';
       setPaymentStatus(status);
       return response;
     } catch (error: any) {
@@ -209,7 +209,7 @@ export const usePayment = () => {
       }
       
       // Update payment status based on response
-      const status = response.status || 'PENDING';
+      const status = response.data?.status || 'PENDING';
       setPaymentStatus(status);
       
       return {

@@ -15,10 +15,10 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
-import type { HomeStackParamList } from '../../App';
+import type { HomeStackParamList } from '../types/navigation';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../services/apiService';
+import { useAuth } from '../hooks/useAuth';
+import { apiService } from '../services';
 import { theme } from '../theme';
 import Card from '../components/Card';
 import CollapsibleCard from '../components/CollapsibleCard';
@@ -44,7 +44,7 @@ type ProfessionalsListScreenNavigationProp =
 const ProfessionalsListScreen = () => {
   const navigation = useNavigation<ProfessionalsListScreenNavigationProp>();
   const route = useRoute();
-  const { categoryId, searchQuery, categoryName } =
+  const { categoryId, searchQuery, categoryName, bookingType } =
     (route.params as RouteParams) || {};
   const { user } = useAuth();
 
@@ -72,10 +72,11 @@ const ProfessionalsListScreen = () => {
 
   useEffect(() => {
     fetchProfessionals();
-  }, [categoryId, searchQuery]);
+  }, [categoryId, searchQuery, bookingType]);
 
   const fetchProfessionals = async (resetList = true, pageNum = 1) => {
-    if (!user?._id) return;
+    const userId = (user as any)?.user_id || (user as any)?._id || (user as any)?.id;
+    if (!userId) return;
 
     if (resetList) {
       setIsLoading(true);
@@ -86,6 +87,14 @@ const ProfessionalsListScreen = () => {
     setError('');
 
     try {
+      // Determine role based on bookingType
+      let roleFilter = filters.role;
+      if (bookingType === 'consultation') {
+        roleFilter = 'doctor';
+      } else if (bookingType === 'class') {
+        roleFilter = 'yoga_teacher';
+      }
+
       const filterParams: ProfessionalFilters = {
         page: pageNum,
         limit: 10,
@@ -97,8 +106,11 @@ const ProfessionalsListScreen = () => {
         city: filters.city,
         min_price: filters.min_price,
         max_price: filters.max_price,
-        role: filters.role,
+        role: roleFilter,
       };
+
+      console.log('📋 [ProfessionalsList] Fetching with bookingType:', bookingType, 'roleFilter:', roleFilter);
+      console.log('📋 [ProfessionalsList] Filter params:', filterParams);
 
       const response = await apiService.searchProfessionalsWithFilters(filterParams);
 
@@ -288,7 +300,7 @@ const ProfessionalsListScreen = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#1E88E5" barStyle="light-content" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{categoryName || 'Professionals'}</Text>
@@ -441,9 +453,30 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
     backgroundColor: '#1E88E5',
-    padding: 16,
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    marginRight: 16,
+  },
+  headerTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   filterBar: {
     flexDirection: 'row',
@@ -553,12 +586,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#FFFFFF',
     fontWeight: '600',
-  },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-    marginLeft: 12,
   },
   searchContainer: {
     flexDirection: 'row',

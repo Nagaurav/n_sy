@@ -12,7 +12,8 @@ import {
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { apiService } from '../services/apiService';
+import { useAuth } from '../hooks/useAuth';
+import { apiService } from '../services';
 import { RootStackParamList } from '../../App';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 

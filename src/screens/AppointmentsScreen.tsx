@@ -12,9 +12,9 @@ import {
   StatusBar,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
-import { apiService } from '../services/apiService';
+import { bookingService, medicalService } from '../services';
 import { ConsultationBooking } from '../types/booking';
 import { theme } from '../theme';
 
@@ -35,7 +35,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     console.log('📱 AppointmentsScreen - Auth State:', {
       authLoading,
       hasUser: !!user,
-      userId: user?._id,
+      userId: (user as any)?.user_id || (user as any)?._id || (user as any)?.id,
       userObject: user, // Log the entire user object to see what fields it has
     });
 
@@ -46,7 +46,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     }
 
     // Check for user_id, _id, or id (API returns user_id)
-    const userId = (user as any)?.user_id || user?._id || (user as any)?.id;
+    const userId = (user as any)?.user_id || (user as any)?._id || (user as any)?.id;
     
     if (userId) {
       console.log('✅ User authenticated, fetching appointments for:', userId);
@@ -56,11 +56,11 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
       setIsLoading(false);
       setError('User not authenticated');
     }
-  }, [(user as any)?.user_id, user?._id, (user as any)?.id, authLoading]);
+  }, [(user as any)?.user_id, (user as any)?._id, (user as any)?.id, authLoading]);
 
   const fetchAppointments = useCallback(async (pageToLoad: number = 1) => {
     // Check for user_id, _id, or id (API returns user_id)
-    const userId = (user as any)?.user_id || user?._id || (user as any)?.id;
+    const userId = (user as any)?.user_id || (user as any)?._id || (user as any)?.id;
     
     if (!userId) {
       setError('User not authenticated');
@@ -84,7 +84,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
         setIsLoadingMore(true);
       }
 
-      const response = await apiService.getUserAppointments(String(userId), {
+      const response = await bookingService.getUserAppointments(String(userId), {
         limit,
         offset,
       });
@@ -131,7 +131,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
         setIsLoadingMore(false);
       }
     }
-  }, [user?._id]);
+  }, [(user as any)?.user_id, (user as any)?._id, (user as any)?.id]);
 
   const handleRefresh = useCallback(() => {
     console.log('🔄 [AppointmentsScreen] User triggered refresh - fetching latest appointment data');
@@ -182,20 +182,20 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
       
       try {
         console.log('📡 [AppointmentsScreen] Fetching prescription for booking:', numericId);
-        const response = await apiService.getBookingPrescription(numericId);
+        const response = await medicalService.getPrescription(numericId);
         console.log('📡 [AppointmentsScreen] Prescription API response:', {
-          hasData: !!response?.data,
-          prescriptionId: response?.data?.id,
-          prescriptionType: response?.data?.prescriptionType,
+          hasData: !!response?.data?.data,
+          prescriptionId: response?.data?.data?.id,
+          prescriptionType: response?.data?.data?.prescriptionType,
         });
         
-        if (response?.data?.id) {
+        if (response?.data?.data?.id) {
           console.log('🚀 [AppointmentsScreen] Navigating to PrescriptionDetail:', {
-            prescriptionId: response.data.id,
+            prescriptionId: response.data.data.id,
           });
           navigation.navigate('HomeStack', {
             screen: 'PrescriptionDetail',
-            params: { prescriptionId: response.data.id },
+            params: { prescriptionId: response.data.data.id },
           });
         } else {
           console.log('ℹ️ [AppointmentsScreen] No prescription found');
@@ -220,79 +220,12 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     [navigation],
   );
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-            } catch (error) {
-              console.error('Logout error:', error);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  // Set up header with back button and logout
+  // Set up header with back button only
   React.useLayoutEffect(() => {
     navigation.setOptions({
-      headerShown: true,
-      headerTitle: 'My Appointments',
-      headerTitleAlign: 'center',
-      headerLeft: () => (
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()}
-          style={{
-            marginLeft: 16,
-            padding: 8,
-            borderRadius: 20,
-            backgroundColor: 'rgba(0,0,0,0.05)'
-          }}
-        >
-          <Ionicons name="arrow-back" size={24} color={appTheme.colors.primary} />
-        </TouchableOpacity>
-      ),
-      headerRight: () => (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <TouchableOpacity 
-            onPress={handleRefresh}
-            disabled={isRefreshing}
-            style={{
-              marginRight: 8,
-              padding: 8,
-              borderRadius: 20,
-              backgroundColor: isRefreshing ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.1)',
-            }}
-          >
-            <Ionicons 
-              name="refresh" 
-              size={20} 
-              color={isRefreshing ? '#ccc' : appTheme.colors.primary} 
-            />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={handleLogout}
-            style={{
-              marginRight: 16,
-              padding: 8,
-              borderRadius: 20,
-              backgroundColor: 'rgba(0,0,0,0.05)'
-            }}
-          >
-            <Ionicons name="log-out-outline" size={20} color={appTheme.colors.primary} />
-          </TouchableOpacity>
-        </View>
-      ),
+      headerShown: false, // Hide default header, use custom green header
     });
-  }, [navigation, appTheme.colors.primary, handleLogout, handleRefresh, isRefreshing]);
+  }, [navigation]);
 
   const getStatusBadgeStyle = (status: string) => {
     switch (status.toLowerCase()) {
@@ -369,10 +302,11 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     // Debug: Log status information
     console.log('📅 Appointment Status Debug:', {
       bookingId,
-      status: item.booking_status || item.status,
-      paymentStatus: item.payment_status,
+      booking_status: item.booking_status,
+      status: item.status,
       displayStatus: status,
-      professionalName: item.professional_name
+      professionalName: item.professional_name,
+      showPrescriptionButton: item.booking_status === 'COMPLETED'
     });
     const timeDisplay = item.time; // Already formatted as "09:00 - 09:15"
 
@@ -392,6 +326,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
       
       // Extract current user ID with multiple fallbacks
       const currentUserId = String(
+        (user as any)?.user_id || 
         (user as any)?.user_id || 
         user?._id || 
         (user as any)?.id || 
@@ -530,7 +465,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
           )}
         </View>
 
-        {status === 'completed' && (
+        {item.booking_status === 'COMPLETED' && (
           <View style={styles.actionsRow}>
             <TouchableOpacity
               style={styles.actionButton}
@@ -591,56 +526,32 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1E88E5" />
+      <StatusBar barStyle="light-content" backgroundColor={theme.colors.primary} />
       
-      {/* User Info Card */}
-      <View style={styles.userInfo}>
-        <View style={styles.userInfoHeader}>
-          <View style={styles.avatarContainer}>
-            <Ionicons name="person" size={24} color="#1E88E5" />
-          </View>
-          <View style={styles.userDetails}>
-            <Text style={styles.welcomeText}>
-              Welcome, {user?.first_name || user?.firstName || 'User'} {user?.last_name || user?.lastName || ''}
-            </Text>
-            {user?.phone && (
-              <View style={styles.phoneRow}>
-                <Ionicons name="call" size={14} color="#6B7280" />
-                <Text style={styles.userPhone}>{user.phone}</Text>
-              </View>
-            )}
-          </View>
-        </View>
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{appointments.length}</Text>
-            <Text style={styles.statLabel}>Total</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>
-              {appointments.filter((a: any) => (a.booking_status || a.status || '').toLowerCase() === 'confirmed').length}
-            </Text>
-            <Text style={styles.statLabel}>Confirmed</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>
-              {appointments.filter((a: any) => (a.booking_status || a.status || '').toLowerCase() === 'completed').length}
-            </Text>
-            <Text style={styles.statLabel}>Completed</Text>
-          </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          >
+            <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>My Appointments</Text>
         </View>
       </View>
 
       {/* Content Area */}
       {error ? (
         <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={64} color="#EF4444" />
+          <View style={styles.errorIconContainer}>
+            <Ionicons name="alert-circle" size={48} color="#EF4444" />
+          </View>
+          <Text style={styles.errorTitle}>Oops!</Text>
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={handleRefresh} style={styles.retryButton}>
             <Ionicons name="refresh" size={20} color="#FFFFFF" />
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>Try Again</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -656,8 +567,8 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              colors={["#1E88E5"]}
-              tintColor="#1E88E5"
+              colors={[theme.colors.primary]}
+              tintColor={theme.colors.primary}
             />
           }
           onEndReached={handleLoadMore}
@@ -665,19 +576,31 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
           ListFooterComponent={
             isLoadingMore ? (
               <View style={styles.footerLoader}>
-                <ActivityIndicator size="small" color="#1E88E5" />
+                <ActivityIndicator size="small" color={theme.colors.primary} />
                 <Text style={styles.footerLoaderText}>Loading more appointments...</Text>
               </View>
             ) : null
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Ionicons name="calendar-outline" size={80} color="#D1D5DB" />
-              <Text style={styles.emptyText}>No Appointments Yet</Text>
+              <View style={styles.emptyIconContainer}>
+                <Ionicons name="calendar-outline" size={64} color="#D1D5DB" />
+              </View>
+              <Text style={styles.emptyTitle}>No Appointments Yet</Text>
               <Text style={styles.emptySubtext}>
                 Your booking history will appear here.{"\n"}
                 Start by booking your first consultation!
               </Text>
+              <TouchableOpacity 
+                style={styles.bookButton}
+                onPress={() => navigation.getParent()?.navigate('MainDrawer', {
+                  screen: 'HomeStack',
+                  params: { screen: 'Home' }
+                })}
+              >
+                <Ionicons name="add-circle" size={20} color="#FFFFFF" />
+                <Text style={styles.bookButtonText}>Book First Appointment</Text>
+              </TouchableOpacity>
             </View>
           }
         />
@@ -689,286 +612,327 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: theme.colors.background.primary,
   },
-  userInfo: {
-    backgroundColor: theme.colors.background.surface,
-    padding: 16,
-    marginBottom: 8,
-    elevation: 2,
+  
+  // Header Styles
+  header: {
+    backgroundColor: theme.colors.primary,
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  userInfoHeader: {
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'flex-start',
   },
-  avatarContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#E0F2FE',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    marginRight: 16,
   },
-  userDetails: {
-    flex: 1,
-  },
-  welcomeText: {
-    fontSize: 18,
+  headerTitle: {
+    fontSize: 20,
     fontWeight: '700',
-    color: theme.colors.text.primary,
-    marginBottom: 4,
+    color: theme.colors.background.surface,
+    letterSpacing: 0.3,
   },
-  phoneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  userPhone: {
-    fontSize: 14,
-    color: theme.colors.text.secondary,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: theme.colors.primary,
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: theme.colors.text.secondary,
-    textTransform: 'uppercase',
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#E5E7EB',
-  },
+
+  // Loading State
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: theme.colors.background.primary,
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6B7280',
+    marginTop: 20,
+    fontSize: 17,
+    color: theme.colors.text.secondary,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
+
+  // Error State
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: 40,
+    backgroundColor: theme.colors.background.primary,
+  },
+  errorIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 3,
+    borderColor: 'rgba(239, 68, 68, 0.2)',
+  },
+  errorTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 12,
+    letterSpacing: 0.2,
   },
   errorText: {
-    fontSize: 16,
-    color: '#EF4444',
+    fontSize: 17,
+    color: '#6B7280',
     textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 24,
-    lineHeight: 24,
+    marginBottom: 32,
+    lineHeight: 26,
+    fontWeight: '500',
   },
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E88E5',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    gap: 8,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
+    borderRadius: theme.borderRadius.l,
+    gap: theme.spacing.s,
+    ...theme.shadows.card,
   },
   retryText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
+    color: theme.colors.background.surface,
+    fontWeight: '700',
     fontSize: 16,
+    letterSpacing: 0.2,
   },
+
+  // List Container
   listContainer: {
-    padding: 16,
+    padding: theme.spacing.l,
+    paddingTop: theme.spacing.m,
   },
   emptyListContainer: {
     flexGrow: 1,
   },
-  appointmentCard: {
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
-    overflow: 'hidden',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: 16,
-    paddingBottom: 12,
-  },
-  dateTimeContainer: {
+
+  // Empty State
+  emptyContainer: {
     flex: 1,
-    gap: 8,
-  },
-  iconTextRow: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    padding: theme.spacing.xl,
   },
-  appointmentDate: {
-    fontSize: 16,
-    fontWeight: '600',
+  emptyIconContainer: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(0, 130, 114, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xl,
+    borderWidth: 3,
+    borderColor: 'rgba(0, 130, 114, 0.15)',
+  },
+  emptyTitle: {
+    fontSize: 28,
+    fontWeight: '800',
     color: '#1F2937',
+    marginBottom: 12,
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
-  appointmentTime: {
-    fontSize: 15,
+  emptySubtext: {
+    fontSize: 17,
     color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 26,
+    marginBottom: 40,
     fontWeight: '500',
   },
-  professionalName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  statusBadge: {
+  bookButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.m,
+    borderRadius: theme.borderRadius.xl,
+    gap: theme.spacing.s,
+    ...theme.shadows.card,
+  },
+  bookButtonText: {
+    color: theme.colors.background.surface,
+    fontWeight: '700',
+    fontSize: 17,
+    letterSpacing: 0.3,
+  },
+
+  // Footer Loader
+  footerLoader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  footerLoaderText: {
+    marginLeft: 12,
+    color: theme.colors.text.secondary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
+  // Appointment Card Styles
+  appointmentCard: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: theme.borderRadius.xl,
+    marginBottom: theme.spacing.l,
+    padding: 0,
+    ...theme.shadows.card,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: 'rgba(0, 130, 114, 0.1)',
+  },
+  cardHeader: {
+    padding: theme.spacing.l,
+    paddingBottom: theme.spacing.m,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+    marginBottom: 8,
+  },
+  professionalName: {
+    fontSize: 18,
+    color: theme.colors.text.primary,
+    marginBottom: 6,
+    fontWeight: '700',
+  },
+  statusBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: theme.spacing.m,
+    paddingVertical: theme.spacing.s,
+    borderRadius: theme.borderRadius.xl,
+    marginBottom: theme.spacing.m,
+    ...theme.shadows.card,
   },
   statusText: {
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 0.3,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 16,
-  },
-  cardDetails: {
-    padding: 16,
-    gap: 12,
+  cardContent: {
+    padding: 20,
+    paddingTop: 0,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    marginBottom: 12,
+  },
+  detailIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   detailLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    minWidth: 60,
   },
   detailValue: {
     fontSize: 14,
-    color: '#1F2937',
+    color: theme.colors.text.primary,
     fontWeight: '600',
     flex: 1,
   },
-  notesContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    backgroundColor: '#F9FAFB',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 4,
-  },
-  notesText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#4B5563',
-    lineHeight: 20,
-  },
   actionsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 12,
+    gap: theme.spacing.m,
+    marginTop: theme.spacing.m,
+    paddingHorizontal: theme.spacing.l,
+    paddingBottom: theme.spacing.l,
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E0F2FE',
-    paddingVertical: 12,
-    gap: 8,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-  },
-  actionButtonText: {
-    color: '#1E88E5',
-    fontSize: 14,
-    fontWeight: '600',
+    paddingVertical: theme.spacing.m,
+    paddingHorizontal: theme.spacing.m,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.l,
+    ...theme.shadows.card,
   },
   secondaryActionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    gap: 8,
-    borderWidth: 1,
+    paddingVertical: theme.spacing.m,
+    paddingHorizontal: theme.spacing.m,
+    backgroundColor: 'rgba(0, 130, 114, 0.08)',
+    borderRadius: theme.borderRadius.l,
+    borderWidth: 1.5,
     borderColor: theme.colors.primary,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+  },
+  actionButtonText: {
+    color: theme.colors.background.surface,
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   secondaryActionButtonText: {
     color: theme.colors.primary,
     fontSize: 14,
     fontWeight: '600',
   },
-  emptyContainer: {
+  
+  // Missing styles for appointment card
+  dateTimeContainer: {
     flex: 1,
-    justifyContent: 'center',
+  },
+  iconTextRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 80,
-    paddingHorizontal: 32,
+    marginBottom: theme.spacing.s,
+    paddingVertical: 2,
   },
-  emptyText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#6B7280',
-    marginTop: 24,
-    marginBottom: 8,
-  },
-  emptySubtext: {
+  appointmentDate: {
     fontSize: 15,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    lineHeight: 22,
+    color: theme.colors.text.secondary,
+    marginLeft: theme.spacing.s,
+    fontWeight: '600',
   },
-  footerLoader: {
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+  appointmentTime: {
+    fontSize: 15,
+    color: theme.colors.text.secondary,
+    marginLeft: theme.spacing.s,
+    fontWeight: '600',
   },
-  footerLoaderText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#6B7280',
+  divider: {
+    height: 1,
+    backgroundColor: theme.colors.text.secondary + '20',
+    marginVertical: theme.spacing.m,
+    marginHorizontal: theme.spacing.l,
+  },
+  cardDetails: {
+    paddingHorizontal: theme.spacing.l,
+    paddingBottom: theme.spacing.l,
   },
 });
 

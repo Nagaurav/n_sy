@@ -15,8 +15,8 @@ import {
   Alert,
 } from 'react-native';
 import { theme } from '../theme';
-import { apiService } from '../services/apiService';
-import { useAuth } from '../contexts/AuthContext';
+import { authService } from '../services';
+import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
 
 type Styles = {
@@ -249,7 +249,7 @@ const OTPScreen = ({ navigation, route }: any) => {
     setError('');
 
     try {
-      const response = await apiService.verifyOTP(phoneNumber, otpString);
+      const response = await authService.verifyOTP(phoneNumber, otpString);
 
       if (response.success && response.data) {
         if (response.data.isRegistered === false || !response.data.user) {
@@ -302,7 +302,7 @@ const OTPScreen = ({ navigation, route }: any) => {
     setError('');
 
     try {
-      const response = await apiService.sendOTP(phoneNumber);
+      const response = await authService.sendOTP(phoneNumber);
 
       if (response.success) {
         setOtp(['', '', '', '', '', '']); // Clear OTP inputs

@@ -16,8 +16,8 @@ import {
 } from 'react-native';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../services/apiService';
+import { useAuth } from '../hooks/useAuth';
+import { supportService } from '../services';
 import { FloatingLabelInput } from '../components/FloatingLabelInput';
 
 interface SupportTicket {
@@ -76,9 +76,9 @@ const SupportScreen = () => {
 
     setIsLoadingTickets(true);
     try {
-      const response = await apiService.getUserSupportTickets(user._id);
-      if (response.success && response.data?.tickets) {
-        setPastTickets(response.data.tickets);
+      const response = await supportService.getUserTickets(user._id, 1, 50);
+      if (response.success && response.data) {
+        setPastTickets(Array.isArray(response.data) ? response.data : response.data.tickets || []);
       }
     } catch (error) {
       console.error('Error fetching past tickets:', error);
@@ -122,7 +122,7 @@ const SupportScreen = () => {
     setError(null);
     
     try {
-      const response = await apiService.submitSupportTicket(
+      const response = await supportService.submitTicket(
         user._id,
         subject.trim(),
         message.trim()

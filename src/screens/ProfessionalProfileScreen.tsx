@@ -21,7 +21,7 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 // Services
-import { apiService } from '../services/apiService';
+import { professionalService } from '../services';
 
 // Types
 import { 
@@ -36,6 +36,7 @@ import type { RootStackParamList } from '../../App';
 
 // Theme
 import { theme } from '../theme';
+import { useAuth } from '../hooks/useAuth';
 
 // Constants
 const DEFAULT_AVATAR = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzY2NjY2NiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yMCAyMWMtMi4yIDAtNC0xLjgtNC00dj0xYzAtLjYtLjQtMS0xLTFjLS42IDAtMSAuNC0xIDF2MWMwIDEuMS0uOSAyLTIgMnMtMi0uOS0yLTJ2LTFjMC0xLjYtMS4zLTMtMy0zYy0xLjYgMC0zIDEuMy0zIDN2MWMwIDEuMS0uOSAyLTIgMnMtMi0uOS0yLTJ2LTFjMC0xLjYtMS4zLTMtMy0zYy0xLjYgMC0zIDEuMy0zIDN2MWMwIDIuMiAxLjggNCA0IDRoMTZ6Ii8+PHBhdGggZD0iTTEyIDExYzIuOCAwIDUtMi4yIDUtNXMtMi4yLTUtNS01cy01IDIuMi01IDUgMi4yIDUgNSA1eiIvPjwvc3ZnPg==';
@@ -103,49 +104,50 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
 
       console.log('🔍 Fetching profile for professional ID:', professionalId);
       
-      const response = await apiService.getProfessionalProfile(professionalId);
+      const response = await professionalService.getProfile(professionalId);
       
       console.log('📦 API Response received:', response);
       
-      if (!response) {
+      if (!response.success || !response.data) {
         throw new Error('No data received from the server');
       }
 
+      const data = response.data;
       const specialization =
-        response.speciality_new?.name ||
-        response.specialization ||
-        (response as any).speciality ||
+        data.speciality_new?.name ||
+        data.specialization ||
+        (data as any).speciality ||
         undefined;
 
       // Map the response to match our ProfessionalAuthProfile type
       const profileData: ProfessionalAuthProfile = {
         professional_id:
-          response.professional_id ||
-          response.id ||
+          data.professional_id ||
+          data.id ||
           parseInt(professionalId as string, 10),
-        first_name: response.first_name || response.firstName || '',
-        last_name: response.last_name || response.lastName || '',
-        email: response.email || '',
-        phone_number: response.phone || response.phoneNumber || '',
-        dob: response.dob || new Date().toISOString().split('T')[0],
-        pin_code: response.pin_code || response.pinCode || '',
-        address: response.address || '',
-        city: response.city || '',
-        state: response.state || '',
-        gender: response.gender || Gender.OTHER,
-        location_latitude: response.location_latitude || response.location?.latitude?.toString() || null,
-        location_longitude: response.location_longitude || response.location?.longitude?.toString() || null,
-        adhaar_number: response.adhaar_number || response.adhaarNumber || '',
-        photo_url: response.photo_url || response.profile_picture || response.profileImage || null,
-        role: response.role || ProfessionalRole.YOGA_TEACHER,
-        about: response.about || response.bio || 'No bio available',
-        work_arrangement: response.work_arrangement || WorkArrangement.FREELANCE,
-        language: response.language || (response.languages && response.languages[0]) || 'English',
+        first_name: data.first_name || data.firstName || '',
+        last_name: data.last_name || data.lastName || '',
+        email: data.email || '',
+        phone_number: data.phone || data.phoneNumber || '',
+        dob: data.dob || new Date().toISOString().split('T')[0],
+        pin_code: data.pin_code || data.pinCode || '',
+        address: data.address || '',
+        city: data.city || '',
+        state: data.state || '',
+        gender: data.gender || Gender.OTHER,
+        location_latitude: data.location_latitude || data.location?.latitude?.toString() || null,
+        location_longitude: data.location_longitude || data.location?.longitude?.toString() || null,
+        adhaar_number: data.adhaar_number || data.adhaarNumber || '',
+        photo_url: data.photo_url || data.profile_picture || data.profileImage || null,
+        role: data.role || ProfessionalRole.YOGA_TEACHER,
+        about: data.about || data.bio || 'No bio available',
+        work_arrangement: data.work_arrangement || WorkArrangement.FREELANCE,
+        language: data.language || (data.languages && data.languages[0]) || 'English',
         specialization,
         speciality: specialization,
-        speciality_new_name: response.speciality_new?.name,
-        created_at: response.created_at || response.createdAt || new Date().toISOString(),
-        updated_at: response.updated_at || response.updatedAt || new Date().toISOString(),
+        speciality_new_name: data.speciality_new?.name,
+        created_at: data.created_at || data.createdAt || new Date().toISOString(),
+        updated_at: data.updated_at || data.updatedAt || new Date().toISOString(),
       };
 
       console.log('✅ Profile data mapped successfully:', {

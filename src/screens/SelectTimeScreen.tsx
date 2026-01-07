@@ -17,9 +17,10 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 
 // ✅ CORRECT IMPORTS
 import type { RootStackParamList } from '../../App';
-import { apiService } from '../services/apiService';
-import { theme } from '../theme';
+import { apiService } from '../services';
+import { useAuth } from '../hooks/useAuth';
 import { useAppSelector } from '../store';
+import { theme } from '../theme';
 import { AvailableSlot, FormattedAvailableSlot, SectionData } from '../types/booking';
 
 type SelectTimeRouteProp = RouteProp<RootStackParamList, 'SelectTime'>;
@@ -79,13 +80,13 @@ const SelectTimeScreen = () => {
       
       const slots = await apiService.getAllAvailableSlots(professionalId);
       
-      if (!slots || slots.length === 0) {
+      if (!slots || !slots.data || !Array.isArray(slots.data) || slots.data.length === 0) {
         setSectionedSlots([]);
         setError('No available time slots found.');
         return;
       }
 
-      const groupedSlots = (slots as AvailableSlot[]).reduce<SectionData[]>((acc, slot) => {
+      const groupedSlots = (slots.data as AvailableSlot[]).reduce<SectionData[]>((acc, slot) => {
         const dateKey = slot.date.substring(0, 10);
         const formattedSlot: FormattedAvailableSlot = {
           ...slot,

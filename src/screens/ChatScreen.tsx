@@ -5,12 +5,12 @@ import { signOutAsync } from '../store/authSlice';
 import { useRoute, RouteProp, useNavigation, useIsFocused } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import { GiftedChat, IMessage, Bubble } from 'react-native-gifted-chat';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import { apiService } from '../services/apiService';
+import { chatService } from '../services';
 import { socketService } from '../services/socketService';
-import type { HomeStackParamList } from '../../App';
+import type { RootStackParamList } from '../../App';
 import type { MessageStatus } from '../types/chat';
 
 interface ChatScreenParams {
@@ -19,7 +19,7 @@ interface ChatScreenParams {
 }
 
 type ChatScreenRouteProp = RouteProp<Record<'ChatScreen', ChatScreenParams>, 'ChatScreen'>;
-type ChatScreenNavigationProp = StackNavigationProp<HomeStackParamList, 'ChatScreen'>;
+type ChatScreenNavigationProp = StackNavigationProp<RootStackParamList, 'ChatScreen'>;
 
 const ChatScreen: React.FC = () => {
   const route = useRoute<ChatScreenRouteProp>();
@@ -53,9 +53,10 @@ const ChatScreen: React.FC = () => {
 
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
   const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
+  const [actualChatId, setActualChatId] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(1);
 
   const socketRef = useRef<any>(null);
   // Track which messages have been marked as read to avoid duplicate receipts
@@ -167,6 +168,79 @@ const ChatScreen: React.FC = () => {
     [chatId],
   );
 
+  // Function to find or create a chat session for the appointment
+  const findOrCreateChatSession = useCallback(async () => {
+    if (!token || !appointmentId) {
+      console.error('❌ Cannot find/create chat: missing token or appointmentId');
+      return;
+    }
+
+    try {
+      console.log('🔍 Looking for existing chat sessions...');
+      console.log('📋 Appointment data:', currentAppointment);
+      
+      // Get user's chat sessions to find one related to this appointment
+      const userChatsResponse = await chatService.getUserChats(1, 50);
+      console.log('📊 User chats response:', userChatsResponse);
+      
+      if (userChatsResponse.success && userChatsResponse.data) {
+        console.log('📝 Found user chats:', userChatsResponse.data.length);
+        
+        // Look for a chat session that might be related to this appointment
+        const relatedChat = userChatsResponse.data.find((chat: any) => {
+          // Check if chat metadata contains appointment reference
+          return chat.appointmentId === appointmentId || 
+                 chat.metadata?.appointmentId === appointmentId ||
+                 chat.title?.includes(appointmentId);
+        });
+        
+        if (relatedChat) {
+          console.log('✅ Found existing chat session:', relatedChat.id);
+          setActualChatId(relatedChat.id);
+          return relatedChat.id;
+        }
+      }
+      
+      console.log('ℹ️ No existing chat found, creating new one...');
+      
+      // If no existing chat found, try to create one with the professional
+      if (currentAppointment?.professional_id) {
+        console.log('👤 Creating chat with professional:', currentAppointment.professional_id);
+        
+        const createChatResponse = await chatService.createChat(
+          String(currentAppointment.professional_id),
+          'professional'
+        );
+        
+        console.log('📤 Create chat response:', createChatResponse);
+        
+        if (createChatResponse.success && createChatResponse.data?.id) {
+          console.log('✅ Created new chat session:', createChatResponse.data.id);
+          setActualChatId(createChatResponse.data.id);
+          return createChatResponse.data.id;
+        } else {
+          console.warn('⚠️ Create chat failed:', createChatResponse);
+        }
+      } else {
+        console.warn('⚠️ No professional_id in current appointment');
+      }
+      
+      console.warn('⚠️ Could not find or create chat session');
+      return null;
+      
+    } catch (error) {
+      console.error('❌ Error finding/creating chat session:', error);
+      return null;
+    }
+  }, [token, appointmentId, currentAppointment]);
+
+  // Find or create chat session when component mounts
+  useEffect(() => {
+    if (token && appointmentId && !actualChatId) {
+      findOrCreateChatSession();
+    }
+  }, [token, appointmentId, actualChatId, findOrCreateChatSession]);
+
   const loadMessages = useCallback(
     async (pageToLoad: number, append: boolean = false) => {
       const limit = 20;
@@ -178,9 +252,12 @@ const ChatScreen: React.FC = () => {
         return;
       }
       
+      // Use actualChatId if available, otherwise fall back to appointmentId
+      const effectiveChatId = actualChatId || chatId;
+      
       // Validate chatId
-      if (!chatId || chatId === 'undefined' || chatId === 'null') {
-        console.error('❌ Cannot load messages: Invalid chatId', chatId);
+      if (!effectiveChatId || effectiveChatId === 'undefined' || effectiveChatId === 'null') {
+        console.error('❌ Cannot load messages: Invalid chatId', effectiveChatId);
         setMessages([]);
         return;
       }
@@ -193,10 +270,10 @@ const ChatScreen: React.FC = () => {
         }
 
         // CRITICAL: Ensure chatId is passed as string to API
-        const chatIdStr = String(chatId);
+        const chatIdStr = String(effectiveChatId);
         console.log('📡 Fetching messages for chatId:', chatIdStr, 'Page:', pageToLoad, 'Token present:', !!token);
         
-        const response = await apiService.getChatMessages(chatIdStr, pageToLoad, limit);
+        const response = await chatService.getChatMessages(chatIdStr, pageToLoad, limit);
         
         if (response.success && response.data) {
           const mapped = response.data.map(mapBackendMessageToGifted);
@@ -249,7 +326,7 @@ const ChatScreen: React.FC = () => {
         setIsLoadingEarlier(false);
       }
     },
-    [chatId, mapBackendMessageToGifted],
+    [actualChatId, chatId, mapBackendMessageToGifted, token],
   );
 
   const handleLoadEarlier = useCallback(() => {
@@ -325,9 +402,10 @@ const ChatScreen: React.FC = () => {
           console.log('✅ Socket connected successfully');
           reconnectAttempts = 0; // Reset reconnect counter on successful connection
           
-          // Join the specific chat room - ensure chatId is string
-          const chatIdStr = String(chatId);
-          console.log('🔌 Joining chat room:', chatIdStr);
+          // Join the specific chat room - use actualChatId if available, fallback to appointmentId
+          const effectiveChatId = actualChatId || chatId;
+          const chatIdStr = String(effectiveChatId);
+          console.log('🔌 Joining chat room:', chatIdStr, '(actualChatId:', actualChatId, ')');
           socketService.joinChat(chatIdStr, String(currentUserId.current));
         });
         
@@ -362,6 +440,14 @@ const ChatScreen: React.FC = () => {
       }
     };
   }, [isAuthReady, token, chatId]); // CRITICAL: Only token and chatId trigger re-connection
+
+  // Re-join socket room when actualChatId changes
+  useEffect(() => {
+    if (socketRef.current?.connected && actualChatId) {
+      console.log('🔄 Re-joining socket room with actualChatId:', actualChatId);
+      socketService.joinChat(actualChatId, String(currentUserId.current));
+    }
+  }, [actualChatId, currentUserId.current]);
 
   // Separate effect for loading messages (depends on auth and chatId)
   useEffect(() => {
@@ -647,12 +733,13 @@ const ChatScreen: React.FC = () => {
       // Add message to UI immediately (optimistic update)
       setMessages((previous) => GiftedChat.append(previous, [optimisticMessage]));
 
-      // Emit message via socket with tempId for correlation - ensure chatId is string
-      const chatIdStr = String(chatId);
-      console.log('📤 Sending message to chatId:', chatIdStr);
+      // Emit message via socket with tempId for correlation - use actualChatId if available
+      const effectiveChatId = actualChatId || chatId;
+      const chatIdStr = String(effectiveChatId);
+      console.log('📤 Sending message to chatId:', chatIdStr, '(actualChatId:', actualChatId, ')');
       socketService.sendMessage(chatIdStr, msg.text.trim(), tempId);
     },
-    [chatId, user?.first_name],
+    [actualChatId, chatId, user?.first_name],
   );
 
   if (isLoading && messages.length === 0) {

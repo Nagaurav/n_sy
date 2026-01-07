@@ -18,7 +18,7 @@ import Config from 'react-native-config';
 import { CommonActions, useFocusEffect } from '@react-navigation/native';
 import { theme } from '../theme';
 import { usePayment } from '../hooks/usePayment';
-import apiService from '../services/apiService';
+import { bookingService } from '../services';
 
 // Define the structure of data received via route.params
 interface BookingData {
@@ -154,7 +154,7 @@ const BookingConfirmationScreen = () => {
           ? parseInt(bookingData.duration, 10)
           : bookingData.duration || 60;
 
-      const result = await apiService.calculateBookingPrice({
+      const result = await bookingService.calculatePrice({
         slotId: numericSlotId,
         duration,
         couponCode: code,
@@ -434,10 +434,10 @@ const BookingConfirmationScreen = () => {
       });
 
       // If we have a payment URL, open it in the WebView
-      if (paymentResponse?.payment_url) {
-        console.log('💳 Payment URL received, navigating to PaymentGateway:', paymentResponse.payment_url);
+      if (paymentResponse?.paymentUrl) {
+        console.log('💳 Payment URL received, navigating to PaymentGateway:', paymentResponse.paymentUrl);
         console.log('📦 Payment data:', {
-          bookingId: paymentResponse.booking_id,
+          bookingId: paymentResponse.data?.booking_id,
           paymentId: paymentResponse.data?.payment_id,
           amount: paymentResponse.data?.final_amount,
           customerId: userId,
@@ -446,8 +446,8 @@ const BookingConfirmationScreen = () => {
         });
         
         navigation.navigate('PaymentGateway', {
-          paymentUrl: paymentResponse.payment_url,
-          bookingId: paymentResponse.booking_id?.toString() || '',
+          paymentUrl: paymentResponse.paymentUrl,
+          bookingId: paymentResponse.data?.booking_id?.toString() || '',
           paymentId: paymentResponse.data?.payment_id || '',
           amount: paymentResponse.data?.final_amount || bookingData.price,
           customerId: userId?.toString() || '',

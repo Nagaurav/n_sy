@@ -1,25 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-export interface User {
-  id: number; // Standardized single ID field
-  phone: string;
-  first_name: string; // API uses snake_case
-  last_name: string; // API uses snake_case
-  email: string;
-  password?: string;
-  dob?: string;
-  gender?: string;
-  city?: string;
-  location_latitude?: string;
-  location_longitude?: string;
-  profileImage?: string;
-  profile_picture_url?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  created_at?: string;
-  updated_at?: string;
-}
+import { User } from '../types/user';
 
 export interface AuthState {
   user: User | null;
