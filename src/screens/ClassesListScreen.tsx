@@ -22,7 +22,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Geolocation from 'react-native-geolocation-service';
 
-import { apiService } from '../services/apiService';
+import { apiService } from '../services';
 import { YogaClass, YogaClassesFilters, PaginationInfo } from '../types/yogaClasses';
 import { HomeStackParamList } from '../types/navigation';
 import { theme } from '../theme';
@@ -134,16 +134,36 @@ const ClassesListScreen = () => {
 
         const response = await apiService.getYogaClasses(filtersWithLocation);
         
-        if (response?.data) {
-          const responseData = response.data;
+        if (response?.success && response?.data) {
+          const classesData = response.data;
           
-          if (responseData.data) {
-            setPaginationInfo(responseData.pagination);
-            
+          // Handle both array and paginated response formats
+          if (Array.isArray(classesData)) {
+            // Direct array response
+            const classesArray = classesData as YogaClass[];
             if (filters.page === 1 || isRefreshing) {
-              setClasses(responseData.data || []);
+              setClasses(classesArray || []);
             } else {
-              setClasses(prev => [...prev, ...(responseData.data || [])]);
+              setClasses(prev => [...prev, ...(classesArray || [])]);
+            }
+            // Set basic pagination info for array responses
+            setPaginationInfo({
+              page: filters.page || 1,
+              limit: 20,
+              total: classesArray?.length || 0,
+              pages: 1
+            });
+          } else {
+            // Paginated response with nested structure
+            const paginatedResponse = classesData as any;
+            if (paginatedResponse.data && paginatedResponse.pagination) {
+              setPaginationInfo(paginatedResponse.pagination);
+              
+              if (filters.page === 1 || isRefreshing) {
+                setClasses(paginatedResponse.data || []);
+              } else {
+                setClasses(prev => [...prev, ...(paginatedResponse.data || [])]);
+              }
             }
           }
           return; // Success, exit retry loop

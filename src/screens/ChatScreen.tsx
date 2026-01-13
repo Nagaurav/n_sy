@@ -1,17 +1,28 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text, Alert } from 'react-native';
-import { store } from '../store';
-import { signOutAsync } from '../store/authSlice';
+import {
+  View,
+  StyleSheet,
+  ActivityIndicator,
+  Text,
+  Dimensions,
+  StatusBar,
+  TouchableOpacity,
+  Platform,
+  Animated,
+} from 'react-native';
 import { useRoute, RouteProp, useNavigation, useIsFocused } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
-import { GiftedChat, IMessage, Bubble } from 'react-native-gifted-chat';
+import { GiftedChat, IMessage, Bubble, InputToolbar, Send, SystemMessage } from 'react-native-gifted-chat';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../hooks/useAuth';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { chatService } from '../services';
 import { socketService } from '../services/socketService';
 import type { RootStackParamList } from '../../App';
-import type { MessageStatus } from '../types/chat';
+import { useTheme } from '../contexts/ThemeContext';
+import { theme } from '../theme';
 
 interface ChatScreenParams {
   appointmentId: string;
@@ -25,811 +36,561 @@ const ChatScreen: React.FC = () => {
   const route = useRoute<ChatScreenRouteProp>();
   const navigation = useNavigation<ChatScreenNavigationProp>();
   const { user, token, isAuthReady } = useAuth();
-  const isFocused = useIsFocused();
+  const { theme: appTheme } = useTheme();
   
-  // Get appointment data from Redux store
   const currentAppointment = useSelector((state: RootState) => state.appointment.currentAppointment);
 
-  // Use appointmentId as the room ID
   const { appointmentId: rawAppointmentId, title } = route.params;
   const appointmentId = String(rawAppointmentId || '');
-  const chatId = appointmentId; // Use appointmentId as chatId for room identification
+  const chatId = appointmentId; 
   
-  // Get professional name from Redux store
   const professionalName = currentAppointment?.professional_name || title || 'Professional';
-  
-  // Log chatId and appointmentId for debugging
-  useEffect(() => {
-    console.log('🔍 ChatScreen mounted with chatId:', chatId, 'appointmentId:', appointmentId);
-    if (!chatId || chatId === 'undefined' || chatId === 'null') {
-      console.error('❌ Invalid chatId received:', chatId);
-    }
-    if (!appointmentId || appointmentId === 'undefined' || appointmentId === 'null') {
-      console.error('❌ Invalid appointmentId received:', rawAppointmentId);
-      // Navigate back if no appointmentId - chat should only be accessible via appointment
-      navigation.goBack();
-    }
-  }, [chatId, rawAppointmentId, appointmentId, navigation]);
+  const professionalId = currentAppointment?.professional_id;
 
+  // State
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
-  const [actualChatId, setActualChatId] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(1);
+  const [actualChatId, setActualChatId] = useState<string | null>(null);
+  const [socketReady, setSocketReady] = useState(false);
+  
+  // Typing & Online state
+  const [isTyping, setIsTyping] = useState(false);
+  const [otherUserTyping, setOtherUserTyping] = useState(false);
+  const [isOnline, setIsOnline] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const dotAnim1 = useRef(new Animated.Value(0)).current;
+  const dotAnim2 = useRef(new Animated.Value(0)).current;
+  const dotAnim3 = useRef(new Animated.Value(0)).current;
 
   const socketRef = useRef<any>(null);
-  // Track which messages have been marked as read to avoid duplicate receipts
-  const readMessagesRef = useRef<Set<string>>(new Set());
+  const chatRoomJoined = useRef<string | null>(null);
 
-  // CRITICAL: Use single canonical user_id source to prevent socket registration failures
-  // The User type defines user_id as the primary key (number), so we use that exclusively
-  const getCanonicalUserId = useCallback((): string => {
-    if (!user) {
-      console.error('❌ [ChatScreen] User object is null/undefined');
-      return '';
-    }
-    // Use user_id as the single source of truth (primary key from API)
-    const userId = (user as any)?.user_id;
-    if (!userId && userId !== 0) {
-      console.error('❌ [ChatScreen] user_id is missing from user object:', user);
-      return '';
-    }
+  // --- User ID Extraction ---
+  const getCanonicalUserId = useCallback(() => {
+    if (!user) return '';
+    const userId = (user as any)?.user_id || (user as any)?._id || (user as any)?.id || '';
     return String(userId);
-  }, [user]);
+  }, [(user as any)?.user_id, (user as any)?._id, (user as any)?.id]);
 
   const currentUserId = useRef<string>(getCanonicalUserId());
-  
-  // Update userId ref when user changes, but don't trigger re-connection
+
   useEffect(() => {
     const newUserId = getCanonicalUserId();
     if (newUserId && newUserId !== currentUserId.current) {
-      console.log('🔄 [ChatScreen] User ID updated:', { old: currentUserId.current, new: newUserId });
       currentUserId.current = newUserId;
-    } else if (!newUserId) {
-      console.error('❌ [ChatScreen] Cannot update userId: invalid user_id');
     }
-  }, [user, getCanonicalUserId]);
+  }, [getCanonicalUserId]); 
 
+  // --- Header Setup ---
   useEffect(() => {
-    if (title) {
-      navigation.setOptions({ headerTitle: title } as any);
+    if (title) navigation.setOptions({ headerTitle: title } as any);
+  }, [title, navigation]);
+
+  // --- Validation ---
+  useEffect(() => {
+    if (!appointmentId || appointmentId === 'undefined') {
+      navigation.goBack();
     }
-    
-    // Listen for authentication errors from socket
-    const handleAuthError = (error: any) => {
-      console.error('🔒 Authentication error in chat:', error);
-      // You can show an alert or navigate to login screen
-      Alert.alert(
-        'Session Expired',
-        'Your session has expired. Please log in again.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Dispatch logout action
-              store.dispatch(signOutAsync() as any);
-              // Navigate to login screen - using the correct navigation action
-              // @ts-ignore - We know this navigation is valid in your stack
-              navigation.navigate('Auth', { screen: 'Login' });
-            },
-          },
-        ]
-      );
-    };
-    
-    const socket = socketService.instance;
-    socket?.on('auth_error', handleAuthError);
-    
-    return () => {
-      socket?.off('auth_error', handleAuthError);
-    };
-  }, [navigation, title]);
+  }, [appointmentId, navigation]);
 
-  const mapBackendMessageToGifted = useCallback(
-    (msg: any): IMessage & { status?: MessageStatus; tempId?: string } => {
-      const id = String(msg._id || msg.id || msg.messageId || `${chatId}-${Date.now()}`);
-      const text = msg.content || msg.text || '';
-      const createdAtRaw = msg.createdAt || msg.timestamp || msg.created_at;
-      const createdAt = createdAtRaw ? new Date(createdAtRaw) : new Date();
-      const senderId = String(
-        msg.senderId || msg.userId || msg.sender_id || msg.user?._id || msg.userId || '',
-      );
-      const senderName = msg.senderName || msg.sender_name || msg.user?.name || 'User';
-
-      const rawStatus = msg.status as MessageStatus | undefined;
-      const status: MessageStatus =
-        rawStatus === 'pending' ||
-        rawStatus === 'sent' ||
-        rawStatus === 'delivered' ||
-        rawStatus === 'read'
-          ? rawStatus
-          : 'sent';
-
-      const message: any = {
-        _id: id,
-        text,
-        createdAt,
-        user: {
-          _id: senderId || 'unknown',
-          name: senderName,
-        },
-        status,
-      };
-
-      if (String(senderId) === String(currentUserId.current)) {
-        message.pending = status === 'pending';
-        message.sent = status === 'sent' || status === 'delivered' || status === 'read';
-        message.received = status === 'delivered' || status === 'read';
-      }
-
-      return message;
-    },
-    [chatId],
-  );
-
-  // Function to find or create a chat session for the appointment
-  const findOrCreateChatSession = useCallback(async () => {
-    if (!token || !appointmentId) {
-      console.error('❌ Cannot find/create chat: missing token or appointmentId');
-      return;
-    }
-
-    try {
-      console.log('🔍 Looking for existing chat sessions...');
-      console.log('📋 Appointment data:', currentAppointment);
-      
-      // Get user's chat sessions to find one related to this appointment
-      const userChatsResponse = await chatService.getUserChats(1, 50);
-      console.log('📊 User chats response:', userChatsResponse);
-      
-      if (userChatsResponse.success && userChatsResponse.data) {
-        console.log('📝 Found user chats:', userChatsResponse.data.length);
-        
-        // Look for a chat session that might be related to this appointment
-        const relatedChat = userChatsResponse.data.find((chat: any) => {
-          // Check if chat metadata contains appointment reference
-          return chat.appointmentId === appointmentId || 
-                 chat.metadata?.appointmentId === appointmentId ||
-                 chat.title?.includes(appointmentId);
-        });
-        
-        if (relatedChat) {
-          console.log('✅ Found existing chat session:', relatedChat.id);
-          setActualChatId(relatedChat.id);
-          return relatedChat.id;
-        }
-      }
-      
-      console.log('ℹ️ No existing chat found, creating new one...');
-      
-      // If no existing chat found, try to create one with the professional
-      if (currentAppointment?.professional_id) {
-        console.log('👤 Creating chat with professional:', currentAppointment.professional_id);
-        
-        const createChatResponse = await chatService.createChat(
-          String(currentAppointment.professional_id),
-          'professional'
-        );
-        
-        console.log('📤 Create chat response:', createChatResponse);
-        
-        if (createChatResponse.success && createChatResponse.data?.id) {
-          console.log('✅ Created new chat session:', createChatResponse.data.id);
-          setActualChatId(createChatResponse.data.id);
-          return createChatResponse.data.id;
-        } else {
-          console.warn('⚠️ Create chat failed:', createChatResponse);
-        }
-      } else {
-        console.warn('⚠️ No professional_id in current appointment');
-      }
-      
-      console.warn('⚠️ Could not find or create chat session');
-      return null;
-      
-    } catch (error) {
-      console.error('❌ Error finding/creating chat session:', error);
-      return null;
-    }
-  }, [token, appointmentId, currentAppointment]);
-
-  // Find or create chat session when component mounts
+  // --- Chat Session Init ---
   useEffect(() => {
     if (token && appointmentId && !actualChatId) {
       findOrCreateChatSession();
     }
-  }, [token, appointmentId, actualChatId, findOrCreateChatSession]);
+  }, [token, appointmentId]);
 
-  const loadMessages = useCallback(
-    async (pageToLoad: number, append: boolean = false) => {
-      const limit = 20;
+  const findOrCreateChatSession = useCallback(async () => {
+    try {
+      const professionalId = currentAppointment?.professional_id;
+      if (!professionalId) return;
+
+      const response = await chatService.createChat(
+        String(professionalId),
+        'professional'
+      );
       
-      // Validate token before making the request
-      if (!token) {
-        console.error('❌ Cannot load messages: No authentication token');
-        setMessages([]);
-        return;
+      if (response.success && response.data) {
+        const chatSessionId = response.data.id || response.data._id;
+        setActualChatId(chatSessionId);
       }
+    } catch (error: any) {
+      console.error('❌ [ChatScreen] Init error:', error);
+    }
+  }, [currentAppointment]);
+
+  // --- Message Mapping ---
+  const mapBackendMessageToGifted = useCallback((backendMessage: any): IMessage => {
+    try {
+      const messageId = backendMessage.messageId || backendMessage.id || backendMessage._id;
+      const senderId = backendMessage.senderId || backendMessage.userId || backendMessage.user?._id;
+      const isSystemMessage = backendMessage.messageType === 'system';
       
-      // Use actualChatId if available, otherwise fall back to appointmentId
-      const effectiveChatId = actualChatId || chatId;
-      
-      // Validate chatId
-      if (!effectiveChatId || effectiveChatId === 'undefined' || effectiveChatId === 'null') {
-        console.error('❌ Cannot load messages: Invalid chatId', effectiveChatId);
-        setMessages([]);
-        return;
+      return {
+        _id: messageId,
+        text: backendMessage.message || backendMessage.content || '',
+        createdAt: new Date(backendMessage.createdAt || backendMessage.timestamp || Date.now()),
+        user: {
+          _id: String(senderId),
+          name: backendMessage.sender?.name || backendMessage.user?.name || 'Unknown',
+        },
+        system: isSystemMessage,
+        pending: false,
+        sent: true, // Always true if it came from backend
+        received: backendMessage.d || false, // Check delivery status
+      };
+    } catch (error) {
+      return {
+        _id: `error-${Date.now()}`,
+        text: 'Error loading message',
+        createdAt: new Date(),
+        user: { _id: 'error', name: 'Error' },
+      };
+    }
+  }, []);
+
+  // --- Message Persistence ---
+  const saveMessagesToStorage = useCallback(async (messagesToSave: IMessage[]) => {
+    try {
+      await AsyncStorage.setItem(`chat_messages_${chatId}`, JSON.stringify(messagesToSave));
+    } catch (error) {
+      console.error('[UI] Failed to save messages to storage:', error);
+    }
+  }, [chatId]);
+
+  const loadMessagesFromStorage = useCallback(async (): Promise<IMessage[]> => {
+    try {
+      const savedMessages = await AsyncStorage.getItem(`chat_messages_${chatId}`);
+      if (savedMessages) {
+        return JSON.parse(savedMessages);
       }
+    } catch (error) {
+      return [];
+    }
+    return [];
+  }, [chatId]);
+
+  // --- Load Messages (FIXED LOGIC) ---
+  const loadMessages = useCallback(async (newPage: number = 1, append: boolean = false) => {
+    const targetChatId = chatId; 
+    if (!token || !targetChatId) return;
+
+    try {
+      if (append) setIsLoadingEarlier(true);
+      else setIsLoading(true);
+
+      // 1. Load from storage first for instant UI
+      const storedMessages = await loadMessagesFromStorage();
       
-      try {
-        if (append) {
-          setIsLoadingEarlier(true);
-        } else {
-          setIsLoading(true);
-        }
+      if (storedMessages.length > 0 && !append) {
+        setMessages(storedMessages);
+        // ⚠️ CRITICAL CHANGE: Do NOT return here. Continue to fetch API to get latest ticks.
+      }
 
-        // CRITICAL: Ensure chatId is passed as string to API
-        const chatIdStr = String(effectiveChatId);
-        console.log('📡 Fetching messages for chatId:', chatIdStr, 'Page:', pageToLoad, 'Token present:', !!token);
+      // 2. Fetch from API to get latest status (Delivered/Read)
+      const response = await chatService.getChatMessages(String(targetChatId), newPage, 20);
+      
+      if (response.success && response.data) {
+        const mapped = response.data.map(mapBackendMessageToGifted);
+        const normalized = mapped.reverse();
+        setHasMore(normalized.length === 20);
+        setPage(newPage);
         
-        const response = await chatService.getChatMessages(chatIdStr, pageToLoad, limit);
-        
-        if (response.success && response.data) {
-          const mapped = response.data.map(mapBackendMessageToGifted);
-          const normalized = mapped.reverse();
-
-          setHasMore(normalized.length === limit);
-          setPage(pageToLoad);
-
-          setMessages((previous) =>
-            append ? GiftedChat.prepend(previous, normalized) : normalized,
-          );
-        } else if (response.error) {
-          // Handle specific error cases
-          if (response.error.toLowerCase().includes('token') || response.error.toLowerCase().includes('auth')) {
-            console.error('❌ Authentication error:', response.error);
-            // Consider triggering a token refresh or logout flow here
-          } else if (response.error.includes('404')) {
-            console.log('ℹ️ Chat not found, starting with empty chat');
-            if (!append) setMessages([]);
-          } else if (response.error.includes('403')) {
-            console.warn('⚠️ Permission denied for chat:', chatId);
-            if (!append) setMessages([]);
-          } else {
-            console.warn('⚠️ Failed to load messages:', response.error);
-          }
+        setMessages((previous) => {
+          // Create a map of API messages by ID for fast lookup
+          const apiMessageMap = new Map(normalized.map(m => [m._id, m]));
+          
+          // Keep pending messages that aren't in API yet
+          const pendingMessages = previous.filter(m => m.pending && !apiMessageMap.has(m._id));
+          
+          let combinedMessages;
           
           if (append) {
-            setHasMore(false);
+             // If scrolling up, prepend API messages to existing ones
+             // Don't sort here - GiftedChat.prepend handles order correctly
+             combinedMessages = GiftedChat.prepend(previous, normalized);
           } else {
-            setMessages([]);
+             // If refreshing/initial load: Replace stored messages with fresh API messages + pending ones
+             combinedMessages = [...pendingMessages, ...normalized];
+             // Only sort on initial load, not when appending
+             combinedMessages.sort((a, b) => 
+               new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+             );
           }
-        } else if (append) {
-          setHasMore(false);
-        }
-      } catch (error: any) {
-        console.error('❌ Error loading chat messages:', error);
-        
-        // Handle specific error cases
-        if (error?.response?.status === 401 || error?.message?.includes('token')) {
-          console.error('❌ Authentication failed - token may be invalid or expired');
-          // Consider triggering a token refresh or logout flow here
-        }
-        
-        // On error, show empty messages (don't break the UI)
-        if (!append) {
-          setMessages([]);
-        }
-      } finally {
-        setIsLoading(false);
-        setIsLoadingEarlier(false);
+
+          // Save fresh data to storage so next load has correct ticks
+          saveMessagesToStorage(combinedMessages).catch(console.error);
+          
+          return combinedMessages;
+        });
       }
-    },
-    [actualChatId, chatId, mapBackendMessageToGifted, token],
-  );
+    } catch (error) {
+      console.error('❌ Error loading messages:', error);
+    } finally {
+      setIsLoading(false);
+      setIsLoadingEarlier(false);
+    }
+  }, [chatId, mapBackendMessageToGifted, token, loadMessagesFromStorage, saveMessagesToStorage]);
 
-  const handleLoadEarlier = useCallback(() => {
-    if (!hasMore || isLoadingEarlier) return;
-    const nextPage = page + 1;
-    loadMessages(nextPage, true);
-  }, [page, hasMore, isLoadingEarlier, loadMessages]);
-
-  // CRITICAL: Isolated socket connection - only depends on token and chatId
-  // This prevents unnecessary re-connections when other state changes
+  // Initial Load
   useEffect(() => {
-    let socket: any = null;
-    let reconnectAttempts = 0;
-    const MAX_RECONNECT_ATTEMPTS = 3;
-    let reconnectTimeout: NodeJS.Timeout;
+    if (isAuthReady && token && chatId) {
+      loadMessages(1, false);
+    }
+  }, [isAuthReady, token, chatId]);
 
-    const connectSocket = () => {
-      // Validate chatId is a valid non-empty string (UUID format)
-      if (!isAuthReady || !token || !chatId || chatId === 'undefined' || chatId === 'null' || !currentUserId.current) {
-        if (!chatId || chatId === 'undefined' || chatId === 'null') {
-          console.error('❌ Cannot connect socket: Invalid chatId', chatId);
-        } else if (!token) {
-          console.error('❌ Cannot connect socket: No authentication token found');
-          // Consider redirecting to login or refreshing token here
-        }
-        return null;
-      }
-      
-      // Validate token format (basic check)
-      if (typeof token !== 'string' || token.split('.').length !== 3) {
-        console.error('❌ Invalid token format');
-        return null;
-      }
+  // --- Socket Connection ---
+  useEffect(() => {
+    if (!isAuthReady || !token || !chatId || !currentUserId.current) return;
 
-      console.log('🔌 Attempting socket connection...', { 
-        hasToken: !!token, 
-        chatId, 
-        userId: currentUserId.current,
-        reconnectAttempts
-      });
+    if (!socketService.instance?.connected) {
+      socketService.connect(token, String(currentUserId.current), 'patient');
+    }
 
-      try {
-        // Connect socket with token, userId, and userType - registration is automatic
-        const newSocket = socketService.connect(token, String(currentUserId.current), 'patient');
-        
-        // Set up connection error handler
-        newSocket.on('connect_error', (error: any) => {
-          console.error('❌ Socket connection error:', error.message);
-          
-          // Handle authentication errors
-          if (error.message.includes('auth') || error.message.includes('token')) {
-            console.error('❌ Authentication failed - token may be invalid or expired');
-            // Consider triggering a token refresh or logout flow here
-            return;
-          }
-          
-          // Implement exponential backoff for reconnection
-          if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Max 30s delay
-            console.log(`⏳ Reconnecting in ${delay}ms (attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
-            
-            reconnectTimeout = setTimeout(() => {
-              reconnectAttempts++;
-              connectSocket();
-            }, delay);
-          } else {
-            console.error(`❌ Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached`);
-          }
-        });
-        
-        // Handle successful connection
-        newSocket.on('connect', () => {
-          console.log('✅ Socket connected successfully');
-          reconnectAttempts = 0; // Reset reconnect counter on successful connection
-          
-          // Join the specific chat room - use actualChatId if available, fallback to appointmentId
-          const effectiveChatId = actualChatId || chatId;
-          const chatIdStr = String(effectiveChatId);
-          console.log('🔌 Joining chat room:', chatIdStr, '(actualChatId:', actualChatId, ')');
-          socketService.joinChat(chatIdStr, String(currentUserId.current));
-        });
-        
-        return newSocket;
-      } catch (error) {
-        console.error('❌ Error connecting socket:', error);
-        return null;
-      }
-    };
-    
-    // Initial connection
-    socket = connectSocket();
+    const socket = socketService.instance;
     socketRef.current = socket;
+    
+    if (!socket) return;
 
-    // Cleanup function
+    const onConnect = () => {
+      setSocketReady(prev => {
+        if (!prev) return true;
+        return prev;
+      }); 
+    };
+
+    const onDisconnect = () => {
+      setSocketReady(false);
+      chatRoomJoined.current = null;
+    };
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    
+    if (socket.connected) {
+      onConnect();
+    }
+
     return () => {
-      console.log('🧹 Cleaning up socket connection');
-      clearTimeout(reconnectTimeout);
-      
-      // Only disconnect if we have a valid socket
-      if (socket) {
-        try {
-          socket.off('connect_error');
-          socket.off('connect');
-          if (socket.connected) {
-            console.log('🔌 Disconnecting socket');
-            socket.disconnect();
-          }
-        } catch (error) {
-          console.error('Error during socket cleanup:', error);
-        }
-      }
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      setSocketReady(false);
     };
-  }, [isAuthReady, token, chatId]); // CRITICAL: Only token and chatId trigger re-connection
+  }, [token]);
 
-  // Re-join socket room when actualChatId changes
+  // --- Join Room ---
   useEffect(() => {
-    if (socketRef.current?.connected && actualChatId) {
-      console.log('🔄 Re-joining socket room with actualChatId:', actualChatId);
-      socketService.joinChat(actualChatId, String(currentUserId.current));
+    if (socketReady && socketRef.current?.connected) {
+      const targetChatId = actualChatId || chatId;
+      if (targetChatId && targetChatId !== chatRoomJoined.current) {
+        socketService.joinChat(String(targetChatId), String(currentUserId.current));
+        chatRoomJoined.current = targetChatId;
+      }
     }
-  }, [actualChatId, currentUserId.current]);
+  }, [socketReady, actualChatId, chatId]);
 
-  // Separate effect for loading messages (depends on auth and chatId)
+  // --- Event Listeners (FIXED STORAGE SYNC) ---
   useEffect(() => {
-    // Validate chatId and token before loading messages
-    if (!isAuthReady) {
-      console.log('🔄 Auth not ready yet, waiting...');
-      return;
-    }
-    
-    if (!token) {
-      console.error('❌ Cannot load messages: No authentication token');
-      // Consider redirecting to login or refreshing token here
-      return;
-    }
-    
-    if (!chatId || chatId === 'undefined' || chatId === 'null') {
-      console.error('❌ Cannot load messages: Invalid chatId', chatId);
-      return;
-    }
-    
-    // Only proceed if we have all required data
-    loadMessages(1, false);
-  }, [isAuthReady, token, chatId, loadMessages]);
-
-  // Separate effect for socket event listeners (depends on chatId and isFocused)
-  useEffect(() => {
-    // Validate chatId is a valid non-empty string
-    if (!chatId || chatId === 'undefined' || chatId === 'null' || !currentUserId.current) {
-      if (!chatId || chatId === 'undefined' || chatId === 'null') {
-        console.error('❌ Cannot setup listeners: Invalid chatId', chatId);
-      }
-      return;
-    }
-
-    const handleNewMessage = (msg: any) => {
-      // Display the new message in the UI
-      const giftedMsg = mapBackendMessageToGifted(msg);
-      setMessages((previous) => GiftedChat.append(previous, [giftedMsg]));
-
-      const senderId =
-        msg.senderId || msg.userId || msg.sender_id || msg.user?._id || msg.userId;
-      const fromCurrentUser = String(senderId || '') === String(currentUserId.current);
-
-      // Skip receipt handling for messages sent by current user
-      if (fromCurrentUser) {
-        return;
-      }
-
-      const messageId = msg.messageId || msg.id || msg._id;
-      if (!messageId) {
-        console.warn('⚠️ new_message event missing messageId:', msg);
-        return;
-      }
-
-      // CRITICAL: Immediately emit mark_delivered receipt when message arrives
-      // This notifies the sender that their message reached the receiving client
-      const chatIdStr = String(chatId);
-      console.log(`📬 New message received, marking as delivered: messageId=${messageId}, chatId=${chatIdStr}`);
-      socketService.markDelivered(chatIdStr, String(messageId));
-
-      // If chat is focused, also mark as read immediately (user is viewing the chat)
-      if (isFocused) {
-        const chatIdStr = String(chatId);
-        console.log(`👁️ Chat is focused, marking as read: messageId=${messageId}, chatId=${chatIdStr}`);
-        socketService.markRead(chatIdStr, String(messageId));
-        readMessagesRef.current.add(String(messageId));
-      }
-    };
+    if (!socketReady) return;
 
     const handleMessageSent = (payload: any) => {
-      // Extract tempId and server messageId from the confirmation payload
-      const tempId = payload?.tempId || payload?.clientTempId;
-      let serverMessageId = payload?.messageId || payload?._id || payload?.id;
-
-      if (!tempId) {
-        console.warn('⚠️ message_sent event missing tempId:', payload);
-        return;
-      }
-
-      // CRITICAL FIX: Handle case where serverMessageId might be a temporary ID initially
-      // If it's still a temp ID (starts with "temp-" or "pending-"), wait for the real ID
-      if (serverMessageId && (String(serverMessageId).startsWith('temp-') || String(serverMessageId).startsWith('pending-'))) {
-        console.log(`⏳ Server returned temporary ID "${serverMessageId}", waiting for final MongoDB ID...`);
-        // Update the message with the temporary ID but keep tempId for later correlation
-        // This allows us to match it again when the real ID arrives
-        setMessages((previous) =>
-          previous.map((m: any) => {
-            const matchesTempId = m.tempId && String(m.tempId) === String(tempId);
-            const matchesId = !m.tempId && String(m._id) === String(tempId);
-
-            if (!matchesTempId && !matchesId) {
-              return m;
-            }
-
-            // Update with temporary ID but keep tempId for final correlation
-            return {
-              ...m,
-              _id: String(serverMessageId), // Use temporary ID for now
-              tempId: tempId, // Keep tempId for final correlation
-              status: 'sent' as MessageStatus, // Change status to 'sent' even with temp ID
-              pending: false,
-              sent: true,
-              received: false,
-            } as any;
-          }),
-        );
-        return; // Wait for final MongoDB ID in next event
-      }
-
-      if (!serverMessageId) {
-        console.warn('⚠️ message_sent event missing messageId:', payload);
-        return;
-      }
-
-      console.log(`✅ Message confirmed with final MongoDB ID: tempId=${tempId} -> messageId=${serverMessageId}`);
-
-      // Find the message by tempId and update it with the real MongoDB ID
-      setMessages((previous) =>
-        previous.map((m: any) => {
-          // Match by tempId (stored separately) or by _id (if tempId was used as _id)
-          const matchesTempId = m.tempId && String(m.tempId) === String(tempId);
-          const matchesId = !m.tempId && String(m._id) === String(tempId);
-
-          if (!matchesTempId && !matchesId) {
-            return m;
-          }
-
-          // Swap tempId for permanent MongoDB messageId and update status
-          return {
-            ...m,
-            _id: String(serverMessageId), // Replace tempId with real MongoDB ID
-            tempId: undefined, // Clear tempId after successful swap
-            status: 'sent' as MessageStatus, // Change status from 'pending' to 'sent'
-            pending: false,
-            sent: true,
-            received: false,
-          } as any;
-        }),
-      );
+        if (payload.status === 'sent' && payload.messageId && payload.tempId) {
+            setMessages((previousMessages) => {
+                let matchFound = false;
+                const updatedMessages = previousMessages.map((msg: any) => {
+                    const isMatchingMessage = 
+                        msg._id === payload.tempId || 
+                        msg.tempId === payload.tempId || 
+                        msg._id === `pending-${payload.tempId}`;
+                    
+                    if (isMatchingMessage) {
+                        matchFound = true;
+                        return {
+                            ...msg,
+                            _id: payload.messageId,
+                            sent: true,
+                            received: false, 
+                            pending: false,
+                            tempId: undefined,
+                        };
+                    }
+                    return msg;
+                });
+                
+                if (matchFound) {
+                    saveMessagesToStorage(updatedMessages).catch(console.error);
+                }
+                return updatedMessages;
+            });
+        }
     };
 
+    const handleNewMessage = (msg: any) => {
+        const senderId = msg.senderId || msg.userId || msg.user?._id;
+        const isMe = String(senderId) === String(currentUserId.current);
+        
+        if (isMe) return; 
+
+        const giftedMsg = mapBackendMessageToGifted(msg);
+        setMessages(previous => {
+            const updatedMessages = GiftedChat.append(previous, [giftedMsg]);
+            saveMessagesToStorage(updatedMessages).catch(console.error);
+            return updatedMessages;
+        });
+        
+        // Only mark as delivered if professional is online
+        if (chatId && isOnline) {
+            socketService.markDelivered(String(chatId), String(msg.messageId || msg._id));
+        }
+    };
+
+    // ✅ FIX: Update storage when delivery receipt arrives (only if professional is online)
     const handleMessageDelivered = (payload: any) => {
-      // Extract messageId from payload (sent by backend worker via RabbitMQ)
-      const messageId = payload?.messageId || payload?._id || payload?.id;
-      if (!messageId) {
-        console.warn('⚠️ message_delivered event missing messageId:', payload);
-        return;
-      }
-
-      console.log(`✅ Message delivered confirmation: messageId=${messageId}`);
-
-      // Update sender's UI: Change status from 'sent' to 'delivered' (single check → double check)
-      setMessages((previous) =>
-        previous.map((m: any) => {
-          // Only update messages sent by current user
-          if (String(m.user?._id) !== String(currentUserId.current)) {
-            return m;
-          }
-
-          // Match by messageId
-          if (String(m._id) !== String(messageId)) {
-            return m;
-          }
-
-          // Update status from 'sent' to 'delivered'
-          return {
-            ...m,
-            status: 'delivered' as MessageStatus,
-            pending: false,
-            sent: true,
-            received: true,
-          } as any;
-        }),
-      );
+         if (isOnline) {
+             setMessages(prev => {
+                 const updated = prev.map(m => (m._id === payload.messageId) ? { ...m, received: true } : m);
+                 saveMessagesToStorage(updated).catch(console.error);
+                 return updated;
+             });
+         }
     };
 
+    // ✅ FIX: Update storage when read receipt arrives (only if professional is online)
     const handleMessageRead = (payload: any) => {
-      // Extract messageId from payload (sent by backend worker via RabbitMQ)
-      const messageId = payload?.messageId || payload?._id || payload?.id;
-      if (!messageId) {
-        console.warn('⚠️ message_read event missing messageId:', payload);
-        return;
-      }
-
-      console.log(`👁️ Message read confirmation: messageId=${messageId}`);
-
-      // Update sender's UI: Change status from 'delivered' to 'read' (double check gray → double check blue)
-      setMessages((previous) =>
-        previous.map((m: any) => {
-          // Only update messages sent by current user
-          if (String(m.user?._id) !== String(currentUserId.current)) {
-            return m;
-          }
-
-          // Match by messageId
-          if (String(m._id) !== String(messageId)) {
-            return m;
-          }
-
-          // Update status from 'delivered' to 'read'
-          return {
-            ...m,
-            status: 'read' as MessageStatus,
-            pending: false,
-            sent: true,
-            received: true,
-          } as any;
-        }),
-      );
+         if (isOnline) {
+             setMessages(prev => {
+                 const updated = prev.map(m => (m._id === payload.messageId) ? { ...m, received: true, read: true } : m);
+                 saveMessagesToStorage(updated).catch(console.error);
+                 return updated;
+             });
+         }
     };
 
-    socketService.onNewMessage(handleNewMessage);
+    const handleUserTyping = (data: any) => {
+        if (String(data.chatId) === String(actualChatId || chatId) && 
+            String(data.userId) !== String(currentUserId.current)) {
+            setOtherUserTyping(data.isTyping);
+        }
+    };
+
+    const handleUserStatus = (data: any) => {
+        if (String(data.userId) === String(professionalId)) {
+            setIsOnline(data.isOnline);
+        }
+    };
+
+    // Register Listeners
     socketService.onMessageSent(handleMessageSent);
+    socketService.onNewMessage(handleNewMessage);
     socketService.onMessageDelivered(handleMessageDelivered);
     socketService.onMessageRead(handleMessageRead);
+    socketService.onUserTyping(handleUserTyping);
+    socketService.onUserStatus(handleUserStatus);
 
-    // Cleanup: Remove event listeners when chatId changes or component unmounts
+    if (professionalId) {
+        socketService.checkUserStatus(String(professionalId));
+    }
+
     return () => {
-      socketService.offNewMessage();
-      const socket = socketRef.current;
-      if (socket) {
-        socket.off('message_sent', handleMessageSent);
-        socket.off('message_delivered', handleMessageDelivered);
-        socket.off('message_read', handleMessageRead);
-      }
+        socketService.offMessageSent();
+        socketService.offNewMessage();
+        socketService.offMessageDelivered();
+        socketService.offMessageRead();
+        socketService.offUserTyping();
+        socketService.offUserStatus();
     };
-  }, [chatId, isFocused, mapBackendMessageToGifted]); // Only chatId and isFocused trigger listener updates
+  }, [socketReady, chatId, mapBackendMessageToGifted, saveMessagesToStorage]);
 
-  // Manual Read Receipt: Mark messages as read when chat becomes focused
-  useEffect(() => {
-    if (!isFocused || !chatId || !currentUserId.current) return;
+  // --- Input & Send ---
+  const handleInputTextChanged = useCallback((text: string) => {
+    const targetChatId = actualChatId || chatId;
+    if (text.length > 0 && !isTyping) {
+        setIsTyping(true);
+        socketService.sendTyping(String(targetChatId), String(currentUserId.current), true);
+    }
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+        setIsTyping(false);
+        socketService.sendTyping(String(targetChatId), String(currentUserId.current), false);
+    }, 2000);
+  }, [actualChatId, chatId]);
 
-    // When chat screen becomes focused, mark all unread messages from other users as read
-    const markVisibleMessagesAsRead = () => {
-      messages.forEach((msg: any) => {
-        const senderId = msg.user?._id;
-        const fromCurrentUser = String(senderId) === String(currentUserId.current);
-        const messageId = msg._id;
-
-        // Skip messages sent by current user or already marked as read
-        if (fromCurrentUser || !messageId || readMessagesRef.current.has(String(messageId))) {
-          return;
-        }
-
-        // Emit manual read receipt for messages that are visible
-        const chatIdStr = String(chatId);
-        console.log(`👁️ Manual read receipt: messageId=${messageId}, chatId=${chatIdStr}`);
-        socketService.markRead(chatIdStr, String(messageId));
-        readMessagesRef.current.add(String(messageId));
-      });
-    };
-
-    // Mark messages as read when chat becomes focused
-    markVisibleMessagesAsRead();
-  }, [isFocused, chatId, messages]);
-
-  const onSend = useCallback(
-    (newMessages: IMessage[] = []) => {
+  const onSend = useCallback((newMessages: IMessage[] = []) => {
       const msg = newMessages[0];
       if (!msg || !msg.text?.trim()) return;
 
-      // Generate a unique tempId for correlation with server response
-      // Format: timestamp-random to ensure uniqueness
-      const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const tempId = `pending-${Date.now()}`;
+      const effectiveChatId = chatId;
 
-      // Create optimistic message with 'pending' status (displayed as 'sending')
       const optimisticMessage: any = {
-        ...msg,
-        _id: tempId, // Use tempId as _id initially
-        text: msg.text.trim(),
-        createdAt: msg.createdAt || new Date(),
-        user: {
-          _id: String(currentUserId.current),
-          name: user?.first_name || 'Me',
-        },
-        status: 'pending' as MessageStatus, // 'pending' = sending state
-        pending: true,
-        sent: false,
-        received: false,
-        tempId, // Store tempId separately for correlation
+          ...msg,
+          _id: tempId,
+          user: { _id: String(currentUserId.current), name: user?.first_name || 'Me' },
+          pending: true,
+          sent: false,
+          received: false,
+          tempId, 
       };
 
-      // Add message to UI immediately (optimistic update)
       setMessages((previous) => GiftedChat.append(previous, [optimisticMessage]));
-
-      // Emit message via socket with tempId for correlation - use actualChatId if available
-      const effectiveChatId = actualChatId || chatId;
-      const chatIdStr = String(effectiveChatId);
-      console.log('📤 Sending message to chatId:', chatIdStr, '(actualChatId:', actualChatId, ')');
-      socketService.sendMessage(chatIdStr, msg.text.trim(), tempId);
+      socketService.sendMessage(String(effectiveChatId), msg.text.trim(), tempId);
     },
-    [actualChatId, chatId, user?.first_name],
+    [chatId, user]
   );
 
-  if (isLoading && messages.length === 0) {
+  // --- Renders ---
+  const renderLoadEarlier = () => {
+    if (!hasMore || isLoadingEarlier) return null;
+    
     return (
-      <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color="#1E88E5" />
+      <View style={{ alignItems: 'center', paddingVertical: theme.spacing.s }}>
+        <TouchableOpacity 
+          onPress={() => loadMessages(page + 1, true)}
+          style={{
+            backgroundColor: appTheme.colors.primary,
+            paddingHorizontal: theme.spacing.l,
+            paddingVertical: theme.spacing.s,
+            borderRadius: theme.borderRadius.m,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}
+        >
+          {isLoadingEarlier && (
+            <ActivityIndicator 
+              size="small" 
+              color={appTheme.colors.background.surface} 
+              style={{ marginRight: theme.spacing.s }}
+            />
+          )}
+          <Text style={{ 
+            color: appTheme.colors.background.surface,
+            fontSize: 14,
+            fontWeight: '600',
+          }}>
+            Load Earlier Messages
+          </Text>
+        </TouchableOpacity>
       </View>
     );
-  }
+  };
+
+  const renderFooter = () => {
+    if (otherUserTyping) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(dotAnim1, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.timing(dotAnim2, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.timing(dotAnim3, { toValue: 1, duration: 600, useNativeDriver: true }),
+        ])
+      ).start();
+
+        return (
+            <View style={{ paddingHorizontal: theme.spacing.m, paddingVertical: theme.spacing.s }}>
+                <Text style={{ color: appTheme.colors.text.secondary, fontStyle: 'italic', fontSize: 12 }}>
+                    {professionalName} is typing...
+                </Text>
+            </View>
+        );
+    }
+    return null;
+  };
+
+  const renderBubble = (props: any) => (
+    <Bubble
+        {...props}
+        wrapperStyle={{
+            right: { backgroundColor: appTheme.colors.primary, borderRadius: theme.borderRadius.l },
+            left: { backgroundColor: appTheme.colors.background.surface, borderRadius: theme.borderRadius.l },
+        }}
+    />
+  );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: appTheme.colors.background.primary }]}>
+      <StatusBar barStyle="light-content" backgroundColor={appTheme.colors.primary} />
+      
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: appTheme.colors.primary }]}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="chevron-back" size={24} color={appTheme.colors.background.surface} />
+        </TouchableOpacity>
+        <View style={styles.headerContent}>
+            <View style={[styles.avatar, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
+                <Ionicons name="person" size={20} color={appTheme.colors.background.surface} />
+            </View>
+            <View style={styles.headerTextContainer}>
+                <Text style={[styles.headerTitle, { color: appTheme.colors.background.surface }]}>{professionalName}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{ 
+                        width: 8, height: 8, borderRadius: 4, 
+                        backgroundColor: isOnline ? '#4CAF50' : '#ccc', marginRight: 6 
+                    }} />
+                    <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 12 }}>
+                        {isOnline ? 'Online' : 'Offline'}
+                    </Text>
+                </View>
+            </View>
+        </View>
+      </View>
+
       <GiftedChat
-        {...({
-          messages,
-          onSend,
-          user: {
-            _id: currentUserId.current,
-            name: user?.first_name || 'Me',
-          },
-          loadEarlier: hasMore,
-          onLoadEarlier: handleLoadEarlier,
-          isLoadingEarlier,
-          renderBubble: (props: any) => (
-            <Bubble
-              {...props}
-              wrapperStyle={{
-                right: { backgroundColor: '#1E88E5' },
-                left: { backgroundColor: '#E5E7EB' },
-              }}
-              textStyle={{
-                right: { color: '#FFFFFF' },
-                left: { color: '#111827' },
-              }}
+          messages={messages}
+          onSend={onSend}
+          user={{ _id: String(currentUserId.current) }}
+          renderLoading={() => <ActivityIndicator size="large" color={appTheme.colors.primary} />}
+          onInputTextChanged={handleInputTextChanged}
+          renderFooter={renderFooter}
+          renderLoadEarlier={renderLoadEarlier}
+          isTyping={otherUserTyping}
+          renderBubble={renderBubble}
+          renderSystemMessage={(props) => (
+            <SystemMessage
+                {...props}
+                containerStyle={{ marginBottom: 15, paddingVertical: 10 }}
+                textStyle={{ color: '#999', fontWeight: 'bold', fontSize: 13, textAlign: 'center' }}
             />
-          ),
-          renderTicks: (currentMessage: any) => {
-            if (!currentMessage || !currentMessage.user) return null;
-
-            if (String(currentMessage.user._id) !== String(currentUserId.current)) {
-              return null;
+          )}
+          textInputProps={{
+            style: { 
+                color: appTheme.colors.text.primary,
+                backgroundColor: appTheme.colors.background.secondary,
+                borderRadius: 20,
+                paddingHorizontal: 15,
+                marginTop: 6,
+                marginBottom: 6,
+                marginRight: 10,
+                flex: 1
             }
-
-            const status: MessageStatus =
-              currentMessage.status ||
-              (currentMessage.pending
-                ? 'pending'
-                : currentMessage.received
-                ? 'delivered'
-                : currentMessage.sent
-                ? 'sent'
-                : 'sent');
-
-            let symbol = '✓';
-            let color = '#9CA3AF';
-
-            if (status === 'pending') {
-              symbol = '🕒';
-              color = '#9CA3AF';
-            } else if (status === 'sent') {
-              symbol = '✓';
-              color = '#9CA3AF';
-            } else if (status === 'delivered') {
-              symbol = '✓✓';
-              color = '#9CA3AF';
-            } else if (status === 'read') {
-              symbol = '✓✓';
-              color = '#3B82F6';
-            }
-
-            return (
-              <Text style={{ fontSize: 11, color, marginRight: 4 }}>{symbol}</Text>
-            );
-          },
-        } as any)}
+          }}
+          alignTop={false}
+          showAvatarForEveryMessage={false}
+          showUserAvatar={false}
+          alwaysShowSend={false}
       />
     </View>
   );
 };
 
+const { width, height } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-  },
-  loaderContainer: {
-    flex: 1,
+  container: { flex: 1 },
+  header: { 
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingBottom: 15,
+    paddingHorizontal: 15,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    elevation: 4,
   },
+  backButton: { padding: 5 },
+  headerContent: { flexDirection: 'row', alignItems: 'center', marginLeft: 15 },
+  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  headerTextContainer: { marginLeft: 10 },
+  headerTitle: { fontSize: 18, fontWeight: 'bold' },
 });
 
 export default ChatScreen;

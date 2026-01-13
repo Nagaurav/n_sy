@@ -134,7 +134,9 @@ const SelectTimeScreen = () => {
     finally { setIsPriceLoading(false); }
   };
 
-  useEffect(() => { fetchAvailableSlots(); }, [fetchAvailableSlots]);
+  useEffect(() => { 
+    fetchAvailableSlots();
+  }, [professionalId]);
 
   const handleSlotSelect = (slot: FormattedAvailableSlot) => {
     if (selectedSlot?.id === slot.id) {

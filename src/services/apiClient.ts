@@ -98,24 +98,79 @@ export type ApiResult<T = any> = {
 // Generic error handler
 export const buildApiErrorResponse = <T = any>(error: any): ApiResult<T> => {
   if (error?.response) {
+    const status = error.response.status;
+    
+    // Handle server errors (502, 503, 504) with specific messages
+    if (status === 502) {
+      return {
+        success: false,
+        error: 'Server is temporarily unavailable. Please try again in a few moments.',
+      };
+    }
+    if (status === 503) {
+      return {
+        success: false,
+        error: 'Server is under maintenance. Please try again later.',
+      };
+    }
+    if (status === 504) {
+      return {
+        success: false,
+        error: 'Request timed out. Please check your connection and try again.',
+      };
+    }
+    
+    // Handle other HTTP errors
     return {
       success: false,
       error:
         error.response.data?.message ||
         error.response.data?.error ||
-        'Something went wrong',
+        `Server error (${status}). Please try again.`,
     };
   }
   if (error?.request) {
     return {
       success: false,
-      error: 'Network error. Please check your connection and try again.',
+      error: 'Network error. Please check your internet connection and try again.',
     };
   }
   return {
     success: false,
     error: error?.message || 'An unexpected error occurred.',
   };
+};
+
+// Retry configuration
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  retryDelay: 1000, // 1 second base delay
+  retryableErrors: [502, 503, 504, 'ECONNABORTED', 'NETWORK_ERROR'],
+};
+
+// Retry helper function with exponential backoff
+const retryRequest = async <T>(
+  requestFn: () => Promise<T>,
+  retries: number = 0
+): Promise<T> => {
+  try {
+    return await requestFn();
+  } catch (error: any) {
+    const status = error?.response?.status;
+    const isRetryable = RETRY_CONFIG.retryableErrors.includes(status) || 
+                       RETRY_CONFIG.retryableErrors.includes(error?.code) ||
+                       error?.message?.includes('Network Error');
+
+    if (isRetryable && retries < RETRY_CONFIG.maxRetries) {
+      const delay = RETRY_CONFIG.retryDelay * Math.pow(2, retries); // Exponential backoff
+      console.log(`🔄 Retrying request in ${delay}ms (attempt ${retries + 1}/${RETRY_CONFIG.maxRetries})`);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return retryRequest(requestFn, retries + 1);
+    }
+    
+    throw error;
+  }
 };
 
 // Generic HTTP methods
@@ -125,7 +180,7 @@ export const apiClient = {
     config?: any,
   ): Promise<ApiResult<T>> => {
     try {
-      const response = await api.get<T>(endpoint, config);
+      const response = await retryRequest(async () => api.get<T>(endpoint, config));
       return {
         success: true,
         data: response.data,
@@ -142,7 +197,7 @@ export const apiClient = {
     config?: any,
   ): Promise<ApiResult<T>> => {
     try {
-      const response = await api.post<T>(endpoint, data, config);
+      const response = await retryRequest(async () => api.post<T>(endpoint, data, config));
       return {
         success: true,
         data: response.data,
@@ -159,7 +214,7 @@ export const apiClient = {
     config?: any,
   ): Promise<ApiResult<T>> => {
     try {
-      const response = await api.put<T>(endpoint, data, config);
+      const response = await retryRequest(async () => api.put<T>(endpoint, data, config));
       return {
         success: true,
         data: response.data,
@@ -175,7 +230,7 @@ export const apiClient = {
     config?: any,
   ): Promise<ApiResult<T>> => {
     try {
-      const response = await api.delete<T>(endpoint, config);
+      const response = await retryRequest(async () => api.delete<T>(endpoint, config));
       return {
         success: true,
         data: response.data,

@@ -6,6 +6,7 @@ class SocketService {
   private socket: Socket | null = null;
   private pendingUserId: string | number | null = null;
   private pendingUserType: string | null = null;
+  private lastToken: string | null = null;
 
   /**
    * Connect to Socket.IO server with authentication token.
@@ -17,33 +18,34 @@ class SocketService {
    * @returns The socket instance
    */
   connect(token: string, userId: string | number, userType: string): Socket {
-    // If already connected with same credentials, return existing socket
+    // Check if critical credentials changed
+    const credentialsChanged = 
+        this.lastToken !== token || 
+        this.pendingUserId !== userId || 
+        this.pendingUserType !== userType;
+
+    // If connected but credentials changed, force disconnect
     if (this.socket && this.socket.connected) {
-      // If credentials changed, disconnect and reconnect
-      if (this.pendingUserId !== userId || this.pendingUserType !== userType) {
-        console.log('🔄 Socket credentials changed, reconnecting...');
+      if (credentialsChanged) {
+        console.log('🔄 Credentials changed, reconnecting socket...');
         this.disconnect();
       } else {
         return this.socket;
       }
     }
 
-    // Store credentials for registration after connection
     this.pendingUserId = userId;
     this.pendingUserType = userType;
+    this.lastToken = token; // Store new token
 
     console.log('🔌 Initializing Socket.IO connection...');
 
-    // Initialize socket client (lazy connection - not connected until connect() is called)
     this.socket = io(SOCKET_URL, {
       path: '/socket.io',
       transports: ['websocket'],
-      // Token is sent in handshake auth payload (required by backend authenticateSocket middleware)
-      auth: {
-        token,
-      },
-      // Auto-connect is enabled by default, but we control when connect() is called
+      auth: { token },
       autoConnect: true,
+      reconnection: true,
     });
 
     // Set up connection event listener to emit registration immediately upon connection
@@ -73,6 +75,12 @@ class SocketService {
           message: 'Authentication failed. Please log in again.' 
         });
       }
+    });
+
+    // Handle generic logic errors from backend
+    this.socket.on('error', (err) => {
+      console.error('⚠️ Socket Logic Error:', err);
+      // Optional: Trigger a toast/alert via a callback
     });
 
     // Handle disconnection
@@ -122,6 +130,28 @@ class SocketService {
       return;
     }
     this.socket.emit('send_message', { chatId: chatIdStr, content, tempId });
+  }
+
+  // Typing indicators
+  sendTyping(chatId: string, userId: string, isTyping: boolean) {
+    if (!this.socket) return;
+    // CRITICAL: Ensure chatId is always a string (UUID format)
+    const chatIdStr = String(chatId || '').trim();
+    if (!chatIdStr || chatIdStr === 'undefined' || chatIdStr === 'null') {
+      console.error('❌ Cannot send typing: Invalid chatId', chatId);
+      return;
+    }
+    this.socket.emit('typing', { chatId: chatIdStr, userId, isTyping });
+  }
+
+  onUserTyping(callback: (data: any) => void) {
+    if (!this.socket) return;
+    this.socket.on('user_typing', callback);
+  }
+
+  offUserTyping() {
+    if (!this.socket) return;
+    this.socket.off('user_typing');
   }
 
   // Delivery / read receipts emitters
@@ -183,9 +213,69 @@ class SocketService {
     this.socket.on('message_read', callback);
   }
 
+  onMessageSaved(callback: (message: any) => void) {
+    if (!this.socket) return;
+    this.socket.on('message_saved', callback);
+  }
+
   offNewMessage() {
     if (!this.socket) return;
     this.socket.off('new_message');
+  }
+
+  offMessageSent() {
+    if (!this.socket) return;
+    this.socket.off('message_sent');
+  }
+
+  onUserOnline(callback: (payload: any) => void) {
+    if (!this.socket) return;
+    this.socket.on('user_online', callback);
+  }
+
+  onUserOffline(callback: (payload: any) => void) {
+    if (!this.socket) return;
+    this.socket.on('user_offline', callback);
+  }
+
+  offUserOnline() {
+    if (!this.socket) return;
+    this.socket.off('user_online');
+  }
+
+  offUserOffline() {
+    if (!this.socket) return;
+    this.socket.off('user_offline');
+  }
+
+  checkUserStatus(userId: string) {
+    if (!this.socket) return;
+    this.socket.emit('check_user_status', { userId: String(userId) });
+  }
+
+  onUserStatus(callback: (data: { userId: string, isOnline: boolean }) => void) {
+    if (!this.socket) return;
+    this.socket.on('user_status', callback);
+  }
+
+  offUserStatus() {
+    if (!this.socket) return;
+    this.socket.off('user_status');
+  }
+
+  offMessageSaved() {
+    if (!this.socket) return;
+    this.socket.off('message_saved');
+  }
+
+  offMessageDelivered() {
+    if (!this.socket) return;
+    this.socket.off('message_delivered');
+  }
+
+  offMessageRead() {
+    if (!this.socket) return;
+    this.socket.off('message_read');
   }
 
   disconnect() {
@@ -195,6 +285,7 @@ class SocketService {
     // Clear pending credentials
     this.pendingUserId = null;
     this.pendingUserType = null;
+    this.lastToken = null;
   }
 }
 

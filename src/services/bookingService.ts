@@ -55,6 +55,10 @@ export const bookingService = {
 
     Object.entries(apiFilters).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
+        // 🛑 FIX: Skip price filters entirely to prevent backend crash
+        if (key === 'min_price' || key === 'max_price') {
+          return; // Don't add price parameters to query
+        }
         const paramValue = typeof value === 'boolean' ? String(value) : String(value);
         queryParams.append(key, paramValue);
       }
@@ -63,13 +67,19 @@ export const bookingService = {
     const queryString = queryParams.toString();
     const endpoint = `/user/professional/getProfessional${queryString ? `?${queryString}` : ''}`;
 
+    console.log('🔍 [bookingService] Search professionals endpoint:', endpoint);
+    console.log('📋 [bookingService] Query params:', Object.fromEntries(queryParams));
+
     return apiClient.get<ProfessionalsResponse>(endpoint);
   },
 
   // Get available time slots for a professional
   getAvailableSlots: async (professionalId: string | number): Promise<ApiResult<TimeSlot[]>> => {
     const response = await apiClient.get('/user/check-slot/checkAvailability', {
-      params: { professional_id: professionalId }
+      params: { 
+        professional_id: professionalId,
+        limit: 500 // 🟢 Request 500 slots to ensure we cover upcoming weeks
+      }
     });
 
     if (response.success && response.data?.success === true && Array.isArray(response.data.slots)) {
@@ -263,5 +273,10 @@ export const bookingService = {
         appointment: null
       },
     };
+  },
+
+  // ✅ FIX: Added missing getBookingDetails method
+  getBookingDetails: async (bookingId: string | number) => {
+    return apiClient.get(`/user/consultation-booking/details/${bookingId}`);
   },
 };

@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { apiService } from '../services/apiService';
+// ✅ FIX: Import from index, not missing apiService file
+import { apiService } from '../services';
 
 // Types - Updated to match actual API response structure
 export interface Appointment {
@@ -28,6 +29,7 @@ export interface Appointment {
   video_enabled: boolean;
   prescription_count?: number;
   chat_id?: string; // Chat ID associated with this appointment
+  transaction_id?: string; // Transaction ID for payment sync
   
   // Backward compatibility properties
   professional_name?: string; // Computed from professional.name

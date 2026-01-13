@@ -53,6 +53,8 @@ export const apiService = {
   searchProfessionalsWithFilters: bookingService.searchProfessionals,
   getAllAvailableSlots: bookingService.getAvailableSlots,
   createBookingAndInitiatePayment: bookingService.createBookingAndInitiatePayment,
+  // ✅ FIX: Added missing getBookingDetails method
+  getBookingDetails: bookingService.getBookingDetails,
   
   // Professional methods
   getProfessionalProfile: professionalService.getProfile,

@@ -78,32 +78,32 @@ export type Shadows = {
 export type Typography = {
   h1: {
     fontSize: number;
-    fontWeight: string;
+    fontWeight: 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
     lineHeight: number;
   };
   h2: {
     fontSize: number;
-    fontWeight: string;
+    fontWeight: 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
     lineHeight: number;
   };
   h3: {
     fontSize: number;
-    fontWeight: string;
+    fontWeight: 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
     lineHeight: number;
   };
   body: {
     fontSize: number;
-    fontWeight: string;
+    fontWeight: 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
     lineHeight: number;
   };
   small: {
     fontSize: number;
-    fontWeight: string;
+    fontWeight: 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
     lineHeight: number;
   };
   caption: {
     fontSize: number;
-    fontWeight: string;
+    fontWeight: 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
     lineHeight: number;
   };
 };
@@ -197,32 +197,32 @@ export const theme: Theme = {
   typography: {
     h1: {
       fontSize: 32,
-      fontWeight: '700',
+      fontWeight: '700' as const,
       lineHeight: 40,
     },
     h2: {
       fontSize: 24,
-      fontWeight: '600',
+      fontWeight: '600' as const,
       lineHeight: 32,
     },
     h3: {
       fontSize: 20,
-      fontWeight: '600',
+      fontWeight: '600' as const,
       lineHeight: 28,
     },
     body: {
       fontSize: 16,
-      fontWeight: '400',
+      fontWeight: '400' as const,
       lineHeight: 24,
     },
     small: {
       fontSize: 14,
-      fontWeight: '400',
+      fontWeight: '400' as const,
       lineHeight: 20,
     },
     caption: {
       fontSize: 12,
-      fontWeight: '400',
+      fontWeight: '400' as const,
       lineHeight: 16,
     },
   },
@@ -262,7 +262,7 @@ export const commonStyles = {
   headerTitle: {
     ...theme.typography.h2,
     color: theme.colors.background.surface,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   // Standardized card styles
   card: {
@@ -305,13 +305,13 @@ export const commonStyles = {
   sectionTitle: {
     ...theme.typography.h3,
     color: theme.colors.text.primary,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     marginBottom: theme.spacing.m,
   },
   cardTitle: {
     ...theme.typography.h3,
     color: theme.colors.text.primary,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     marginBottom: theme.spacing.s,
   },
   body: {
@@ -335,7 +335,7 @@ export const commonStyles = {
   buttonText: {
     ...theme.typography.body,
     color: theme.colors.background.surface,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   secondaryButton: {
     backgroundColor: 'transparent',
@@ -350,7 +350,7 @@ export const commonStyles = {
   secondaryButtonText: {
     ...theme.typography.body,
     color: theme.colors.primary,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   input: {
     borderWidth: 1,

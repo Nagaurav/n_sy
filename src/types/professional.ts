@@ -14,6 +14,9 @@ export enum WorkArrangement {
 
 export enum ProfessionalRole {
   YOGA_TEACHER = 'yoga_teacher',
+  YOGA_INSTRUCTOR = 'yoga_instructor', // 👈 New from your data
+  YOGA_THERAPIST = 'yoga_therapist',   // 👈 New from your data
+  CENTER_OWNER = 'center_owner',       // 👈 New from your data
   NUTRITIONIST = 'nutritionist',
   PERSONAL_TRAINER = 'personal_trainer',
   THERAPIST = 'therapist',

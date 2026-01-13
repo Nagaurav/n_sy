@@ -631,21 +631,6 @@ const HomeScreen = () => {
             </View>
           </View>
 
-          {/* Wellness Tip Card */}
-          <View style={[styles.wellnessTipCard, { backgroundColor: theme.colors.secondary }]}>
-            <View style={styles.wellnessTipHeader}>
-              <View style={styles.wellnessTipIcon}>
-                <Ionicons name="bulb-outline" size={20} color="#FFFFFF" />
-              </View>
-              <Text style={styles.wellnessTipTitle}>Daily Wellness Tip</Text>
-            </View>
-            <Animated.View style={{ opacity: fadeAnim }}>
-              <Text style={styles.wellnessTipContent}>
-                {wellnessTips[currentTipIndex]}
-              </Text>
-            </Animated.View>
-          </View>
-          
           {/* Next Appointment Section */}
           <Text style={styles.sectionTitle}>Your Next Session</Text>
           
@@ -737,23 +722,21 @@ const HomeScreen = () => {
                 <Ionicons name="chevron-forward" size={24} color="#FFFFFF" />
               </View>
             </TouchableOpacity>
+          </View>
 
-            {/* View Appointments Card */}
-            <TouchableOpacity 
-              style={[styles.quickActionCard, { backgroundColor: theme.colors.accent }]}
-              onPress={navigateToAppointments}
-              activeOpacity={0.9}
-            >
-              <View style={styles.quickActionGradient} />
-              <View style={styles.quickActionContent}>
-                <Ionicons name="calendar" size={36} color="#FFFFFF" />
-                <View style={styles.quickActionTextContainer}>
-                  <Text style={styles.quickActionTitle}>My Appointments</Text>
-                  <Text style={styles.quickActionSubtitle}>View and manage your sessions</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color="#FFFFFF" />
+          {/* Wellness Tip Card - Moved to bottom */}
+          <View style={[styles.wellnessTipCard, { backgroundColor: '#10B981' }]}>
+            <View style={styles.wellnessTipHeader}>
+              <View style={styles.wellnessTipIcon}>
+                <Ionicons name="bulb-outline" size={20} color="#FFFFFF" />
               </View>
-            </TouchableOpacity>
+              <Text style={styles.wellnessTipTitle}>Daily Wellness Tip</Text>
+            </View>
+            <Animated.View style={{ opacity: fadeAnim }}>
+              <Text style={styles.wellnessTipContent}>
+                {wellnessTips[currentTipIndex]}
+              </Text>
+            </Animated.View>
           </View>
         </View>
       </ScrollView>

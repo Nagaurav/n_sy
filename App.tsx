@@ -99,7 +99,6 @@ const RedTestScreen = () => (
 
 // Home Stack Navigator
 const HomeStackNavigator = () => {
-  console.log('🧭 HomeStackNavigator rendering');
   return (
     <HomeStack.Navigator
       screenOptions={{
@@ -111,7 +110,7 @@ const HomeStackNavigator = () => {
       <HomeStack.Screen name="ProfessionalsList" component={ProfessionalsListScreen} />
       <HomeStack.Screen name="ProfessionalProfile" component={ProfessionalProfileScreen} />
       <HomeStack.Screen name="ClassesList" component={ClassesListScreen} />
-      <HomeStack.Screen name="AppointmentDetail" component={AppointmentDetailScreen} />
+            <HomeStack.Screen name="AppointmentDetail" component={AppointmentDetailScreen} />
       <HomeStack.Screen name="BookingConfirmation" component={BookingConfirmationScreen} />
       <HomeStack.Screen 
         name="PaymentGateway" 
@@ -257,7 +256,7 @@ const AppNavigator = () => {
     const timer = setTimeout(() => {
       console.log('🔧 Navigation ready timeout reached');
       setIsNavigationReady(true);
-    }, 3000); // 3 second timeout
+    }, 5000); // 5 second timeout
     
     return () => clearTimeout(timer);
   }, []);
@@ -269,9 +268,8 @@ const AppNavigator = () => {
     isNavigationReady 
   });
 
-  // Show splash screen for 8 seconds using navigation timeout only
+  // Show splash screen for 5 seconds using navigation timeout only
   if (!isNavigationReady) {
-    console.log('⏳ Showing splash screen...');
     return (
       <AuthStack.Navigator screenOptions={{ headerShown: false }}>
         <AuthStack.Screen name="Splash" component={SplashScreen} />
@@ -280,7 +278,6 @@ const AppNavigator = () => {
   }
 
   if (isAuthenticated) {
-    console.log('✅ User authenticated, showing main app');
     return (
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         {/* The Home Tabs (Base Layer) */}
@@ -303,7 +300,6 @@ const AppNavigator = () => {
       </RootStack.Navigator>
     );
   } else {
-    console.log('❌ User not authenticated, showing auth screens');
     return (
       <AuthStack.Navigator
         screenOptions={{
@@ -323,7 +319,6 @@ const AppNavigator = () => {
 };
 
 const App = () => {
-  console.log('🚀 [App] Application starting...');
   
   try {
     return (

@@ -13,6 +13,7 @@ import { useNavigation, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../../App';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { apiClient } from '../services/apiClient';
 
 const { width, height } = Dimensions.get('window');
 
@@ -22,12 +23,20 @@ type BookingSuccessScreenRouteProp = RouteProp<RootStackParamList, 'BookingSucce
 
 // Define the component's props interface
 interface BookingSuccessScreenProps {
-  route: BookingSuccessScreenRouteProp;
+  route: BookingSuccessScreenRouteProp & {
+    params: {
+      transactionId?: string; // Add this
+      paymentId?: string;     // Add this (PhonePe might send different keys)
+    }
+  };
 }
 
 const BookingSuccessScreen = ({ route }: BookingSuccessScreenProps) => {
   const navigation = useNavigation<BookingSuccessScreenNavigationProp>();
-  const { bookingId, amount, bookingDetails, status, message } = route.params;
+  const { bookingId, amount, bookingDetails, status, message, transactionId, paymentId } = route.params;
+  
+  // Use the available ID (some flows might name it differently)
+  const activeTransactionId = transactionId || paymentId;
   
   // Animation values
   const [scaleValue] = useState(new Animated.Value(0));
@@ -70,7 +79,26 @@ const BookingSuccessScreen = ({ route }: BookingSuccessScreenProps) => {
     }
 
     return () => clearTimeout(confettiTimer);
-  }, [bookingId, bookingDetails, scaleValue, fadeValue, slideValue]);
+  }, []);
+
+  useEffect(() => {
+    const syncPaymentStatus = async () => {
+      if (activeTransactionId) {
+        try {
+          console.log(`🔄 Force syncing payment for TXN: ${activeTransactionId}`);
+          // This calls your backend 'manualPaymentSync' function
+          await apiClient.post(`/user/consultation-booking/sync/${activeTransactionId}`);
+          console.log('✅ Payment status synced successfully with server');
+        } catch (error) {
+          console.error('⚠️ Sync attempt failed (Background webhook will handle it):', error);
+        }
+      }
+    };
+
+    if (status === 'success') {
+      syncPaymentStatus();
+    }
+  }, [activeTransactionId, status]);
 
   const handleViewAppointments = () => {
     // Navigate to MainDrawer -> HomeStack -> Appointments

@@ -82,6 +82,24 @@ export const chatService = {
     };
   },
 
+  // Find or create chat session for appointment
+  findOrCreateChat: async (appointmentId: string): Promise<ApiResult<any>> => {
+    const payload = {
+      appointmentId,
+    };
+    
+    const response = await apiClient.post('/chat/find-or-create', payload);
+    
+    // Unwrap the nested data
+    const raw = response.data;
+    const chatData = raw?.data ?? raw;
+
+    return {
+      success: true,
+      data: chatData, 
+    };
+  },
+
   // Send a message
   sendMessage: async (chatId: string, message: string, messageType: string = 'text'): Promise<ApiResult<any>> => {
     const payload = {
@@ -97,6 +115,24 @@ export const chatService = {
   markAsRead: async (chatId: string, messageIds: string[]): Promise<ApiResult<any>> => {
     const payload = {
       messageIds,
+    };
+    
+    return apiClient.post(`/chat/${chatId}/read`, payload);
+  },
+
+  // Handle message delivered receipts
+  handleMessageDelivered: async (chatId: string, messageId: string): Promise<ApiResult<any>> => {
+    const payload = {
+      messageId,
+    };
+    
+    return apiClient.post(`/chat/${chatId}/delivered`, payload);
+  },
+
+  // Handle message read receipts  
+  handleMessageRead: async (chatId: string, messageId: string): Promise<ApiResult<any>> => {
+    const payload = {
+      messageId,
     };
     
     return apiClient.post(`/chat/${chatId}/read`, payload);

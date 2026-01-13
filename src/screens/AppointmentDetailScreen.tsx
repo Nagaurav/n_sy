@@ -14,7 +14,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { RootState } from '../store';
-import { apiService } from '../services';
+import { apiService, apiClient } from '../services';
 import { setCurrentAppointment, setChatActive, fetchAppointmentById } from '../store/appointmentSlice';
 import { useAuth } from '../hooks/useAuth';
 import { VideoPlaceholder, PrescriptionViewer } from '../components';
@@ -36,18 +36,18 @@ const AppointmentDetailScreen: React.FC = () => {
   const dispatch = useDispatch();
   const { theme } = useTheme();
   const { user, token, isAuthenticated } = useAuth();
-  const { appointmentId, professionalId, userId, appointmentData } = route.params as RouteParams;
+  const { appointmentId, professionalId: routeProfessionalId, userId, appointmentData } = route.params as RouteParams;
   
-  console.log('📋 [AppointmentDetail] Screen mounted with appointmentId:', appointmentId, 'professionalId:', professionalId, 'userId:', userId);
+  console.log('📋 [AppointmentDetail] Screen mounted with appointmentId:', appointmentId, 'professionalId:', routeProfessionalId, 'userId:', userId);
   
   // Validate required parameters
   useEffect(() => {
-    if (!appointmentId || !professionalId || !userId) {
-      console.error('❌ [AppointmentDetail] Missing required parameters:', { appointmentId, professionalId, userId });
+    if (!appointmentId || !routeProfessionalId || !userId) {
+      console.error('❌ [AppointmentDetail] Missing required parameters:', { appointmentId, professionalId: routeProfessionalId, userId });
       Alert.alert('Invalid Appointment', 'Required appointment information is missing.');
       navigation.goBack();
     }
-  }, [appointmentId, professionalId, userId, navigation]);
+  }, [appointmentId, routeProfessionalId, userId, navigation]);
   
   const {
     currentAppointment,
@@ -62,6 +62,9 @@ const AppointmentDetailScreen: React.FC = () => {
   const [prescriptionData, setPrescriptionData] = useState<any>(null);
   const [prescriptionLoading, setPrescriptionLoading] = useState(false);
 
+  // Get professionalId from appointment data or route params
+  const professionalId = currentAppointment?.professional_id || routeProfessionalId || 'unknown';
+
   // Debug: Log appointment state changes
   useEffect(() => {
     console.log('📋 [AppointmentDetail] Appointment state updated:', {
@@ -75,35 +78,55 @@ const AppointmentDetailScreen: React.FC = () => {
     });
   }, [currentAppointment, loading, error, chatActive, videoCallActive, appointmentId]);
 
+  // Helper to combine Date (from slot.date) and Time (from slot.start_time)
+  const getRealAppointmentDate = (dateString: string, timeString: string) => {
+    try {
+      const dateObj = new Date(dateString); // "2025-05-07..."
+      const timeObj = new Date(timeString); // "1970-01-01T01:30..."
+
+      // Combine them
+      const finalDate = new Date(dateObj);
+      finalDate.setHours(timeObj.getUTCHours());
+      finalDate.setMinutes(timeObj.getUTCMinutes());
+      finalDate.setSeconds(0);
+      
+      return finalDate;
+    } catch (e) {
+      console.error("Date parsing error", e);
+      return new Date();
+    }
+  };
+
   // Calculate time until chat becomes available (15 minutes before appointment)
   const calculateTimeUntilChat = useCallback(() => {
-    if (!currentAppointment || !currentAppointment.date || !currentAppointment.time) {
-      console.log(' [AppointmentDetail] No appointment data for chat calculation');
+    // 1. Safety Check: If we don't have a valid appointment, stop immediately.
+    if (!currentAppointment) {
+      console.log(' [AppointmentDetail] No appointment data available');
       return null;
     }
-    
+
     try {
-      // Handle both ISO time strings and formatted time strings
-      let appointmentDate: Date;
-      
-      if (currentAppointment.time.includes('T')) {
-        // ISO time string - parse directly
-        appointmentDate = new Date(currentAppointment.time);
-      } else {
-        // Formatted time string - combine with date
-        const [hours, minutes] = currentAppointment.time.split(':').map(Number);
-        appointmentDate = new Date(currentAppointment.date || '');
-        appointmentDate.setHours(hours, minutes, 0, 0);
+      // Use slot data if available, otherwise fall back to root level data
+      const appointmentDate = currentAppointment.date || currentAppointment.slot?.date;
+      const appointmentTime = currentAppointment.time || currentAppointment.slot?.start_time;
+
+      if (!appointmentDate || !appointmentTime) {
+        console.log(' [AppointmentDetail] No appointment date or time available');
+        return null;
       }
+
+      // ✅ NEW CODE: Use the helper function to combine date and time properly
+      const chatStartTime = getRealAppointmentDate(appointmentDate, appointmentTime);
       
+      // Now calculate availability using this correct date
       const now = new Date();
-      
-      const diff = appointmentDate.getTime() - now.getTime();
-      const minutesUntilChat = diff <= 0 ? 0 : Math.floor(diff / (1000 * 60));
+      const diff = (chatStartTime.getTime() - now.getTime()) / 60000;
+      const minutesUntilChat = diff <= 0 ? 0 : Math.floor(diff);
       
       console.log(' [AppointmentDetail] Chat availability:', {
-        appointmentTime: appointmentDate.toISOString(),
-        chatStartTime: new Date(appointmentDate.getTime() - 15 * 60 * 1000).toISOString(),
+        appointmentDate,
+        appointmentTime,
+        chatStartTime: chatStartTime.toISOString(),
         now: now.toISOString(),
         minutesUntilChat,
         isAvailable: minutesUntilChat === 0,
@@ -371,12 +394,12 @@ const AppointmentDetailScreen: React.FC = () => {
       const response = await apiService.getBookingPrescription(bookingId);
       console.log('📡 [AppointmentDetail] Prescription API response:', {
         hasData: !!response?.data,
-        prescriptionId: response?.data?.id,
-        prescriptionType: response?.data?.prescriptionType,
+        prescriptionId: response?.data?.data?.id,
+        prescriptionType: response?.data?.data?.prescriptionType,
       });
       
-      if (response?.data?.id) {
-        setPrescriptionData(response.data);
+      if (response?.data?.data?.id) {
+        setPrescriptionData(response.data.data);
       } else {
         setPrescriptionData(null);
       }
@@ -410,13 +433,42 @@ const AppointmentDetailScreen: React.FC = () => {
     refreshAppointment();
   }, [refreshAppointment]);
 
+  // ✅ ADD PAYMENT SYNC EFFECT - Sync payment status when appointment loads
+  useEffect(() => {
+    const syncPaymentStatus = async () => {
+      if (currentAppointment?.transaction_id && currentAppointment?.payment_status === 'PENDING') {
+        try {
+          console.log(`🔄 [AppointmentDetail] Force syncing payment for TXN: ${currentAppointment.transaction_id}`);
+          // This calls your backend 'manualPaymentSync' function
+          await apiClient.post(`/user/consultation-booking/sync/${currentAppointment.transaction_id}`);
+          console.log('✅ [AppointmentDetail] Payment status synced successfully with server');
+          
+          // Refresh appointment data after sync to get updated status
+          setTimeout(() => {
+            console.log('🔄 [AppointmentDetail] Refreshing appointment data after payment sync...');
+            refreshAppointment();
+          }, 1000);
+        } catch (error) {
+          console.error('⚠️ [AppointmentDetail] Sync attempt failed (Background webhook will handle it):', error);
+        }
+      }
+    };
+
+    if (currentAppointment) {
+      syncPaymentStatus();
+    }
+  }, [currentAppointment, refreshAppointment]);
+
   // Update time until chat
   useEffect(() => {
     console.log('⏰ [AppointmentDetail] Setting up chat countdown timer');
     const timer = setInterval(() => {
       const minutes = calculateTimeUntilChat();
+      const previousMinutes = timeUntilChat;
       setTimeUntilChat(minutes);
-      if (minutes !== null && minutes > 0) {
+      
+      // Only log when time actually changes (not every 30 seconds)
+      if (minutes !== null && minutes !== previousMinutes) {
         console.log('⏰ [AppointmentDetail] Chat available in', minutes, 'minutes');
       }
     }, 30000); // Update every 30 seconds
@@ -427,7 +479,7 @@ const AppointmentDetailScreen: React.FC = () => {
       console.log('🧹 [AppointmentDetail] Cleaning up chat countdown timer');
       clearInterval(timer);
     };
-  }, [calculateTimeUntilChat]);
+  }, [calculateTimeUntilChat, timeUntilChat]);
 
   if (loading && !currentAppointment) {
     return (
@@ -839,7 +891,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 28, // Increased from 20 for much better spacing
   },
   detailContent: {
     flex: 1,

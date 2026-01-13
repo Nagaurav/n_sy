@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -32,16 +33,8 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useEffect(() => {
-    console.log('📱 AppointmentsScreen - Auth State:', {
-      authLoading,
-      hasUser: !!user,
-      userId: (user as any)?.user_id || (user as any)?._id || (user as any)?.id,
-      userObject: user, // Log the entire user object to see what fields it has
-    });
-
-    // Wait for auth to finish loading before checking user
+    // Reduced logging to prevent console spam
     if (authLoading) {
-      console.log('⏳ Waiting for auth to finish loading...');
       return;
     }
 
@@ -49,14 +42,12 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     const userId = (user as any)?.user_id || (user as any)?._id || (user as any)?.id;
     
     if (userId) {
-      console.log('✅ User authenticated, fetching appointments for:', userId);
       fetchAppointments(1);
     } else {
-      console.log('❌ User not authenticated - user object:', user);
       setIsLoading(false);
       setError('User not authenticated');
     }
-  }, [(user as any)?.user_id, (user as any)?._id, (user as any)?.id, authLoading]);
+  }, [user, authLoading]);
 
   const fetchAppointments = useCallback(async (pageToLoad: number = 1) => {
     // Check for user_id, _id, or id (API returns user_id)
@@ -89,20 +80,11 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
         offset,
       });
       
-      console.log('📋 Appointments API Response:', response);
-      console.log('📋 response.data type:', typeof response.data);
-      console.log('📋 response.data is array?', Array.isArray(response.data));
-      console.log('📋 response.data keys:', Object.keys(response.data || {}));
-      console.log('📋 response.data content:', JSON.stringify(response.data, null, 2));
-      
       if (response.success && response.data) {
         // API returns data as array directly, not nested in appointments field
         const appointmentsList = Array.isArray(response.data) 
           ? response.data 
           : (response.data as any).data || (response.data as any).appointments || [];
-        
-        console.log('📋 Appointments list:', appointmentsList);
-        console.log('📋 Appointments count:', appointmentsList.length);
         
         // Sort appointments by date (newest first)
         const sortedAppointments = appointmentsList.sort((a: any, b: any) => {
@@ -131,7 +113,20 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
         setIsLoadingMore(false);
       }
     }
-  }, [(user as any)?.user_id, (user as any)?._id, (user as any)?.id]);
+  }, [user]);
+
+  // ✅ ADD THIS BLOCK to refresh whenever screen appears
+  useFocusEffect(
+    React.useCallback(() => {
+      // Check if we have a user before fetching
+      const userId = (user as any)?.user_id || (user as any)?._id || (user as any)?.id;
+      
+      if (userId) {
+        console.log('🔄 Screen focused - Fetching latest appointments...');
+        fetchAppointments(1); // Fetch page 1 to get the newest status
+      }
+    }, [user, fetchAppointments]) // Dependencies
+  );
 
   const handleRefresh = useCallback(() => {
     console.log('🔄 [AppointmentsScreen] User triggered refresh - fetching latest appointment data');
@@ -299,15 +294,18 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     const bookingId = item.booking_id || item._id;
     const appointmentId = item.appointment_id || bookingId?.toString();
     
-    // Debug: Log status information
-    console.log('📅 Appointment Status Debug:', {
-      bookingId,
-      booking_status: item.booking_status,
-      status: item.status,
-      displayStatus: status,
-      professionalName: item.professional_name,
-      showPrescriptionButton: item.booking_status === 'COMPLETED'
-    });
+    // Debug: Log status information (reduced frequency)
+    if (bookingId === 53 || bookingId === 49) { // Only log for specific appointments
+      console.log('📅 Appointment Status Debug:', {
+        bookingId,
+        booking_status: item.booking_status,
+        status: item.status,
+        displayStatus: status,
+        professionalName: item.professional_name,
+        showPrescriptionButton: item.booking_status === 'COMPLETED'
+      });
+    }
+    const showPrescriptionButton = item.booking_status === 'COMPLETED';
     const timeDisplay = item.time; // Already formatted as "09:00 - 09:15"
 
     const handleAppointmentPress = () => {
@@ -465,7 +463,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
           )}
         </View>
 
-        {item.booking_status === 'COMPLETED' && (
+        {showPrescriptionButton && (
           <View style={styles.actionsRow}>
             <TouchableOpacity
               style={styles.actionButton}
