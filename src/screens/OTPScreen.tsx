@@ -7,25 +7,32 @@ import {
   StyleSheet,
   SafeAreaView,
   KeyboardAvoidingView,
-  Platform,
+  Platform as RNPlatform,
   ViewStyle,
   TextStyle,
   ActivityIndicator,
   StatusBar,
   Alert,
+  ScrollView,
+  Animated,
+  Dimensions,
 } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { theme } from '../theme';
 import { authService } from '../services';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
 
+const { width } = Dimensions.get('window');
+
 type Styles = {
   container: ViewStyle;
   header: ViewStyle;
   backButton: ViewStyle;
-  backButtonText: TextStyle;
   headerTitle: TextStyle;
   content: ViewStyle;
+  card: ViewStyle;
+  decorativeCircle: ViewStyle;
   subtitle: TextStyle;
   phoneNumberText: TextStyle;
   otpContainer: ViewStyle;
@@ -40,108 +47,144 @@ type Styles = {
   resendText: TextStyle;
   resendButton: TextStyle;
   countdownText: TextStyle;
-  headerContent: ViewStyle;
 };
 
 const styles = StyleSheet.create<Styles>({
   container: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
   },
   header: {
-    backgroundColor: '#1E88E5',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-  },
-  headerContent: {
-    flexDirection: 'row',
+    height: 120,
+    width: '100%',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden',
+    position: 'relative',
+    marginTop: 40,
     alignItems: 'center',
-    paddingTop: 40,
-    paddingBottom: 20,
+    justifyContent: 'center',
   },
   backButton: {
-    padding: 8,
-  },
-  backButtonText: {
-    fontSize: 24,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    position: 'absolute',
+    left: 16,
+    top: 80,
+    padding: 12,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    zIndex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    flex: 1,
-    textAlign: 'center',
-    marginRight: 24, // To balance the back button
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: 1,
+    fontFamily: RNPlatform.OS === 'ios' ? 'Georgia' : 'serif',
   },
   content: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 40,
-    backgroundColor: '#F3F4F6',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    marginTop: -20,
+    paddingTop: 20,
+  },
+  card: {
+    marginHorizontal: 0,
+    marginTop: 20,
+    marginBottom: 20,
+    borderRadius: 30,
+    padding: 40,
+    backgroundColor: '#FFFFFF',
+  },
+  decorativeCircle: {
+    position: 'absolute',
+    width: width,
+    height: width,
+    borderRadius: width / 2,
+    backgroundColor: 'rgba(0, 130, 114, 0.05)',
+    top: -width / 2,
+    left: 0,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
+    fontSize: 18,
     textAlign: 'center',
-    marginBottom: 8,
-    lineHeight: 24,
+    marginBottom: 12,
+    lineHeight: 26,
+    fontFamily: RNPlatform.OS === 'ios' ? 'Georgia' : 'serif',
+    fontWeight: '500',
   },
   phoneNumberText: {
-    fontSize: 16,
-    color: '#1F2937',
+    fontSize: 18,
     textAlign: 'center',
     marginBottom: 40,
-    fontWeight: '600',
+    fontWeight: '700',
+    fontFamily: RNPlatform.OS === 'ios' ? 'Georgia' : 'serif',
+    letterSpacing: 0.5,
   },
   otpContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 32,
+    marginBottom: 40,
+    paddingHorizontal: 10,
   },
   otpInputContainer: {
-    width: 50,
-    height: 60,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#6B7280',
-    borderRadius: 8,
+    width: 45,
+    height: 65,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   otpInputFocused: {
     borderColor: '#008272',
+    backgroundColor: '#F0FDFA',
+    shadowColor: '#008272',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   otpInput: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#1A202C',
     textAlign: 'center',
     width: '100%',
     height: '100%',
+    letterSpacing: 2,
   },
   button: {
-    backgroundColor: '#008272',
-    borderRadius: 12,
-    paddingVertical: 16,
+    borderRadius: 20,
+    paddingVertical: 20,
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
+    shadowColor: '#008272',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
   buttonDisabled: {
-    backgroundColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginBottom: 24,
+    opacity: 0.5,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   errorText: {
     color: '#EF4444',
@@ -152,21 +195,25 @@ const styles = StyleSheet.create<Styles>({
   },
   resendContainer: {
     alignItems: 'center',
-    marginTop: 24,
+    marginTop: 30,
+    marginBottom: 20,
   },
   resendText: {
-    color: '#6B7280',
-    fontSize: 14,
+    color: '#64748B',
+    fontSize: 15,
+    fontWeight: '500',
   },
   resendButton: {
-    color: '#1E88E5',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#008272',
+    fontSize: 15,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
   countdownText: {
-    color: '#6B7280',
-    fontSize: 14,
+    color: '#64748B',
+    fontSize: 15,
     marginTop: 4,
+    fontWeight: '500',
   },
 });
 
@@ -180,9 +227,26 @@ const OTPScreen = ({ navigation, route }: any) => {
   const [error, setError] = useState('');
   const [timeLeft, setTimeLeft] = useState(30);
   const [canResend, setCanResend] = useState(false);
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(50));
   const inputRefs = useRef<(TextInput | null)[]>([]);
   
   const isOtpComplete = otp.every(digit => digit !== '');
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   // Mask phone number for privacy
   const maskPhoneNumber = (phone: string) => {
@@ -335,91 +399,112 @@ const OTPScreen = ({ navigation, route }: any) => {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
-      <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
-
-      {/* Header */}
+    <View style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      
+      {/* Header with Logo */}
       <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
-        <View style={styles.headerContent}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Verify Your Number</Text>
-        </View>
+        <Animated.View 
+          style={{
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }]
+          }}
+        >
+          <Text style={[styles.headerTitle, { color: '#FFFFFF' }]}>Verify OTP</Text>
+        </Animated.View>
       </View>
 
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.goBack()}
+      >
+        <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+      </TouchableOpacity>
+
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={RNPlatform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
-        <View style={styles.content}>
-          <Text style={styles.subtitle}>Enter the 6-digit code sent to</Text>
-          <Text style={styles.phoneNumberText}>{maskPhoneNumber(phoneNumber)}</Text>
-
-          <View style={styles.otpContainer}>
-            {otp.map((digit, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.otpInputContainer,
-                  focusedIndex === index && styles.otpInputFocused,
-                ]}
-              >
-                <TextInput
-                  ref={(ref) => {
-                    inputRefs.current[index] = ref;
-                  }}
-                  style={styles.otpInput}
-                  value={digit}
-                  onChangeText={(value) => handleOtpChange(value, index)}
-                  onKeyPress={(e) => handleKeyPress(e, index)}
-                  onFocus={() => setFocusedIndex(index)}
-                  onBlur={() => setFocusedIndex(null)}
-                  keyboardType="number-pad"
-                  maxLength={1}
-                  selectTextOnFocus
-                  editable={!isLoading}
-                  caretHidden={true}
-                />
-              </View>
-            ))}
-          </View>
-
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-          <TouchableOpacity
-            style={[
-              styles.button,
-              (!isOtpComplete || isLoading) && styles.buttonDisabled
-            ]}
-            onPress={handleVerifyOTP}
-            disabled={!isOtpComplete || isLoading}
-            activeOpacity={0.8}
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 10 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Animated.View 
+            style={{
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }}
           >
-            {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.buttonText}>Verify & Proceed</Text>
-            )}
-          </TouchableOpacity>
+            <View style={[styles.card, { backgroundColor: theme.colors.background.surface, ...theme.shadows.float }]}>
+              <View style={styles.decorativeCircle} />
+              <Text style={[styles.subtitle, { color: theme.colors.text.secondary }]}>Enter the 6-digit code sent to</Text>
+              <Text style={[styles.phoneNumberText, { color: theme.colors.text.primary }]}>{maskPhoneNumber(phoneNumber)}</Text>
 
-          <View style={styles.resendContainer}>
-            {canResend ? (
-              <TouchableOpacity onPress={handleResendOTP} disabled={isLoading}>
-                <Text style={styles.resendButton}>Resend OTP</Text>
+              <View style={styles.otpContainer}>
+                {otp.map((digit, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.otpInputContainer,
+                      { backgroundColor: theme.colors.background.surface },
+                      focusedIndex === index && styles.otpInputFocused,
+                    ]}
+                  >
+                    <TextInput
+                      ref={(ref) => {
+                        inputRefs.current[index] = ref;
+                      }}
+                      style={styles.otpInput}
+                      value={digit}
+                      onChangeText={(value) => handleOtpChange(value, index)}
+                      onKeyPress={(e) => handleKeyPress(e, index)}
+                      onFocus={() => setFocusedIndex(index)}
+                      onBlur={() => setFocusedIndex(null)}
+                      keyboardType="number-pad"
+                      maxLength={1}
+                      selectTextOnFocus
+                      editable={!isLoading}
+                      caretHidden={true}
+                    />
+                  </View>
+                ))}
+              </View>
+
+              {error ? <Text style={[styles.errorText, { color: theme.colors.error }]}>{error}</Text> : null}
+
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  { backgroundColor: theme.colors.primary },
+                  (!isOtpComplete || isLoading) && styles.buttonDisabled
+                ]}
+                onPress={handleVerifyOTP}
+                disabled={!isOtpComplete || isLoading}
+                activeOpacity={0.8}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.buttonText}>Verify & Proceed</Text>
+                )}
               </TouchableOpacity>
-            ) : (
-              <Text style={styles.countdownText}>
-                Resend OTP in {timeLeft} seconds
-              </Text>
-            )}
-          </View>
-        </View>
+
+              <View style={styles.resendContainer}>
+                {canResend ? (
+                  <TouchableOpacity onPress={handleResendOTP} disabled={isLoading}>
+                    <Text style={styles.resendButton}>Resend OTP</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.countdownText}>
+                    Resend OTP in {timeLeft} seconds
+                  </Text>
+                )}
+              </View>
+            </View>
+          </Animated.View>
+        </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 };
 
