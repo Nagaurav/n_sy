@@ -1,11 +1,15 @@
 import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { UserProfileData } from './userProfile';
+import type { YogaClass } from './yogaClasses';
 
 export type HomeStackParamList = {
   Home: undefined;
   ClassesList: {
     bookingType?: 'class' | 'consultation';
+  };
+  ClassDetails: { 
+    classData: YogaClass; 
   };
   ProfessionalsList: {
     bookingType?: 'class' | 'consultation';

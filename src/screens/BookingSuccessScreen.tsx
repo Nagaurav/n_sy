@@ -13,6 +13,7 @@ import { useNavigation, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../../App';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { apiService } from '../services';
 import { apiClient } from '../services/apiClient';
 
 const { width, height } = Dimensions.get('window');
@@ -35,8 +36,11 @@ const BookingSuccessScreen = ({ route }: BookingSuccessScreenProps) => {
   const navigation = useNavigation<BookingSuccessScreenNavigationProp>();
   const { bookingId, amount, bookingDetails, status, message, transactionId, paymentId } = route.params;
   
-  // Use the available ID (some flows might name it differently)
-  const activeTransactionId = transactionId || paymentId;
+  // Use available ID (some flows might name it differently)
+  const activeTransactionId = transactionId || paymentId; // ⚠️ Ensure this is not undefined!
+  
+  // Debug: Log transaction ID to confirm it exists
+  console.log('Transaction ID:', activeTransactionId);
   
   // Animation values
   const [scaleValue] = useState(new Animated.Value(0));
@@ -81,24 +85,69 @@ const BookingSuccessScreen = ({ route }: BookingSuccessScreenProps) => {
     return () => clearTimeout(confettiTimer);
   }, []);
 
+  // ✅ FIX: Poll if we have a Transaction ID, regardless of status string
   useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 10; 
+
     const syncPaymentStatus = async () => {
-      if (activeTransactionId) {
-        try {
-          console.log(`🔄 Force syncing payment for TXN: ${activeTransactionId}`);
-          // This calls your backend 'manualPaymentSync' function
-          await apiClient.post(`/user/consultation-booking/sync/${activeTransactionId}`);
-          console.log('✅ Payment status synced successfully with server');
-        } catch (error) {
-          console.error('⚠️ Sync attempt failed (Background webhook will handle it):', error);
+      if (!activeTransactionId) return;
+
+      try {
+        console.log(`🔄 [Attempt ${attempts + 1}] Syncing payment: ${activeTransactionId}`);
+        console.log(`📡 Calling manual sync endpoint to convert PENDING -> SUCCESS`);
+        
+        // Manual sync endpoint to force status update
+        const response = await apiService.syncPaymentStatus(activeTransactionId);
+        
+        console.log(`📊 Sync response:`, response.data);
+        
+        // Enhanced success detection
+        const isSuccess = 
+             response.data?.msg?.includes('SUCCESS') || 
+             response.data?.msg?.includes('updated to SUCCESS') ||
+             response.data?.current_status === 'SUCCESS' ||
+             response.data?.status === 'SUCCESS';
+
+        const isPending = 
+             response.data?.current_status === 'PENDING' ||
+             response.data?.status === 'PENDING';
+
+        if (isSuccess) {
+          console.log('✅ Payment status successfully converted to SUCCESS!');
+          clearInterval(intervalId);
+          
+          // Optional: Show success feedback to user
+          console.log('🎉 Manual sync completed - payment confirmed');
+        } else if (isPending) {
+          console.log('⏳ Payment still PENDING, will retry sync...');
+          // Continue polling
+        } else {
+          console.log('❓ Unexpected status:', response.data);
         }
+      } catch (error) {
+        console.error('⚠️ Sync attempt failed:', error);
+        // Continue trying even on error, as payment might still be processing
+      }
+      
+      attempts++;
+      if (attempts >= MAX_ATTEMPTS) {
+        console.log('🛑 Max sync attempts reached. Payment status will be updated by webhook.');
+        clearInterval(intervalId);
       }
     };
 
-    if (status === 'success') {
-      syncPaymentStatus();
+    // 🚀 CHANGED CONDITION: Run if we have an ID, don't wait for 'status' param
+    if (activeTransactionId) {
+      syncPaymentStatus(); // Run once immediately
+      intervalId = setInterval(syncPaymentStatus, 3000);
     }
-  }, [activeTransactionId, status]);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [activeTransactionId]); // Remove 'status' from dependency array
 
   const handleViewAppointments = () => {
     // Navigate to MainDrawer -> HomeStack -> Appointments

@@ -78,19 +78,101 @@ export const apiService = {
   getClassById: yogaService.getClassById,
   
   // Payment methods (legacy compatibility)
+  // ✅ UPDATED METHOD
   getBookingPaymentStatus: async (bookingId: string) => {
-    // This would need to be implemented in bookingService or a new paymentService
-    // For now, return a mock response to prevent crashes
-    return {
-      success: true,
-      data: {
-        status: 'SUCCESS',
-        amount: 0
+    // Use the booking details endpoint to get payment status
+    const response = await bookingService.getBookingDetails(bookingId);
+    
+    if (response.success && response.data) {
+      let bookingData = response.data;
+
+      // 🛠️ FIX 1: Unwrap double-nested data (if response.data.data exists)
+      if (bookingData.data && !bookingData.booking_status) {
+        bookingData = bookingData.data;
       }
+      
+      // 🔍 Debug: Log the unwrapped data to be sure
+      console.log('🔍 [getBookingPaymentStatus] Unwrapped Booking Data:', {
+         id: bookingData.booking_id,
+         paymentStatus: bookingData.payment?.status,
+         bookingStatus: bookingData.booking_status
+      });
+
+      // 🛠️ FIX 2: Prioritize 'payment.status', then 'booking_status'
+      let status = 
+          bookingData.payment?.status || 
+          bookingData.payment_status || 
+          bookingData.booking_status || 
+          bookingData.status || 
+          'UNKNOWN';
+
+      // 🛑 CRITICAL FIX: DO NOT convert PENDING to CONFIRMED.
+      // If it is PENDING, we want the UI to know so it triggers sync.
+      if (status === 'CONFIRMED') {
+        status = 'SUCCESS';
+      } 
+      // ❌ REMOVED: else if (status === 'PENDING') status = 'CONFIRMED';
+
+      // 🛠️ FIX 4: Correctly extract amount (it might be in amounts.final or payment.amount)
+      const amount = 
+          bookingData.payment?.amount || 
+          bookingData.amounts?.final || 
+          bookingData.final_amount || 
+          bookingData.amount || 
+          0;
+
+      return {
+        success: true,
+        data: {
+          status: status,
+          amount: amount,
+          bookingDetails: bookingData
+        }
+      };
+    }
+    
+    return {
+      success: false,
+      error: response.error || 'Failed to get payment status'
     };
   },
+  
+  // ✅ NEW: Manual sync endpoint to force status update from PENDING to SUCCESS
+  syncPaymentStatus: async (paymentId: string) => {
+    try {
+      // Import apiClient directly to avoid circular dependency
+      const { apiClient } = await import('./apiClient');
+      
+      // Use apiClient directly to call the sync endpoint
+      const response = await apiClient.post(`/user/consultation-booking/sync-payment/${paymentId}`, {});
+      
+      if (response.data) {
+        return {
+          success: true,
+          data: response.data
+        };
+      }
+      
+      return {
+        success: false,
+        error: 'No response from sync endpoint'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Sync failed'
+      };
+    }
+  },
   getPaymentStatus: async (paymentId: string) => {
-    // Mock implementation for payment status checking
+    // For payment status, we need to check if there's a dedicated endpoint
+    // For now, use booking details if paymentId looks like a booking ID
+    if (paymentId.startsWith('TXN_')) {
+      const bookingId = paymentId.replace('TXN_', '').split('_')[0];
+      return apiService.getBookingPaymentStatus(bookingId);
+    }
+    
+    // Mock for actual payment IDs (would need real payment gateway integration)
     return {
       success: true,
       data: {
@@ -100,7 +182,13 @@ export const apiService = {
     };
   },
   verifyPayment: async (paymentId: string) => {
-    // Mock implementation for payment verification
+    // Similar to getPaymentStatus, use booking details for TXN_ prefixed IDs
+    if (paymentId.startsWith('TXN_')) {
+      const bookingId = paymentId.replace('TXN_', '').split('_')[0];
+      return apiService.getBookingPaymentStatus(bookingId);
+    }
+    
+    // Mock for actual payment IDs
     return {
       success: true,
       data: {

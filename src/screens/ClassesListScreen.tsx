@@ -253,14 +253,15 @@ const ClassesListScreen = () => {
       if (!classItem.professional_id) {
         throw new Error('Professional ID is missing');
       }
-      navigation.navigate('ProfessionalProfile', { 
-        professionalId: classItem.professional_id.toString() 
+      // 🚀 Navigate to ClassDetails instead of ProfessionalProfile
+      navigation.navigate('ClassDetails', { 
+        classData: classItem 
       });
     } catch (error) {
-      console.error('Error navigating to professional profile:', error);
+      console.error('Error navigating to class details:', error);
       Alert.alert(
         'Navigation Error',
-        'Unable to load the professional profile. Please try again later.',
+        'Unable to load the class details. Please try again later.',
         [{ text: 'OK' }]
       );
     }

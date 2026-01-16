@@ -120,10 +120,8 @@ const PaymentGatewayScreen = () => {
     // Check if the navigation is to the payment completion callback URL
     const isPaymentCompletionUrl = [
       'samyayog.com/payment-complete',
-      '/payment/success',
       '/payment/failure',
       'payment-complete',
-      'payment/success',
       'payment/failure'
     ].some(pattern => url.includes(pattern));
     
@@ -155,11 +153,20 @@ const PaymentGatewayScreen = () => {
 
       const response: PaymentStatusResponse = wrapped as any;
 
+      // Debug: Log the actual response structure
+      console.log(' Full response structure:', {
+        response: wrapped,
+        responseData: wrapped.data,
+        responseDataKeys: wrapped.data ? Object.keys(wrapped.data) : 'no data',
+        bookingDetails: wrapped.data?.bookingDetails,
+        bookingDetailsKeys: wrapped.data?.bookingDetails ? Object.keys(wrapped.data.bookingDetails) : 'no booking details'
+      });
+
       // Accept response even if success field is missing, as long as data is present
       if (response.data || (response.success && response.data)) {
         const { status, amount, bookingDetails } = response.data || {};
         
-        console.log('📊 Payment status response processed:', {
+        console.log(' Payment status response processed:', {
           hasSuccess: !!response.success,
           hasData: !!response.data,
           status,
@@ -169,12 +176,26 @@ const PaymentGatewayScreen = () => {
         
         // Navigate to success or failure screen based on payment status
         if (status === 'SUCCESS' || status === 'COMPLETED') {
-          console.log('✅ Payment successful, navigating to success screen');
+          console.log(' Payment successful, performing manual sync before navigation');
+          
+          try {
+            // Perform manual sync to ensure status is updated from PENDING to SUCCESS
+            console.log(`📡 Manual sync for booking: ${bookingId}, payment: ${paymentId}`);
+            const syncResponse = await apiService.syncPaymentStatus(paymentId || bookingId);
+            console.log('📊 Manual sync response:', syncResponse.data);
+          } catch (syncError) {
+            console.warn('⚠️ Manual sync failed, but continuing to success screen:', syncError);
+            // Don't block navigation if sync fails
+          }
+          
+          console.log('🎉 Navigating to success screen');
           navigation.replace('BookingSuccess', {
             bookingId,
             paymentId,
             amount: amount || 0,
-            bookingDetails: bookingDetails || {}
+            bookingDetails: bookingDetails || {},
+            status: 'success',
+            message: 'Payment completed successfully'
           });
         } else if (status === 'FAILED' || status === 'CANCELLED') {
           console.log('❌ Payment failed, navigating to failure screen');
@@ -184,6 +205,18 @@ const PaymentGatewayScreen = () => {
           });
         } else {
           // Handle pending or other statuses with retry logic
+          console.log(`⏳ Status is ${status}. Triggering FORCE SYNC...`);
+          
+          // 🚀 CRITICAL FIX: Force backend to sync with PhonePe NOW
+          if (paymentId) {
+              try {
+                  await apiService.syncPaymentStatus(paymentId);
+                  console.log("📡 Force sync triggered successfully");
+              } catch (e) {
+                  console.log("⚠️ Force sync failed, continuing retry loop");
+              }
+          }
+
           console.log(`⏳ Payment status: ${status} (attempt ${currentRetry + 1}/${maxRetries})`);
           
           if (currentRetry < maxRetries - 1) {
@@ -201,7 +234,7 @@ const PaymentGatewayScreen = () => {
             console.log('⏰ Max retries reached, navigating to failed screen');
             navigation.replace('BookingFailed', {
               bookingId,
-              error: `Payment status: ${status}. Verification timed out after ${maxRetries} attempts. Please contact support if amount was deducted.`
+              error: `Verification timed out. Status: ${status}`
             });
           }
         }

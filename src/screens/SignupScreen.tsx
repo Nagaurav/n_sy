@@ -18,7 +18,9 @@ import {
   PermissionsAndroid,
   Image,
   Pressable,
+  Animated,
 } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import Geolocation from '@react-native-community/geolocation';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
@@ -28,8 +30,8 @@ import { theme } from '../theme';
 import { authService } from '../services';
 import { RootStackParamList } from '../../App';
 import { useAuth } from '../hooks/useAuth';
-import { FloatingLabelInput } from '../components/FloatingLabelInput';
 import { useTheme } from '../contexts/ThemeContext';
+import { FloatingLabelInput } from '../components/FloatingLabelInput';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
 type Gender = 'male' | 'female' | 'other' | '';
@@ -42,9 +44,9 @@ type LocationError = {
 type Styles = {
   container: ViewStyle;
   header: ViewStyle;
-  headerOverlay: ViewStyle;
   logoImage: ImageStyle;
-  content: ViewStyle;
+  headerTitle: TextStyle;
+  card: ViewStyle;
   title: TextStyle;
   subtitle: TextStyle;
   phoneContainer: ViewStyle;
@@ -53,6 +55,8 @@ type Styles = {
   formContainer: ViewStyle;
   input: TextStyle;
   inputError: ViewStyle;
+  cityInput: TextStyle;
+  cityContainer: ViewStyle;
   dateInput: ViewStyle;
   locationContainer: ViewStyle;
   locationButton: ViewStyle;
@@ -69,12 +73,6 @@ type Styles = {
   submitButton: ViewStyle;
   submitButtonDisabled: ViewStyle;
   submitButtonText: TextStyle;
-  loginContainer: ViewStyle;
-  loginText: TextStyle;
-  loginButton: TextStyle;
-  button: ViewStyle;
-  buttonDisabled: ViewStyle;
-  buttonText: TextStyle;
   toggleButton: ViewStyle;
   toggleButtonText: TextStyle;
 };
@@ -84,41 +82,46 @@ const styles = StyleSheet.create<Styles>({
     flex: 1,
   },
   header: {
-    height: 80, // Reduced from 160 to 80px
+    height: 80,
     width: '100%',
-    borderBottomLeftRadius: 20, // Smaller radius
-    borderBottomRightRadius: 20,
+    marginTop: 40,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
     overflow: 'hidden',
     position: 'relative',
-    marginTop: 20, // Reduced from 40
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   logoImage: {
-    width: '100%',
-    height: '100%',
+    width: 120,
+    height: 120,
     resizeMode: 'contain',
   },
-  headerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.1)',
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    fontFamily: RNPlatform.OS === 'ios' ? 'Georgia' : 'serif',
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 30, // Back to original padding
+  card: {
+    marginHorizontal: 24,
+    marginTop: 20,
+    marginBottom: 40,
+    borderRadius: 24,
+    padding: 32,
   },
   title: {
     fontSize: 24,
-    fontWeight: '800', // Made bolder (from bold to 800)
-    color: '#1F2937',
+    fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
+    fontFamily: RNPlatform.OS === 'ios' ? 'Georgia' : 'serif',
   },
   subtitle: {
     fontSize: 16,
-    color: '#6B7280',
     textAlign: 'center',
-    marginBottom: 40,
-    lineHeight: 24,
+    marginBottom: 32,
+    fontFamily: RNPlatform.OS === 'ios' ? 'Georgia' : 'serif',
   },
   phoneContainer: {
     backgroundColor: '#FFFFFF',
@@ -130,12 +133,10 @@ const styles = StyleSheet.create<Styles>({
   },
   phoneLabel: {
     fontSize: 12,
-    color: '#6B7280',
     marginBottom: 4,
   },
   phoneNumber: {
     fontSize: 16,
-    color: '#1F2937',
     fontWeight: '600',
   },
   formContainer: {
@@ -147,8 +148,21 @@ const styles = StyleSheet.create<Styles>({
     borderColor: '#E5E7EB',
     borderRadius: 12,
     padding: 16,
-    fontSize: 16,
-    color: '#1F2937',
+    fontSize: 18,
+    marginBottom: 8,
+  },
+  inputError: {
+    borderColor: '#EF4444',
+  },
+  cityInput: {
+    flex: 1,
+    marginRight: 12,
+    fontSize: 18,
+    height: 56, // Match main input height
+  },
+  cityContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     marginBottom: 8,
   },
   dateInput: {
@@ -157,39 +171,35 @@ const styles = StyleSheet.create<Styles>({
   } as ViewStyle,
   locationContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
+    alignItems: 'center',
+    gap: 12,
     marginBottom: 8,
   } as ViewStyle,
   locationButton: {
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    height: 56,
+    height: 48, 
+    width: 48, 
+    marginBottom: 24, 
   } as ViewStyle,
   locationButtonText: {
-    color: '#1E88E5',
     fontWeight: '600',
     fontSize: 14,
   } as TextStyle,
-  inputError: {
-    borderColor: '#EF4444',
-  },
   label: {
     fontSize: 14,
-    color: '#1F2937',
     marginBottom: 8,
     marginTop: 8,
     fontWeight: '500',
   },
   errorText: {
-    color: '#EF4444',
-    fontSize: 12,
-    marginBottom: 8,
-    marginTop: -4,
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: '400',
   },
   genderContainer: {
     flexDirection: 'row',
@@ -202,7 +212,7 @@ const styles = StyleSheet.create<Styles>({
     backgroundColor: '#F3F4F6',
     marginRight: 8,
     alignItems: 'center',
-    height: 80, // Increased height for icons
+    height: 80,
   },
   genderButtonActive: {
     backgroundColor: '#1E88E5',
@@ -217,7 +227,6 @@ const styles = StyleSheet.create<Styles>({
     marginBottom: 4,
   },
   genderText: {
-    color: '#6B7280',
     fontWeight: '500',
     fontSize: 12,
     textAlign: 'center',
@@ -228,18 +237,13 @@ const styles = StyleSheet.create<Styles>({
     textAlign: 'center',
   },
   submitButton: {
-    backgroundColor: '#008272', // Using primary color like LoginScreen
-    borderRadius: 16, // More rounded corners (from 12 to 16)
-    paddingVertical: 20, // Increased height (from 16 to 20)
-    alignItems: 'center',
-    marginBottom: 16, // Reduced from 24
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#D1D5DB',
-    borderRadius: 16, // More rounded corners
-    paddingVertical: 20, // Increased height
+    borderRadius: 16,
+    paddingVertical: 18,
     alignItems: 'center',
     marginBottom: 16,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
   submitButtonText: {
     color: '#FFFFFF',
@@ -249,43 +253,12 @@ const styles = StyleSheet.create<Styles>({
   toggleButton: {
     alignItems: 'center',
     paddingVertical: 12,
-    marginBottom: 16, // Reduced spacing
+    marginBottom: 8,
   },
   toggleButtonText: {
-    color: '#008272', // Using primary color directly
     fontSize: 14,
-    fontWeight: '700', // Made bolder (from 500 to 700)
+    fontWeight: '600',
     textDecorationLine: 'underline',
-  },
-  loginContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 16,
-    marginBottom: 32,
-  },
-  loginText: {
-    color: '#6B7280',
-    fontSize: 14,
-  },
-  loginButton: {
-    color: '#008272', // Using primary color
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  button: {
-    backgroundColor: '#008272',
-    borderRadius: 16,
-    paddingVertical: 20,
-    alignItems: 'center',
-    marginVertical: 8,
-  },
-  buttonDisabled: {
-    backgroundColor: '#D1D5DB',
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });
 
@@ -300,8 +273,51 @@ interface SignupScreenProps {
 
 const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
   const { theme } = useTheme();
-  const { phoneNumber } = route.params;
+  const phoneNumber = route.params?.phoneNumber || '';
   const { signIn } = useAuth();
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(50));
+  const [scrollY] = useState(new Animated.Value(0));
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [headerHeight] = useState(new Animated.Value(160));
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  const handleScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+    { useNativeDriver: false }
+  );
+
+  React.useEffect(() => {
+    const listener = scrollY.addListener(({ value }) => {
+      const shouldShrink = value > 50;
+      if (shouldShrink !== isScrolled) {
+        setIsScrolled(shouldShrink);
+        Animated.timing(headerHeight, {
+          toValue: shouldShrink ? 80 : 160,
+          duration: 200,
+          useNativeDriver: false,
+        }).start();
+      }
+    });
+
+    return () => {
+      scrollY.removeListener(listener);
+    };
+  }, [scrollY, isScrolled]);
 
   const [formData, setFormData] = useState({
     first_name: '',
@@ -351,8 +367,13 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
 
   const requestLocationPermission = async () => {
     if (RNPlatform.OS === 'ios') {
-      const hasPermission = await Geolocation.requestAuthorization('whenInUse');
-      return hasPermission === 'granted' || hasPermission === 'restricted';
+      try {
+        Geolocation.requestAuthorization();
+        return true; // For iOS, we'll assume permission is granted after request
+      } catch (error) {
+        console.error('Location permission error:', error);
+        return false;
+      }
     } else {
       const hasPermission = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
@@ -381,19 +402,27 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
     setIsLocationLoading(true);
     
     try {
-      const position = await Geolocation.getCurrentPosition({
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 10000,
-      });
-      
-      setFormData(prev => ({
-        ...prev,
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      }));
-      setIsLocationLoading(false);
-      Alert.alert('Success', 'Location updated successfully!');
+      Geolocation.getCurrentPosition(
+        (position) => {
+          setFormData(prev => ({
+            ...prev,
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          }));
+          setIsLocationLoading(false);
+          Alert.alert('Success', 'Location updated successfully!');
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          setIsLocationLoading(false);
+          Alert.alert('Error', 'Failed to get your location. Please try again.');
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 10000,
+        }
+      );
     } catch (error: any) {
       console.error('Error getting location:', error);
       setIsLocationLoading(false);
@@ -545,34 +574,52 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
     <View style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
       
-      {/* 🟢 REDUCED HEADER: Teal green color */}
-      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
-        <Image 
-          source={require('../assets/logo.jpg')} 
-          style={styles.logoImage} 
-          resizeMode="contain" 
-        />
-        <View style={styles.headerOverlay} />
-      </View>
-      
       <KeyboardAvoidingView
         behavior={RNPlatform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, paddingBottom: 100 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 10 }}
           keyboardShouldPersistTaps="handled"
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
         >
-          <View style={styles.content}>
-            <Text style={styles.title}>Create Your Account</Text>
-            <Text style={styles.subtitle}>
-              Please fill in your details to create an account
-            </Text>
+          {/* Dynamic Header with Title */}
+          <Animated.View style={[styles.header, { 
+            backgroundColor: theme.colors.primary,
+          }]}>
+            <Animated.View style={{
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
+            }}>
+              <Text style={[styles.headerTitle, { color: '#FFFFFF', fontFamily: theme.typography.fontFamily }]}>SIGN UP</Text>
+            </Animated.View>
+          </Animated.View>
+          
+          <Animated.View 
+            style={{
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }}
+          >
+            <View style={[styles.card, { backgroundColor: theme.colors.background.surface, ...theme.shadows.float }]}>
+              <Text style={[styles.title, { color: theme.colors.text.primary, fontFamily: theme.typography.fontFamily }]}>Create Your Account</Text>
+              <Text style={[styles.subtitle, { color: theme.colors.text.secondary, fontFamily: theme.typography.fontFamily }]}>
+                Please fill in your details to create an account
+              </Text>
 
-            <View style={styles.phoneContainer}>
-              <Text style={styles.phoneLabel}>Phone Number</Text>
-              <Text style={styles.phoneNumber}>+{formData.phone}</Text>
-            </View>
+              <View style={styles.phoneContainer}>
+                <Text style={[styles.label, { color: theme.colors.text.primary }]}>Phone Number</Text>
+                <View style={[
+                  styles.input,
+                  { backgroundColor: theme.colors.background.surface }
+                ]}>
+                  <Text style={[styles.phoneNumber, { color: theme.colors.text.primary }]}>+{formData.phone}</Text>
+                </View>
+              </View>
 
             <View style={styles.formContainer}>
               <FloatingLabelInput
@@ -600,19 +647,14 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
                 autoCapitalize="none"
               />
 
-              <Text style={styles.label}>Date of Birth</Text>
-              <TouchableOpacity
-                style={[
-                  styles.input,
-                  styles.dateInput,
-                  errors.dob ? styles.inputError : null
-                ]}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Text style={formData.dob ? {} : { color: '#9CA3AF' }}>
-                  {formData.dob || 'Select your date of birth'}
-                </Text>
-              </TouchableOpacity>
+              <FloatingLabelInput
+                label="Date of Birth"
+                value={formData.dob}
+                onChangeText={(value) => handleInputChange('dob', value)}
+                error={errors.dob}
+                editable={false}
+                onPressIn={() => setShowDatePicker(true)}
+              />
               {showDatePicker && (
                 <DateTimePicker
                   value={selectedDate}
@@ -622,16 +664,16 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
                   maximumDate={new Date()}
                 />
               )}
-              {errors.dob ? <Text style={styles.errorText}>{errors.dob}</Text> : null}
 
-              <Text style={styles.label}>Gender</Text>
+              <Text style={[styles.label, { color: theme.colors.text.primary }]}>Gender</Text>
               <View style={styles.genderContainer}>
                 {(['male', 'female', 'other'] as const).map((gender) => (
                   <TouchableOpacity
                     key={gender}
                     style={[
                       styles.genderButton,
-                      formData.gender === gender && styles.genderButtonActive
+                      { backgroundColor: theme.colors.background.secondary },
+                      formData.gender === gender && { backgroundColor: theme.colors.primary }
                     ]}
                     onPress={() => handleGenderSelect(gender)}
                   >
@@ -664,25 +706,25 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
                         {gender === 'male' && (
                           <Image 
                             source={require('../assets/icons/male-gender.png')} 
-                            style={[styles.genderIcon, { tintColor: '#6B7280' }]} 
+                            style={[styles.genderIcon, { tintColor: theme.colors.text.secondary }]} 
                             resizeMode="contain"
                           />
                         )}
                         {gender === 'female' && (
                           <Image 
                             source={require('../assets/icons/femenine.png')} 
-                            style={[styles.genderIcon, { tintColor: '#6B7280' }]} 
+                            style={[styles.genderIcon, { tintColor: theme.colors.text.secondary }]} 
                             resizeMode="contain"
                           />
                         )}
                         {gender === 'other' && (
                           <Image 
                             source={require('../assets/icons/gender.png')} 
-                            style={[styles.genderIcon, { tintColor: '#6B7280' }]} 
+                            style={[styles.genderIcon, { tintColor: theme.colors.text.secondary }]} 
                             resizeMode="contain"
                           />
                         )}
-                        <Text style={styles.genderText}>
+                        <Text style={[styles.genderText, { color: theme.colors.text.secondary }]}>
                           {gender.charAt(0).toUpperCase() + gender.slice(1)}
                         </Text>
                       </View>
@@ -690,34 +732,29 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
                   </TouchableOpacity>
                 ))}
               </View>
-              {errors.gender ? <Text style={styles.errorText}>{errors.gender}</Text> : null}
+              {errors.gender ? <Text style={[styles.errorText, { color: theme.colors.error }]}>{errors.gender}</Text> : null}
 
-              <Text style={styles.label}>City</Text>
-              <View style={styles.locationContainer}>
-                <View style={{ flex: 1 }}>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      errors.city ? styles.inputError : null
-                    ]}
-                    placeholder="Enter your city"
-                    value={formData.city}
-                    onChangeText={(value) => handleInputChange('city', value)}
-                  />
-                </View>
+              <Text style={[styles.label, { color: theme.colors.text.primary }]}>City</Text>
+              <View style={styles.cityContainer}>
+                <FloatingLabelInput
+                  label="City"
+                  value={formData.city}
+                  onChangeText={(value) => handleInputChange('city', value)}
+                  error={errors.city}
+                  containerStyle={{ flex: 1, marginRight: 12 }}
+                />
                 <TouchableOpacity
-                  style={styles.locationButton}
+                  style={[styles.locationButton, { backgroundColor: theme.colors.background.secondary }]}
                   onPress={getCurrentLocation}
                   disabled={isLocationLoading}
                 >
                   {isLocationLoading ? (
-                    <ActivityIndicator color="#1E88E5" size="small" />
+                    <ActivityIndicator color={theme.colors.primary} size="small" />
                   ) : (
-                    <Text style={styles.locationButtonText}>Use My Location</Text>
+                    <Ionicons name="location" size={18} color={theme.colors.primary} />
                   )}
                 </TouchableOpacity>
               </View>
-              {errors.city ? <Text style={styles.errorText}>{errors.city}</Text> : null}
 
               <FloatingLabelInput
                 label="Password"
@@ -738,6 +775,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
               <TouchableOpacity
                 style={[
                   styles.submitButton,
+                  { backgroundColor: theme.colors.primary },
                   isLoading ? styles.submitButtonDisabled : null
                 ]}
                 onPress={handleSignup}
@@ -756,10 +794,11 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
                 onPress={() => navigation.navigate('PhoneNumber')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.toggleButtonText}>Already have an account? Log In</Text>
+                <Text style={[styles.toggleButtonText, { color: theme.colors.primary }]}>Already have an account? Log In</Text>
               </TouchableOpacity>
             </View>
           </View>
+        </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

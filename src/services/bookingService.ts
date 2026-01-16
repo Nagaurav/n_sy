@@ -25,7 +25,9 @@ export interface BookingPrice {
 export interface BookingPaymentParams {
   userId: string | number;
   professionalId: string | number;
-  slotId: string | number;
+  slotId?: string | number; // 👈 Change to Optional (?)
+  serviceType?: 'yoga_class' | 'consultation' | 'membership';
+  serviceId?: string; // This carries yoga_plan_id
   duration: number;
   couponCode?: string;
   metadata?: Record<string, any>;
@@ -78,7 +80,7 @@ export const bookingService = {
     const response = await apiClient.get('/user/check-slot/checkAvailability', {
       params: { 
         professional_id: professionalId,
-        limit: 500 // 🟢 Request 500 slots to ensure we cover upcoming weeks
+        limit: 1000 // 🟢 Increased to 1000 slots to ensure we cover upcoming weeks
       }
     });
 
@@ -169,24 +171,54 @@ export const bookingService = {
 
   // Create booking and initiate payment
   createBookingAndInitiatePayment: async (params: BookingPaymentParams): Promise<ApiResult<any>> => {
+    // 1. Base Payload
     const payload: any = {
       user_id: Number(params.userId),
       professional_id: Number(params.professionalId),
-      duration: params.duration || 30,
+      duration: params.duration || 30, // Now accepts "ONE_MONTH"
       coupon_code: params.couponCode || undefined,
     };
 
+    // 2. Add Slot ID ONLY if it is a valid number (Consultations)
     const numericSlot = Number(params.slotId);
-    if (Number.isFinite(numericSlot)) {
+    if (Number.isFinite(numericSlot) && numericSlot > 0) {
       payload.slot_id = numericSlot;
     }
 
+    // 3. ✅ Add Class ID if it exists (Yoga Classes)
+    if (params.serviceType === 'yoga_class' && params.serviceId) {
+       payload.yoga_plan_id = Number(params.serviceId);
+       console.log('🧘 [bookingService] Yoga class booking detected, added yoga_plan_id:', payload.yoga_plan_id);
+    }
+
+    // Debug: Log the exact payload being sent
+    console.log('🚀 [bookingService] Sending payload to backend:', {
+      endpoint: '/user/consultation-booking/create',
+      payload,
+      serviceType: params.serviceType,
+      serviceId: params.serviceId,
+      duration: params.duration,
+      isYogaClass: params.serviceType === 'yoga_class',
+      isConsultation: !params.serviceType || params.serviceType === 'consultation'
+    });
+
+    // ... send request ...
     const response = await apiClient.post('/user/consultation-booking/create', payload);
 
-    if (!response.data) {
+    console.log('🔍 [bookingService] Raw API response:', {
+      success: response.success,
+      data: response.data,
+      hasPaymentUrl: !!response.data?.payment_url,
+      hasDataPaymentUrl: !!response.data?.data?.payment_url,
+      dataKeys: response.data ? Object.keys(response.data) : 'no data',
+      innerDataKeys: response.data?.data ? Object.keys(response.data.data) : 'no inner data',
+      expectedStructure: 'Based on BookingResponse type, payment_url should be at root level'
+    });
+
+    if (!response.success || !response.data) {
       return {
         success: false,
-        error: 'No data received from booking service'
+        error: response.error || 'No data received from booking service'
       };
     }
 
@@ -206,7 +238,7 @@ export const bookingService = {
       };
     }
 
-    // Fallback to check if payment_url is inside data object
+    // Fallback: check if payment_url is inside data object (unlikely based on types)
     if (response.data.data?.payment_url) {
       return {
         success: true,

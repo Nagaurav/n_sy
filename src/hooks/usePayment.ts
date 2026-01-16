@@ -7,7 +7,7 @@ type PaymentParams = {
   amount: number;
   bookingId: string;
   professionalId: string | number;
-  slotId: string | number;
+  slotId?: string | number; // 👈 Make Optional
   duration: number; // in minutes
   serviceType?: 'yoga_class' | 'consultation' | 'membership';
   serviceId?: string;
@@ -54,11 +54,21 @@ export const usePayment = () => {
           throw new Error(errorMsg);
         }
 
-        if (!params.professionalId || !params.slotId || !params.duration) {
-          const errorMsg = `Missing required booking information - Professional: ${params.professionalId}, Slot: ${params.slotId}, Duration: ${params.duration}`;
-          console.error(errorMsg);
-          setPaymentError(errorMsg);
-          throw new Error(errorMsg);
+        // 1. Check Professional (Always required)
+        if (!params.professionalId) {
+           throw new Error('Professional ID is required');
+        }
+
+        // 2. Check Slot ID (ONLY required for Consultations)
+        const isConsultation = !params.serviceType || params.serviceType === 'consultation';
+        
+        if (isConsultation && (!params.slotId || Number(params.slotId) === 0)) {
+           throw new Error(`Slot ID is required for consultations.`);
+        }
+
+        // 3. Check Duration (Optional for classes, required for slots)
+        if (isConsultation && (!params.duration || params.duration <= 0)) {
+           throw new Error(`Duration is required.`);
         }
 
         console.log('Initiating booking and payment with params:', {
@@ -75,6 +85,18 @@ export const usePayment = () => {
         
         try {
           // Use the createBookingAndInitiatePayment function
+          console.log('🚀 [usePayment] Calling apiService.createBookingAndInitiatePayment with:', {
+            userId,
+            professionalId: params.professionalId,
+            slotId: params.slotId,
+            serviceType,
+            serviceId,
+            amount: params.amount,
+            couponCode: params.couponCode,
+            duration: params.duration,
+            metadata: params.metadata
+          });
+
           const response = await apiService.createBookingAndInitiatePayment({
             userId,
             professionalId: params.professionalId,
@@ -87,19 +109,26 @@ export const usePayment = () => {
           });
 
           console.log('Payment initiation response:', {
+            success: response?.success,
             hasPaymentUrl: !!response?.data?.payment_url,
+            hasDataPaymentUrl: !!response?.data?.data?.payment_url,
             bookingId: response?.data?.booking_id,
-            responseKeys: response ? Object.keys(response) : 'No response'
+            responseKeys: response ? Object.keys(response) : 'No response',
+            dataKeys: response?.data ? Object.keys(response.data) : 'No data',
+            innerDataKeys: response?.data?.data ? Object.keys(response.data.data) : 'No inner data',
+            fullResponse: response
           });
 
-          if (response?.data?.payment_url) {
+          if (response?.success && response?.data?.payment_url) {
             return {
               ...response,
               paymentUrl: response.data.payment_url // Ensure consistent property name
             };
           }
 
-          const errorMsg = 'Failed to initiate payment: No payment URL in response';
+          const errorMsg = response?.success 
+            ? 'Failed to initiate payment: No payment URL in response' 
+            : 'Failed to initiate payment: API call failed';
           console.error(errorMsg, { response });
           throw new Error(errorMsg);
         } catch (apiError: any) {

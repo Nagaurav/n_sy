@@ -696,7 +696,8 @@ export const apiService = {
         }>;
       }>('/user/check-slot/checkAvailability', {
         params: {
-          professional_id: professionalId
+          professional_id: professionalId,
+          limit: 1000 // 🟢 Increased to 1000 slots to ensure we cover upcoming weeks
         }
       });
       

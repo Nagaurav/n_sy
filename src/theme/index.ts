@@ -1,4 +1,4 @@
-import { Dimensions } from 'react-native';
+import { Dimensions, Platform } from 'react-native';
 
 export type ColorPalette = {
   primary: string;      // Calming Teal
@@ -76,6 +76,7 @@ export type Shadows = {
 };
 
 export type Typography = {
+  fontFamily?: string;
   h1: {
     fontSize: number;
     fontWeight: 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
@@ -195,6 +196,7 @@ export const theme: Theme = {
     },
   },
   typography: {
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
     h1: {
       fontSize: 32,
       fontWeight: '700' as const,

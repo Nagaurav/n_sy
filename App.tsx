@@ -86,6 +86,7 @@ import HelpSupportScreen from './src/screens/HelpSupportScreen';
 import ProfessionalsListScreen from './src/screens/ProfessionalsListScreen';
 import ProfessionalProfileScreen from './src/screens/ProfessionalProfileScreen';
 import ClassesListScreen from './src/screens/ClassesListScreen';
+import ClassDetailsScreen from './src/screens/ClassDetailsScreen';
 import AppointmentDetailScreen from './src/screens/AppointmentDetailScreen';
 
 // Temporary test component to verify navigation
@@ -110,7 +111,8 @@ const HomeStackNavigator = () => {
       <HomeStack.Screen name="ProfessionalsList" component={ProfessionalsListScreen} />
       <HomeStack.Screen name="ProfessionalProfile" component={ProfessionalProfileScreen} />
       <HomeStack.Screen name="ClassesList" component={ClassesListScreen} />
-            <HomeStack.Screen name="AppointmentDetail" component={AppointmentDetailScreen} />
+      <HomeStack.Screen name="ClassDetails" component={ClassDetailsScreen} />
+      <HomeStack.Screen name="AppointmentDetail" component={AppointmentDetailScreen} />
       <HomeStack.Screen name="BookingConfirmation" component={BookingConfirmationScreen} />
       <HomeStack.Screen 
         name="PaymentGateway" 
@@ -256,7 +258,7 @@ const AppNavigator = () => {
     const timer = setTimeout(() => {
       console.log('🔧 Navigation ready timeout reached');
       setIsNavigationReady(true);
-    }, 5000); // 5 second timeout
+    }, 2000); // 2 second timeout
     
     return () => clearTimeout(timer);
   }, []);
@@ -268,7 +270,7 @@ const AppNavigator = () => {
     isNavigationReady 
   });
 
-  // Show splash screen for 5 seconds using navigation timeout only
+  // Show splash screen for 2 seconds using navigation timeout only
   if (!isNavigationReady) {
     return (
       <AuthStack.Navigator screenOptions={{ headerShown: false }}>

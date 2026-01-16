@@ -71,7 +71,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    justifyContent: 'space-between',
   },
   iconButton: {
     padding: 10,
@@ -578,8 +577,6 @@ const HomeScreen = () => {
             </TouchableOpacity>
             
             <Text style={styles.appTitle}>SAMYAYOG</Text>
-            
-            <View style={styles.iconButton} />
           </View>
         </View>
       </View>

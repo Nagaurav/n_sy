@@ -368,34 +368,28 @@ const BookingConfirmationScreen = () => {
         yogaPlanId: bookingData.yogaPlanId
       });
 
-      // Determine desired duration early
-      const duration = typeof bookingData.duration === 'string' 
-        ? parseInt(bookingData.duration, 10) 
-        : bookingData.duration || 60;
-
-      // CRITICAL: Slot resolution must be handled by backend, not frontend
-      // Frontend guessing slots is a security/authenticity hazard
-      // Require slot_id to be present and valid - fail if missing
-      const rawSlotId = bookingData.slot_id;
-      const numericSlotId = Number(rawSlotId);
-      
-      if (!rawSlotId || !Number.isFinite(numericSlotId) || numericSlotId <= 0) {
-        const errorMsg = 'Slot ID is required for booking. Please go back and select a time slot.';
-        console.error('❌ [BookingConfirmation] Slot resolution hazard prevented:', {
-          slot_id: rawSlotId,
-          numericSlotId,
-          bookingData: {
-            date: bookingData.date,
-            startDate: bookingData.startDate,
-            time: bookingData.time,
-            startTime: bookingData.startTime,
-          }
-        });
-        throw new Error(errorMsg);
+      // 1. Handle Duration (Don't panic on "ONE_MONTH")
+      let safeDuration = 0;
+      if (typeof bookingData.duration === 'number') {
+          safeDuration = bookingData.duration;
+      } else if (typeof bookingData.duration === 'string') {
+          const parsed = parseInt(bookingData.duration, 10);
+          safeDuration = isNaN(parsed) ? 0 : parsed; 
+          // 0 is fine for classes, backend knows duration
       }
-      
-      const slotId = numericSlotId;
-      console.log('✅ [BookingConfirmation] Using validated slot_id:', slotId);
+
+      // 2. Handle Slot ID (Don't force 0, just pass undefined)
+      let slotIdToPass: number | undefined = undefined;
+      const isClassBooking = bookingData.serviceType === 'yoga_class' || !!bookingData.yogaPlanId;
+
+      if (!isClassBooking) {
+         // Strict check ONLY for consultations
+         const numericSlot = Number(bookingData.slot_id);
+         if (!bookingData.slot_id || isNaN(numericSlot) || numericSlot <= 0) {
+            throw new Error('Slot ID is required for consultation booking.');
+         }
+         slotIdToPass = numericSlot;
+      }
       
       const serviceType = bookingData.serviceType || 'yoga_class';
       const serviceId = bookingData.serviceId || 
@@ -405,8 +399,8 @@ const BookingConfirmationScreen = () => {
       console.log('Payment parameters:', {
         serviceType,
         serviceId,
-        slotId,
-        duration,
+        slotId: slotIdToPass, // ✅ Will be 'undefined' for classes, which is correct
+        duration: safeDuration,
         professionalId: bookingData.professionalId,
         amount: priceDetails.final_amount
       });
@@ -416,10 +410,10 @@ const BookingConfirmationScreen = () => {
         bookingId: `booking_${Date.now()}`,
         amount: priceDetails.final_amount,
         professionalId: bookingData.professionalId,
-        slotId,
-        duration,
-        serviceType,
-        serviceId,
+        slotId: slotIdToPass, // ✅ Will be 'undefined' for classes, which is correct
+        serviceType: isClassBooking ? 'yoga_class' : 'consultation',
+        serviceId: bookingData.yogaPlanId?.toString(), // ✅ Passing Real Class ID
+        duration: safeDuration,
         couponCode: isCouponApplied ? couponCode : undefined,
         metadata: {
           professionalName: bookingData.professionalName,
@@ -433,7 +427,7 @@ const BookingConfirmationScreen = () => {
         }
       });
 
-      // If we have a payment URL, open it in the WebView
+      // If we have a payment URL, open it in WebView
       if (paymentResponse?.paymentUrl) {
         console.log('💳 Payment URL received, navigating to PaymentGateway:', paymentResponse.paymentUrl);
         console.log('📦 Payment data:', {
