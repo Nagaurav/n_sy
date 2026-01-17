@@ -32,7 +32,6 @@ type Styles = {
   headerTitle: TextStyle;
   content: ViewStyle;
   card: ViewStyle;
-  decorativeCircle: ViewStyle;
   subtitle: TextStyle;
   phoneNumberText: TextStyle;
   otpContainer: ViewStyle;
@@ -96,15 +95,6 @@ const styles = StyleSheet.create<Styles>({
     borderRadius: 30,
     padding: 40,
     backgroundColor: '#FFFFFF',
-  },
-  decorativeCircle: {
-    position: 'absolute',
-    width: width,
-    height: width,
-    borderRadius: width / 2,
-    backgroundColor: 'rgba(0, 130, 114, 0.05)',
-    top: -width / 2,
-    left: 0,
   },
   subtitle: {
     fontSize: 18,
@@ -436,7 +426,6 @@ const OTPScreen = ({ navigation, route }: any) => {
             }}
           >
             <View style={[styles.card, { backgroundColor: theme.colors.background.surface, ...theme.shadows.float }]}>
-              <View style={styles.decorativeCircle} />
               <Text style={[styles.subtitle, { color: theme.colors.text.secondary }]}>Enter the 6-digit code sent to</Text>
               <Text style={[styles.phoneNumberText, { color: theme.colors.text.primary }]}>{maskPhoneNumber(phoneNumber)}</Text>
 

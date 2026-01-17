@@ -66,6 +66,13 @@ export type Shadows = {
     shadowRadius: number;
     elevation: number;
   };
+  large: {
+    shadowColor: string;
+    shadowOffset: { width: number; height: number };
+    shadowOpacity: number;
+    shadowRadius: number;
+    elevation: number;
+  };
   none: {
     shadowColor: string;
     shadowOffset: { width: number; height: number };
@@ -186,6 +193,13 @@ export const theme: Theme = {
       shadowOpacity: 0.12,
       shadowRadius: 8,
       elevation: 6,
+    },
+    large: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.15,
+      shadowRadius: 16,
+      elevation: 10,
     },
     none: {
       shadowColor: 'transparent',
