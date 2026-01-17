@@ -447,7 +447,7 @@ const BookingConfirmationScreen = () => {
           customerId: userId?.toString() || '',
           customerEmail: user?.email || '',
           customerPhone: user?.phone || '',
-          merchantId: Config.PHONEPE_MERCHANT_ID || 'PGTESTPAYUAT' // Fallback to test ID if not set
+          merchantId: Config.PHONEPE_MERCHANT_ID || 'PGTESTPAYUAT', // Fallback to test ID if not set
         });
         
         console.log('✅ Navigation to PaymentGateway called');

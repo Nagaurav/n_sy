@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,14 +11,15 @@ import {
   StatusBar,
   Platform,
   Alert,
-  ImageStyle,
-  ViewStyle,
-  TextStyle,
+  Animated,
+  Share,
+  Linking,
   Dimensions,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import LinearGradient from 'react-native-linear-gradient';
 
 // Services
 import { professionalService } from '../services';
@@ -29,18 +30,17 @@ import {
   Gender, 
   WorkArrangement, 
   ProfessionalRole,
-  Service
 } from '../types';
 import type { HomeStackParamList } from '../types/navigation';
 import type { RootStackParamList } from '../../App';
 
 // Theme
 import { theme } from '../theme';
-import { useAuth } from '../hooks/useAuth';
 
 // Constants
-const DEFAULT_AVATAR = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzY2NjY2NiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yMCAyMWMtMi4yIDAtNC0xLjgtNC00dj0xYzAtLjYtLjQtMS0xLTFjLS42IDAtMSAuNC0xIDF2MWMwIDEuMS0uOSAyLTIgMnMtMi0uOS0yLTJ2LTFjMC0xLjYtMS4zLTMtMy0zYy0xLjYgMC0zIDEuMy0zIDN2MWMwIDEuMS0uOSAyLTIgMnMtMi0uOS0yLTJ2LTFjMC0xLjYtMS4zLTMtMy0zYy0xLjYgMC0zIDEuMy0zIDN2MWMwIDIuMiAxLjggNCA0IDRoMTZ6Ii8+PHBhdGggZD0iTTEyIDExYzIuOCAwIDUtMi4yIDUtNXMtMi4yLTUtNS01cy01IDIuMi01IDUgMi4yIDUgNSA1eiIvPjwvc3ZnPg==';
-const { width } = Dimensions.get('window');
+const DEFAULT_AVATAR = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzY2NjY2NiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yMCAyMGMtMi4yIDAtNC0xLjgtNC00dj0xYzAtLjYtLjQtMS0xLTFjLS42IDAtMSAuNC0xIDF2MWMwIDEuMS0uOSAyLTIgMnMtMi0uOS0yLTJ2LTFjMC0xLjYtMS4zLTMtMy0zYy0xLjYgMC0zIDEuMy0zIDN2MWMwIDEuMS0uOSAyLTIgMnMtMi0uOS0yLTJ2LTFjMC0xLjYtMS4zLTMtMy0zYy0xLjYgMC0zIDEuMy0zIDN2MWMwIDIuMiAxLjggNCA0IDRoMTZ6Ii8+PHBhdGggZD0iTTEyIDExYzIuOCAwIDUtMi4yIDUtNXMtMi4yLTUtNS01cy01IDIuMi01IDUgMi4yIDUgNSA1eiIvPjwvc3ZnPg==';
+const { width, height } = Dimensions.get('window');
+const HEADER_HEIGHT = height * 0.35;
 
 // Navigation Types
 type ProfessionalProfileRouteProp = RouteProp<HomeStackParamList, 'ProfessionalProfile'>;
@@ -50,14 +50,6 @@ type ProfessionalProfileNavigationProp = StackNavigationProp<RootStackParamList>
 interface ProfessionalProfileScreenProps {
   route: ProfessionalProfileRouteProp;
   navigation: ProfessionalProfileNavigationProp;
-}
-
-// State Types
-interface ProfileState {
-  data: ProfessionalAuthProfile | null;
-  isLoading: boolean;
-  isRefreshing: boolean;
-  error: string | null;
 }
 
 // Format work arrangement for display
@@ -91,10 +83,14 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
   route, 
   navigation 
 }) => {
-  const { professionalId } = route.params;
+  const { professionalId } = route.params as { professionalId: string };
   const [profileData, setProfileData] = useState<ProfessionalAuthProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  // Animation values
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   // Fetch professional profile data
   const fetchProfessionalProfile = useCallback(async () => {
@@ -141,11 +137,18 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
         photo_url: data.photo_url || data.profile_picture || data.profileImage || null,
         role: data.role || ProfessionalRole.YOGA_TEACHER,
         about: data.about || data.bio || 'No bio available',
-        work_arrangement: data.work_arrangement || WorkArrangement.FREELANCE,
+        work_arrangement: (data.work_arrangement && Object.values(WorkArrangement).includes(data.work_arrangement as WorkArrangement)) 
+          ? data.work_arrangement as WorkArrangement 
+          : WorkArrangement.FREELANCE,
         language: data.language || (data.languages && data.languages[0]) || 'English',
         specialization,
         speciality: specialization,
         speciality_new_name: data.speciality_new?.name,
+        // ✅ NEW FIELDS FROM BACKEND
+        rating: data.rating || 0,
+        review_count: data.review_count || 0,
+        starting_price: data.starting_price || 0,
+        experience_years: data.experience_years || 0,
         created_at: data.created_at || data.createdAt || new Date().toISOString(),
         updated_at: data.updated_at || data.updatedAt || new Date().toISOString(),
       };
@@ -180,12 +183,12 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
     
     console.log('✅ Profile data available, preparing navigation...');
     
-    // Define default service details for booking
+    // ✅ USE REAL BACKEND PRICE
     const defaultService = {
       id: 'default_consultation',
       name: 'Standard Consultation',
-      duration: 30,
-      price: 0,
+      duration: 60, 
+      price: profileData.starting_price || 500, // Fallback to 500 if 0
       description: 'Standard consultation session',
       is_online: true,
       price_online_15min: 0,
@@ -227,11 +230,51 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
     fetchProfessionalProfile();
   }, [fetchProfessionalProfile]);
 
+  // Handle share functionality
+  const handleShare = useCallback(async () => {
+    if (!profileData) return;
+    
+    try {
+      const result = await Share.share({
+        message: `Check out ${profileData.first_name} ${profileData.last_name}, ${formatRole(profileData.role)} at SamyaYog`,
+        url: `samyayog://professional/${profileData.professional_id}`,
+      });
+    } catch (error) {
+      console.error('Error sharing profile:', error);
+    }
+  }, [profileData]);
+
+  // Handle contact actions
+  const handleContact = useCallback((type: 'email' | 'phone' | 'location') => {
+    if (!profileData) return;
+    
+    switch (type) {
+      case 'email':
+        if (profileData.email) {
+          Linking.openURL(`mailto:${profileData.email}`);
+        }
+        break;
+      case 'phone':
+        if (profileData.phone_number) {
+          Linking.openURL(`tel:${profileData.phone_number}`);
+        }
+        break;
+      case 'location':
+        if (profileData.address) {
+          const address = [profileData.address, profileData.city, profileData.state]
+            .filter(Boolean)
+            .join(', ');
+          Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(address)}`);
+        }
+        break;
+    }
+  }, [profileData]);
+
   // Loading state
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>Loading profile...</Text>
@@ -241,17 +284,13 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
   }
 
   // Error state
-  if (error || !profileData) {
+  if (error) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
         <View style={styles.errorContainer}>
-          <Ionicons 
-            name="alert-circle-outline" 
-            size={48} 
-            color={theme.colors.error || '#FF3B30'} 
-          />
-          <Text style={styles.errorText}>{error || 'Failed to load professional profile'}</Text>
+          <Ionicons name="alert-circle-outline" size={48} color={theme.colors.error} />
+          <Text style={styles.errorText}>Failed to load profile</Text>
           <TouchableOpacity style={styles.retryButton} onPress={fetchProfessionalProfile}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
@@ -262,138 +301,260 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       
-      {/* Header with back button */}
-      <View style={styles.headerContainer}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+      {/* Animated Header */}
+      <Animated.View style={[
+        styles.header,
+        {
+          height: scrollY.interpolate({
+            inputRange: [0, HEADER_HEIGHT - 100],
+            outputRange: [HEADER_HEIGHT, 100],
+            extrapolate: 'clamp',
+          }),
+        },
+      ]}>
+        <LinearGradient
+          colors={[theme.colors.primary, theme.colors.secondary]}
+          style={styles.gradientHeader}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
         >
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {profileData.first_name} {profileData.last_name}
-        </Text>
-        
-        <View style={styles.headerRight} />
-      </View>
-
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollViewContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Profile Header Card */}
-        <View style={styles.profileHeaderCard}>
-          <View style={styles.profileImageContainer}>
-            <Image
-              source={{ uri: profileData.photo_url || DEFAULT_AVATAR }}
-              style={styles.profileImage}
-              resizeMode="cover"
-              defaultSource={{ uri: DEFAULT_AVATAR }}
-            />
-          </View>
-
-          <View style={styles.profileInfo}>
-            <Text style={styles.profileName} numberOfLines={2}>
-              {profileData.first_name} {profileData.last_name}
-            </Text>
+          {/* Back and Share buttons */}
+          <View style={styles.headerActions}>
+            <TouchableOpacity 
+              style={styles.headerButton}
+              onPress={() => navigation.goBack()}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
             
-            {profileData.role && (
+            <TouchableOpacity 
+              style={styles.headerButton}
+              onPress={handleShare}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+            >
+              <Ionicons name="share-outline" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          
+          {/* Profile Info */}
+          <Animated.View style={[
+            styles.profileInfo,
+            {
+              opacity: scrollY.interpolate({
+                inputRange: [0, HEADER_HEIGHT / 2],
+                outputRange: [1, 0],
+                extrapolate: 'clamp',
+              }),
+              transform: [
+                {
+                  translateY: scrollY.interpolate({
+                    inputRange: [0, HEADER_HEIGHT / 2],
+                    outputRange: [0, -20],
+                    extrapolate: 'clamp',
+                  }),
+                },
+              ],
+            },
+          ]}>
+            <View style={styles.profileImageContainer}>
+              <Image
+                source={{ uri: profileData?.photo_url || DEFAULT_AVATAR }}
+                style={styles.profileImage}
+                resizeMode="cover"
+              />
+              <View style={styles.statusIndicator} />
+            </View>
+            
+            <Animated.Text style={styles.profileName} numberOfLines={1}>
+              {profileData?.first_name} {profileData?.last_name}
+            </Animated.Text>
+            
+            {profileData?.role && (
               <Text style={styles.profession}>
                 {formatRole(profileData.role)}
               </Text>
             )}
 
-            <View style={styles.detailsContainer}>
-              <View style={styles.detailItem}>
-                <Ionicons name="briefcase-outline" size={16} color={theme.colors.primary} />
-                <Text style={styles.detailText}>
-                  {formatWorkArrangement(profileData.work_arrangement)}
+            {/* ✅ RATING SECTION */}
+            {profileData?.rating ? (
+              <View style={styles.ratingContainer}>
+                <Ionicons name="star" size={16} color="#FFD700" />
+                <Text style={styles.ratingText}>
+                  {profileData.rating.toFixed(1)} 
+                  <Text style={styles.reviewCountText}> ({profileData.review_count} reviews)</Text>
                 </Text>
               </View>
+            ) : null}
+          </Animated.View>
+        </LinearGradient>
+      </Animated.View>
 
-              <View style={styles.detailItem}>
-                <Ionicons name="language-outline" size={16} color={theme.colors.primary} />
-                <Text style={styles.detailText}>
-                  {profileData.language || 'English'}
-                </Text>
-              </View>
-
-              {(profileData.city || profileData.state) && (
-                <View style={styles.detailItem}>
-                  <Ionicons name="location-outline" size={16} color={theme.colors.primary} />
-                  <Text style={styles.detailText} numberOfLines={1}>
-                    {[profileData.city, profileData.state]
-                      .filter(Boolean)
-                      .join(', ')}
-                  </Text>
-                </View>
-              )}
-            </View>
+      {/* Content */}
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
+      >
+        {/* Quick Stats */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statItem}>
+            <Ionicons name="briefcase-outline" size={24} color={theme.colors.primary} />
+            <Text style={styles.statValue}>{formatWorkArrangement(profileData?.work_arrangement)}</Text>
+            <Text style={styles.statLabel}>Work Type</Text>
+          </View>
+          
+          <View style={styles.statDivider} />
+          
+          <View style={styles.statItem}>
+            <Ionicons name="language-outline" size={24} color={theme.colors.primary} />
+            <Text style={styles.statValue}>{profileData?.language || 'English'}</Text>
+            <Text style={styles.statLabel}>Language</Text>
+          </View>
+          
+          <View style={styles.statDivider} />
+          
+          <View style={styles.statItem}>
+            <Ionicons name="location-outline" size={24} color={theme.colors.primary} />
+            <Text style={styles.statValue} numberOfLines={1}>
+              {[profileData?.city, profileData?.state]
+                .filter(Boolean)
+                .join(', ') || 'Remote'}
+            </Text>
+            <Text style={styles.statLabel}>Location</Text>
           </View>
         </View>
 
         {/* About Section */}
-        {profileData.about && (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>About</Text>
-            <Text style={styles.aboutText}>
-              {profileData.about}
-            </Text>
+        {profileData?.about && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="person-outline" size={24} color={theme.colors.primary} />
+              <Text style={styles.sectionTitle}>About</Text>
+            </View>
+            
+            <TouchableOpacity onPress={() => setIsExpanded(!isExpanded)}>
+              <Text style={styles.aboutText} numberOfLines={isExpanded ? undefined : 3}>
+                {profileData?.about}
+              </Text>
+              {profileData?.about && profileData.about.length > 150 && (
+                <Text style={styles.readMoreText}>
+                  {isExpanded ? 'Read less' : 'Read more'}
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* Contact Information Section */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Contact Information</Text>
+        {/* Contact Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="call-outline" size={24} color={theme.colors.primary} />
+            <Text style={styles.sectionTitle}>Get in Touch</Text>
+          </View>
           
-          {profileData.email && (
-            <View style={styles.contactItem}>
-              <Ionicons name="mail-outline" size={20} color={theme.colors.primary} />
-              <Text style={styles.contactText} numberOfLines={1} ellipsizeMode="tail">
-                {profileData.email}
-              </Text>
-            </View>
+          {profileData?.email && (
+            <TouchableOpacity 
+              style={styles.contactItem}
+              onPress={() => handleContact('email')}
+            >
+              <View style={styles.contactIcon}>
+                <Ionicons name="mail-outline" size={20} color="#fff" />
+              </View>
+              <View style={styles.contactInfo}>
+                <Text style={styles.contactLabel}>Email</Text>
+                <Text style={styles.contactText} numberOfLines={1} ellipsizeMode="tail">
+                  {profileData?.email}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
           )}
 
-          {profileData.phone_number && (
-            <View style={styles.contactItem}>
-              <Ionicons name="call-outline" size={20} color={theme.colors.primary} />
-              <Text style={styles.contactText}>
-                {profileData.phone_number}
-              </Text>
-            </View>
+          {profileData?.phone_number && (
+            <TouchableOpacity 
+              style={styles.contactItem}
+              onPress={() => handleContact('phone')}
+            >
+              <View style={styles.contactIcon}>
+                <Ionicons name="call-outline" size={20} color="#fff" />
+              </View>
+              <View style={styles.contactInfo}>
+                <Text style={styles.contactLabel}>Phone</Text>
+                <Text style={styles.contactText}>
+                  {profileData?.phone_number}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
           )}
 
-          {profileData.address && (
-            <View style={styles.contactItem}>
-              <Ionicons name="location-outline" size={20} color={theme.colors.primary} />
-              <Text style={styles.contactText} numberOfLines={2}>
-                {[profileData.address, profileData.city, profileData.state, profileData.pin_code]
-                  .filter(Boolean)
-                  .join(', ')}
-              </Text>
-            </View>
+          {profileData?.address && (
+            <TouchableOpacity 
+              style={styles.contactItem}
+              onPress={() => handleContact('location')}
+            >
+              <View style={styles.contactIcon}>
+                <Ionicons name="location-outline" size={20} color="#fff" />
+              </View>
+              <View style={styles.contactInfo}>
+                <Text style={styles.contactLabel}>Address</Text>
+                <Text style={styles.contactText} numberOfLines={2}>
+                  {[profileData?.address, profileData?.city, profileData?.state, profileData?.pin_code]
+                    .filter(Boolean)
+                    .join(', ')}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
           )}
         </View>
 
-        {/* Bottom spacing for button */}
+        {/* Specialization */}
+        {profileData?.specialization && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="star-outline" size={24} color={theme.colors.primary} />
+              <Text style={styles.sectionTitle}>Specialization</Text>
+            </View>
+            
+            <View style={styles.specializationBadge}>
+              <Text style={styles.specializationText}>
+                {profileData?.specialization}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Bottom spacing */}
         <View style={styles.bottomSpacing} />
       </ScrollView>
 
-      {/* Fixed Book Button */}
+      {/* Book Button */}
       <View style={styles.footer}>
         <TouchableOpacity
           style={styles.bookButton}
           onPress={handleBookAppointment}
           activeOpacity={0.8}
-          hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
         >
-          <Text style={styles.bookButtonText}>Book Consultation</Text>
+          <LinearGradient
+            colors={[theme.colors.primary, theme.colors.secondary]}
+            style={styles.bookButtonGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            <Ionicons name="calendar-outline" size={20} color="#fff" />
+            <Text style={styles.bookButtonText}>
+              Book Consultation
+            </Text>
+          </LinearGradient>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -403,7 +564,7 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f7fa',
+    backgroundColor: theme.colors.background.primary,
   },
   loadingContainer: {
     flex: 1,
@@ -413,7 +574,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#6B7280',
+    color: theme.colors.text.secondary,
     fontFamily: 'System',
   },
   errorContainer: {
@@ -421,12 +582,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.background.surface,
   },
   errorText: {
     marginTop: 16,
     fontSize: 16,
-    color: theme.colors.error || '#FF3B30',
+    color: theme.colors.error,
     textAlign: 'center',
     marginBottom: 24,
     fontFamily: 'System',
@@ -435,233 +596,269 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: theme.borderRadius.m,
   },
   retryButtonText: {
-    color: 'white',
+    color: theme.colors.background.surface,
     fontWeight: '600',
     fontSize: 16,
     fontFamily: 'System',
   },
-  headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    backgroundColor: '#fff',
-    borderBottomWidth: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+  // Header
+  header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
   },
-  backButton: {
-    padding: 12,
-    backgroundColor: 'rgba(0,0,0,0.08)',
-    borderRadius: 24,
+  gradientHeader: {
+    flex: 1,
+    marginTop: 40,
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+    justifyContent: 'center',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.s,
+    marginTop: theme.spacing.l,
+  },
+  headerButton: {
     width: 48,
     height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    flex: 1,
-    textAlign: 'center',
-    marginHorizontal: 20,
-    fontFamily: 'System',
-  },
-  headerRight: {
-    width: 40,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollViewContent: {
-    paddingBottom: 120,
-  },
-  profileHeaderCard: {
-    backgroundColor: '#fff',
-    margin: 20,
-    padding: 32,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 8,
-    borderWidth: 0,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  profileImageContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 4,
-    borderColor: theme.colors.primary,
-    backgroundColor: '#f8f9fa',
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-  } as ImageStyle,
   profileInfo: {
     alignItems: 'center',
+    paddingTop: theme.spacing.s,
+  },
+  profileImageContainer: {
+    position: 'relative',
+    marginBottom: theme.spacing.xs,
+  },
+  profileImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: theme.colors.background.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  statusIndicator: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#10B981',
+    borderWidth: 2,
+    borderColor: theme.colors.background.surface,
   },
   profileName: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.background.surface,
     textAlign: 'center',
-    letterSpacing: 0.5,
+    marginBottom: theme.spacing.xs,
+    letterSpacing: 0.3,
     fontFamily: 'System',
   },
   profession: {
-    fontSize: 18,
-    color: theme.colors.primary,
-    marginBottom: 20,
-    fontWeight: '600',
-    letterSpacing: 0.3,
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
+    letterSpacing: 0.2,
     fontFamily: 'System',
-    backgroundColor: 'rgba(79, 70, 229, 0.1)',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
-    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: theme.spacing.s,
+    paddingVertical: 4,
+    borderRadius: theme.borderRadius.m,
   },
-  detailsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 12,
-    marginTop: 8,
-  },
-  detailItem: {
+  ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    marginTop: 8,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  detailText: {
-    marginLeft: 8,
+  ratingText: {
+    color: '#FFF',
+    fontWeight: '700',
+    marginLeft: 4,
     fontSize: 14,
-    color: '#475569',
+  },
+  reviewCountText: {
+    fontWeight: '400',
+    fontSize: 12,
+    opacity: 0.9,
+  },
+  // Content
+  scrollView: {
+    flex: 1,
+    marginTop: HEADER_HEIGHT,
+  },
+  scrollViewContent: {
+    paddingBottom: 140,
+    paddingTop: theme.spacing.m,
+  },
+  // Stats
+  statsContainer: {
+    backgroundColor: theme.colors.background.surface,
+    marginHorizontal: theme.spacing.m,
+    padding: theme.spacing.m,
+    borderRadius: theme.borderRadius.l,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    ...theme.shadows.card,
+    marginBottom: theme.spacing.m,
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 14,
     fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginTop: 4,
+    textAlign: 'center',
     fontFamily: 'System',
   },
-  sectionCard: {
-    backgroundColor: '#fff',
-    margin: 20,
-    marginTop: 0,
-    padding: 24,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 4,
-    borderWidth: 0,
+  statLabel: {
+    fontSize: 11,
+    color: theme.colors.text.secondary,
+    marginTop: 2,
+    textAlign: 'center',
+    fontFamily: 'System',
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: theme.spacing.m,
+  },
+  // Sections
+  section: {
+    backgroundColor: theme.colors.background.surface,
+    marginHorizontal: theme.spacing.m,
+    marginBottom: theme.spacing.m,
+    padding: theme.spacing.m,
+    borderRadius: theme.borderRadius.l,
+    ...theme.shadows.card,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.m,
   },
   sectionTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 20,
-    letterSpacing: 0.3,
-    borderBottomWidth: 3,
-    borderBottomColor: theme.colors.primary,
-    paddingBottom: 12,
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginLeft: theme.spacing.s,
     fontFamily: 'System',
-    position: 'relative',
   },
   aboutText: {
-    fontSize: 16,
-    lineHeight: 28,
-    color: '#475569',
-    letterSpacing: 0.2,
+    fontSize: 14,
+    lineHeight: 22,
+    color: theme.colors.text.primary,
     fontFamily: 'System',
     textAlign: 'justify',
   },
+  readMoreText: {
+    fontSize: 13,
+    color: theme.colors.primary,
+    fontWeight: '500',
+    marginTop: theme.spacing.s,
+    fontFamily: 'System',
+  },
+  // Contact
   contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    marginBottom: theme.spacing.s,
+    backgroundColor: theme.colors.background.primary,
+    padding: theme.spacing.s,
+    borderRadius: theme.borderRadius.m,
   },
-  contactText: {
-    marginLeft: 14,
-    fontSize: 16,
-    color: '#1a1a1a',
-    fontWeight: '600',
+  contactIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: theme.spacing.s,
+  },
+  contactInfo: {
+    flex: 1,
+  },
+  contactLabel: {
+    fontSize: 11,
+    color: theme.colors.text.secondary,
+    marginBottom: 2,
     fontFamily: 'System',
   },
+  contactText: {
+    fontSize: 14,
+    color: theme.colors.text.primary,
+    fontWeight: '500',
+    fontFamily: 'System',
+  },
+  // Specialization
+  specializationBadge: {
+    backgroundColor: 'rgba(0, 130, 114, 0.1)',
+    padding: theme.spacing.s,
+    borderRadius: theme.borderRadius.m,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  specializationText: {
+    fontSize: 14,
+    color: theme.colors.primary,
+    fontWeight: '500',
+    textAlign: 'center',
+    fontFamily: 'System',
+  },
+  // Footer
   footer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 20,
+    padding: theme.spacing.m,
     backgroundColor: 'transparent',
-    zIndex: 1,
-    elevation: 1,
+    zIndex: 10,
   },
   bookButton: {
-    backgroundColor: theme.colors.primary,
-    paddingVertical: 20,
-    borderRadius: 20,
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    ...theme.shadows.large,
+  },
+  bookButtonGradient: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 10,
-    marginHorizontal: 20,
-    marginBottom: 20,
-    position: 'relative',
-    overflow: 'hidden',
+    paddingVertical: theme.spacing.m,
+    paddingHorizontal: theme.spacing.l,
+    gap: theme.spacing.xs,
   },
   bookButtonText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '800',
+    color: theme.colors.background.surface,
+    fontSize: 16,
+    fontWeight: '700',
     textAlign: 'center',
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
     fontFamily: 'System',
     textTransform: 'uppercase',
   },

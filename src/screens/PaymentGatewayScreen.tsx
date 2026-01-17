@@ -183,6 +183,19 @@ const PaymentGatewayScreen = () => {
             console.log(`📡 Manual sync for booking: ${bookingId}, payment: ${paymentId}`);
             const syncResponse = await apiService.syncPaymentStatus(paymentId || bookingId);
             console.log('📊 Manual sync response:', syncResponse.data);
+            
+            // Check if sync was successful
+            const isSuccess = 
+              syncResponse.data?.msg?.includes('SUCCESS') || 
+              syncResponse.data?.msg?.includes('updated to SUCCESS') ||
+              syncResponse.data?.current_status === 'SUCCESS' ||
+              syncResponse.data?.status === 'SUCCESS';
+            
+            if (isSuccess) {
+              console.log('✅ Payment sync successful - status updated to SUCCESS');
+            } else {
+              console.log('⚠️ Payment sync completed but status still pending - webhook will handle final update');
+            }
           } catch (syncError) {
             console.warn('⚠️ Manual sync failed, but continuing to success screen:', syncError);
             // Don't block navigation if sync fails

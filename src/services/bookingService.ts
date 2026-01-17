@@ -169,6 +169,42 @@ export const bookingService = {
     };
   },
 
+  // Check slot availability before booking
+  checkSlotAvailability: async (slotId: string | number, professionalId: string | number): Promise<ApiResult<{ available: boolean; reason?: string }>> => {
+    try {
+      // Get all available slots for the professional
+      const response = await apiClient.get('/user/check-slot/checkAvailability', {
+        params: { 
+          professional_id: professionalId 
+        }
+      });
+
+      // Check if the specific slot is in the available slots
+      const availableSlots = response.data?.data || [];
+      const targetSlot = availableSlots.find((slot: any) => 
+        slot.id === Number(slotId) || slot.slot_id === Number(slotId)
+      );
+
+      return {
+        success: true,
+        data: {
+          available: !!targetSlot,
+          reason: targetSlot ? undefined : 'This time slot is no longer available'
+        }
+      };
+    } catch (error: any) {
+      console.error('Error checking slot availability:', error);
+      // If we can't check availability, assume it's not available to be safe
+      return {
+        success: true,
+        data: {
+          available: false,
+          reason: 'Unable to verify slot availability. Please try again.'
+        }
+      };
+    }
+  },
+
   // Create booking and initiate payment
   createBookingAndInitiatePayment: async (params: BookingPaymentParams): Promise<ApiResult<any>> => {
     // 1. Base Payload
@@ -199,8 +235,33 @@ export const bookingService = {
       serviceId: params.serviceId,
       duration: params.duration,
       isYogaClass: params.serviceType === 'yoga_class',
-      isConsultation: !params.serviceType || params.serviceType === 'consultation'
+      isConsultation: !params.serviceType || params.serviceType === 'consultation',
+      slotId: params.slotId,
+      professionalId: params.professionalId
     });
+
+    // Validate required fields before sending
+    if (!params.userId || !params.professionalId) {
+      console.error('❌ [bookingService] Missing required fields:', {
+        userId: params.userId,
+        professionalId: params.professionalId
+      });
+      return {
+        success: false,
+        error: 'Missing required booking information'
+      };
+    }
+
+    // For consultations, validate slot_id is provided
+    if (!params.serviceType || params.serviceType === 'consultation') {
+      if (!params.slotId || Number(params.slotId) <= 0) {
+        console.error('❌ [bookingService] Invalid or missing slot_id for consultation:', params.slotId);
+        return {
+          success: false,
+          error: 'Please select a valid time slot for consultation'
+        };
+      }
+    }
 
     // ... send request ...
     const response = await apiClient.post('/user/consultation-booking/create', payload);
@@ -212,18 +273,29 @@ export const bookingService = {
       hasDataPaymentUrl: !!response.data?.data?.payment_url,
       dataKeys: response.data ? Object.keys(response.data) : 'no data',
       innerDataKeys: response.data?.data ? Object.keys(response.data.data) : 'no inner data',
-      expectedStructure: 'Based on BookingResponse type, payment_url should be at root level'
+      expectedStructure: 'Based on BookingResponse type, payment_url should be at root level',
+      fullResponse: response
     });
 
-    if (!response.success || !response.data) {
+    if (!response.success) {
+      console.error('❌ [bookingService] API call failed:', response);
       return {
         success: false,
-        error: response.error || 'No data received from booking service'
+        error: response.error || 'API call failed'
+      };
+    }
+
+    if (!response.data) {
+      console.error('❌ [bookingService] No data received from API');
+      return {
+        success: false,
+        error: 'No data received from booking service'
       };
     }
 
     // Handle the API response format where payment_url is at the root level
     if (response.data.payment_url) {
+      console.log('✅ [bookingService] Found payment_url at root level');
       return {
         success: true,
         data: {
@@ -238,8 +310,9 @@ export const bookingService = {
       };
     }
 
-    // Fallback: check if payment_url is inside data object (unlikely based on types)
+    // Fallback: check if payment_url is inside data object
     if (response.data.data?.payment_url) {
+      console.log('✅ [bookingService] Found payment_url in nested data object');
       return {
         success: true,
         data: {
@@ -253,6 +326,15 @@ export const bookingService = {
         }
       };
     }
+
+    // No payment URL found - log detailed error
+    console.error('❌ [bookingService] No payment URL found in response:', {
+      responseSuccess: response.success,
+      hasData: !!response.data,
+      dataKeys: response.data ? Object.keys(response.data) : 'no data',
+      innerDataKeys: response.data?.data ? Object.keys(response.data.data) : 'no inner data',
+      fullResponse: response
+    });
 
     return {
       success: false,

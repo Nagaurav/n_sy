@@ -439,15 +439,29 @@ const AppointmentDetailScreen: React.FC = () => {
       if (currentAppointment?.transaction_id && currentAppointment?.payment_status === 'PENDING') {
         try {
           console.log(`🔄 [AppointmentDetail] Force syncing payment for TXN: ${currentAppointment.transaction_id}`);
-          // This calls your backend 'manualPaymentSync' function
-          await apiClient.post(`/user/consultation-booking/sync/${currentAppointment.transaction_id}`);
-          console.log('✅ [AppointmentDetail] Payment status synced successfully with server');
           
-          // Refresh appointment data after sync to get updated status
-          setTimeout(() => {
-            console.log('🔄 [AppointmentDetail] Refreshing appointment data after payment sync...');
-            refreshAppointment();
-          }, 1000);
+          // Use consistent endpoint with other screens
+          const response = await apiService.syncPaymentStatus(currentAppointment.transaction_id);
+          console.log('✅ [AppointmentDetail] Payment sync response:', response.data);
+          
+          // Check if sync was successful
+          const isSuccess = 
+            response.data?.msg?.includes('SUCCESS') || 
+            response.data?.msg?.includes('updated to SUCCESS') ||
+            response.data?.current_status === 'SUCCESS' ||
+            response.data?.status === 'SUCCESS';
+          
+          if (isSuccess) {
+            console.log('✅ [AppointmentDetail] Payment status synced successfully');
+            
+            // Refresh appointment data after sync to get updated status
+            setTimeout(() => {
+              console.log('🔄 [AppointmentDetail] Refreshing appointment data after payment sync...');
+              refreshAppointment();
+            }, 1000);
+          } else {
+            console.log('⚠️ [AppointmentDetail] Payment still pending, will retry on next load');
+          }
         } catch (error) {
           console.error('⚠️ [AppointmentDetail] Sync attempt failed (Background webhook will handle it):', error);
         }

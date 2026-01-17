@@ -9,7 +9,10 @@ export enum WorkArrangement {
   FULL_TIME = 'full_time',
   PART_TIME = 'part_time',
   FREELANCE = 'freelance',
-  CONTRACT = 'contract'
+  CONTRACT = 'contract',
+  ONLINE = 'ONLINE',      // 🆕 Backend work arrangement types
+  OFFLINE = 'OFFLINE',    // 🆕 Backend work arrangement types
+  HYBRID = 'HYBRID'       // 🆕 Backend work arrangement types
 }
 
 export enum ProfessionalRole {
@@ -43,17 +46,18 @@ export interface Professional {
   bio?: string;
   about?: string;
   profile_picture?: string;
-  photo_url?: string;
+  photo_url?: string;          // ✅ Backend sends this, not profile_picture
   experience_years?: number;
   specialization?: string; // Legacy field used by UI
   speciality?: string; // Alias for specialization
   speciality_new?: SpecialityNew; // New nested speciality object from backend
   languages?: string[];
   language?: string;
-  rating?: number;
-  review_count?: number;
-  is_available?: boolean;
+  rating?: number;             // ✅ Backend rating field
+  review_count?: number;       // ✅ Backend review count field
+  is_available?: boolean;      // ✅ Backend availability field
   is_verified?: boolean;
+  starting_price?: number;     // 🆕 Calculated field from backend
   
   // Location fields
   city?: string;
@@ -72,7 +76,7 @@ export interface Professional {
   dob?: string;
   gender?: Gender;
   role?: ProfessionalRole;
-  work_arrangement?: WorkArrangement;
+  work_arrangement?: WorkArrangement | string; // ✅ Supports enum values and backend string values ('ONLINE', 'OFFLINE', 'HYBRID')
   adhaar_number?: string;
   adhaarNumber?: string;
   
@@ -113,6 +117,11 @@ export interface ProfessionalAuthProfile {
   specialization?: string;
   speciality?: string;
   speciality_new_name?: string;
+  // ✅ ADD THESE NEW FIELDS
+  rating?: number;
+  review_count?: number;
+  starting_price?: number;
+  experience_years?: number;
   created_at: string;
   updated_at: string;
 }

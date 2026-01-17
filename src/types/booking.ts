@@ -168,6 +168,7 @@ export interface SectionData {
   title: string; // The date string (YYYY-MM-DD or formatted)
   data: FormattedAvailableSlot[]; // Slots for that date
   formattedDate?: string; // Formatted date string (e.g., 'Monday, January 1, 2023')
+  dateLabel?: string; // Short date label (e.g., 'Today', 'Tomorrow', 'Monday')
 }
 
 // Filter and Sort interfaces

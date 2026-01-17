@@ -62,9 +62,9 @@ const ModernHomeHeader: React.FC<ModernHomeHeaderProps> = ({ onMenuPress }) => {
 
 const styles = StyleSheet.create({
   container: {
-    paddingTop: StatusBar.currentHeight || 40,
+    paddingTop: 40,
     paddingBottom: theme.spacing.l,
-    paddingHorizontal: theme.spacing.m,
+    paddingHorizontal: 24,
     position: 'relative',
     overflow: 'hidden',
   },

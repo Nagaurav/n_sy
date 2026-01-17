@@ -78,6 +78,24 @@ api.interceptors.response.use(
         console.warn('⚠️ 403 Forbidden (not logging out):', errorMessage);
         return Promise.reject(new Error(errorMessage));
       }
+      
+      // Handle 409 Conflict (duplicate booking, slot already taken, etc.)
+      if (error.response.status === 409) {
+        const errorMessage = error.response.data?.message || 
+                           error.response.data?.error || 
+                           'This slot is already booked or no longer available. Please choose a different time.';
+        console.warn('⚠️ 409 Conflict:', errorMessage);
+        return Promise.reject(new Error(errorMessage));
+      }
+      
+      // Handle 400 Bad Request
+      if (error.response.status === 400) {
+        const errorMessage = error.response.data?.message || 
+                           error.response.data?.error || 
+                           'Invalid request. Please check your booking details and try again.';
+        console.warn('⚠️ 400 Bad Request:', errorMessage);
+        return Promise.reject(new Error(errorMessage));
+      }
     } else if (error.request) {
       console.error('API Request Error:', error.request);
     } else {

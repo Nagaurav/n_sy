@@ -84,7 +84,24 @@ export const usePayment = () => {
         });
         
         try {
-          // Use the createBookingAndInitiatePayment function
+        // For consultations, check slot availability first
+        if (!params.serviceType || params.serviceType === 'consultation') {
+          console.log('🔍 [usePayment] Checking slot availability before booking...');
+          const availabilityCheck = await apiService.checkSlotAvailability(params.slotId!, params.professionalId!);
+          
+          if (!availabilityCheck.success || !availabilityCheck.data) {
+            throw new Error('Unable to verify slot availability. Please try again.');
+          }
+          
+          if (!availabilityCheck.data.available) {
+            const reason = availabilityCheck.data.reason || 'This time slot is no longer available';
+            throw new Error(reason);
+          }
+          
+          console.log('✅ [usePayment] Slot is available, proceeding with booking');
+        }
+
+        // Use the createBookingAndInitiatePayment function
           console.log('🚀 [usePayment] Calling apiService.createBookingAndInitiatePayment with:', {
             userId,
             professionalId: params.professionalId,
@@ -116,10 +133,12 @@ export const usePayment = () => {
             responseKeys: response ? Object.keys(response) : 'No response',
             dataKeys: response?.data ? Object.keys(response.data) : 'No data',
             innerDataKeys: response?.data?.data ? Object.keys(response.data.data) : 'No inner data',
-            fullResponse: response
+            fullResponse: response,
+            errorMessage: response?.error
           });
 
           if (response?.success && response?.data?.payment_url) {
+            console.log('✅ Payment initiation successful - returning payment URL');
             return {
               ...response,
               paymentUrl: response.data.payment_url // Ensure consistent property name
@@ -128,7 +147,7 @@ export const usePayment = () => {
 
           const errorMsg = response?.success 
             ? 'Failed to initiate payment: No payment URL in response' 
-            : 'Failed to initiate payment: API call failed';
+            : `Failed to initiate payment: ${response?.error || 'API call failed'}`;
           console.error(errorMsg, { response });
           throw new Error(errorMsg);
         } catch (apiError: any) {
@@ -145,17 +164,34 @@ export const usePayment = () => {
           throw apiError; // Re-throw to be caught by the outer catch
         }
       } catch (error: any) {
-        const errorMessage = error.response?.data?.message || 
-                           error.message || 
-                           'Payment processing failed. Please try again.';
+        // Handle specific HTTP status codes with user-friendly messages
+        let errorMessage = 'Payment processing failed. Please try again.';
+        
+        if (error.response?.status === 409) {
+          errorMessage = error.response.data?.message || 
+                        error.response.data?.error || 
+                        'This time slot is already booked. Please choose a different time.';
+        } else if (error.response?.status === 400) {
+          errorMessage = error.response.data?.message || 
+                        error.response.data?.error || 
+                        'Invalid booking details. Please check and try again.';
+        } else if (error.response?.status === 403) {
+          errorMessage = error.response.data?.message || 
+                        error.response.data?.error || 
+                        'Access denied. Please log in again.';
+        } else if (error.response?.data?.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
         
         console.error('Payment initiation error:', {
-          error: errorMessage,
-          stack: error.stack,
-          response: error.response?.data
+          message: errorMessage,
+          status: error.response?.status,
+          responseData: error.response?.data,
+          originalError: error
         });
         
-        setPaymentError(errorMessage);
         throw new Error(errorMessage);
       } finally {
         setIsProcessing(false);
