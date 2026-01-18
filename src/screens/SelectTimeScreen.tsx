@@ -261,10 +261,10 @@ const SelectTimeScreen = () => {
   if (error) {
     return (
       <View style={styles.errorContainer}>
-        <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
+        <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background.primary} />
         <View style={styles.errorContent}>
           <View style={styles.errorIcon}>
-            <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+            <Ionicons name="alert-circle-outline" size={48} color={theme.colors.feedback.error} />
           </View>
           <Text style={styles.errorTitle}>Oops!</Text>
           <Text style={styles.errorMessage}>{error}</Text>
@@ -279,7 +279,7 @@ const SelectTimeScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
+      <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background.primary} />
       
       {/* Professional Header */}
       <LinearGradient
@@ -425,7 +425,7 @@ const SelectTimeScreen = () => {
           onPress={handleConfirm}
         >
           <LinearGradient
-            colors={selectedSlot ? [theme.colors.primary, theme.colors.secondary] : ['#d1d5db', '#9ca3af']}
+            colors={selectedSlot ? [theme.colors.primary, theme.colors.secondary] : [theme.colors.text.secondary, theme.colors.background.secondary]}
             style={styles.buttonGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
@@ -433,7 +433,7 @@ const SelectTimeScreen = () => {
             <Ionicons 
               name="checkmark-circle-outline" 
               size={20} 
-              color={selectedSlot ? "#fff" : "#9ca3af"} 
+              color={selectedSlot ? theme.colors.background.surface : theme.colors.text.secondary} 
             />
             <Text style={[
               styles.confirmButtonText,
@@ -451,7 +451,7 @@ const SelectTimeScreen = () => {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: '#f8fafc' 
+    backgroundColor: theme.colors.background.primary 
   },
   loadingContainer: {
     flex: 1,
@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#fef2f2',
+    backgroundColor: theme.colors.feedback.error + '20',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
@@ -582,7 +582,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+    backgroundColor: 'rgba(0, 130, 114, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -629,7 +629,7 @@ const styles = StyleSheet.create({
   dayIndicator: {
     flex: 1,
     height: 2,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: theme.colors.colors?.border || '#E5E7EB',
     borderRadius: 1,
   },
   slotsContainer: {
@@ -647,11 +647,11 @@ const styles = StyleSheet.create({
   },
   selectedSlot: {
     borderLeftColor: theme.colors.primary,
-    backgroundColor: 'rgba(79, 70, 229, 0.05)',
+    backgroundColor: 'rgba(0, 130, 114, 0.05)',
     ...theme.shadows.large,
   },
   onlineSlot: {
-    borderLeftColor: '#10b981',
+    borderLeftColor: theme.colors.feedback.success,
   },
   slotContent: {
     flexDirection: 'row',
@@ -692,7 +692,7 @@ const styles = StyleSheet.create({
   durationText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#374151',
+    color: theme.colors.text.primary,
     fontFamily: 'System',
   },
   onlineBadge: {
@@ -728,7 +728,7 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: '#fff',
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: theme.colors.colors?.border || '#E5E7EB',
     paddingHorizontal: 24,
     paddingVertical: 20,
     ...theme.shadows.large,
@@ -757,7 +757,7 @@ const styles = StyleSheet.create({
   },
   discountText: {
     fontSize: 12,
-    color: '#10b981',
+    color: theme.colors.feedback.success,
     fontWeight: '600',
     marginTop: 4,
     fontFamily: 'System',
@@ -789,7 +789,7 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
   },
   disabledButtonText: {
-    color: '#9ca3af',
+    color: theme.colors.text.secondary,
   },
   // Compact Design Styles
   compactSlotsContainer: {
@@ -834,7 +834,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: theme.colors.colors?.border || '#E5E7EB',
     padding: 12,
     width: (width - 48 - 24) / 4, // 4 boxes per row accounting for padding and gaps
     alignItems: 'center',
@@ -846,7 +846,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.primary,
   },
   onlineCompactSlot: {
-    borderColor: '#10b981',
+    borderColor: theme.colors.feedback.success,
   },
   compactSlotContent: {
     alignItems: 'center',

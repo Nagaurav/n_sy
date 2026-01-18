@@ -218,15 +218,16 @@ const PaymentGatewayScreen = () => {
           });
         } else {
           // Handle pending or other statuses with retry logic
-          console.log(`⏳ Status is ${status}. Triggering FORCE SYNC...`);
+          console.log(`⏳ Status is ${status} (attempt ${currentRetry + 1}/${maxRetries})`);
           
-          // 🚀 CRITICAL FIX: Force backend to sync with PhonePe NOW
+          // 🚀 ADD THIS: Force backend to check with PhonePe immediately
+          // instead of waiting for webhook.
           if (paymentId) {
               try {
+                  console.log(`📡 Force syncing status with PhonePe for payment: ${paymentId}...`);
                   await apiService.syncPaymentStatus(paymentId);
-                  console.log("📡 Force sync triggered successfully");
-              } catch (e) {
-                  console.log("⚠️ Force sync failed, continuing retry loop");
+              } catch (err) {
+                  console.log(`⚠️ Force sync failed for payment: ${paymentId}, but continuing retry loop`);
               }
           }
 

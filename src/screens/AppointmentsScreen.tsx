@@ -227,32 +227,32 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
       case 'confirmed':
       case 'upcoming':
         return {
-          backgroundColor: '#E6F4F1',
+          backgroundColor: theme.colors.feedback.success + '20',
           textColor: theme.colors.primary,
           icon: 'calendar-check',
         };
       case 'completed':
         return {
-          backgroundColor: '#DCFCE7',
-          textColor: '#166534',
+          backgroundColor: theme.colors.feedback.success + '40',
+          textColor: theme.colors.feedback.success,
           icon: 'checkmark-done-circle',
         };
       case 'pending':
         return {
-          backgroundColor: '#FEF3C7',
-          textColor: '#92400E',
+          backgroundColor: theme.colors.feedback.warning + '20',
+          textColor: theme.colors.feedback.warning,
           icon: 'time',
         };
       case 'cancelled':
         return {
-          backgroundColor: '#FEE2E2',
-          textColor: '#B91C1C',
+          backgroundColor: theme.colors.feedback.error + '20',
+          textColor: theme.colors.feedback.error,
           icon: 'close-circle',
         };
       default:
         return {
-          backgroundColor: '#F8F9FA',
-          textColor: '#6B7280',
+          backgroundColor: theme.colors.background.secondary,
+          textColor: theme.colors.text.secondary,
           icon: 'help-circle',
         };
     }
@@ -394,16 +394,16 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
             {/* Professional Name */}
             {item.professional_name && (
               <View style={styles.iconTextRow}>
-                <Ionicons name="person-circle" size={18} color="#1E88E5" />
+                <Ionicons name="person-circle" size={18} color={theme.colors.primary} />
                 <Text style={styles.professionalName}>{item.professional_name}</Text>
               </View>
             )}
             <View style={styles.iconTextRow}>
-              <Ionicons name="calendar" size={18} color="#1E88E5" />
+              <Ionicons name="calendar" size={18} color={theme.colors.primary} />
               <Text style={styles.appointmentDate}>{formatDate(item.date)}</Text>
             </View>
             <View style={styles.iconTextRow}>
-              <Ionicons name="time" size={18} color="#1E88E5" />
+              <Ionicons name="time" size={18} color={theme.colors.primary} />
               <Text style={styles.appointmentTime}>{timeDisplay}</Text>
             </View>
           </View>
@@ -419,20 +419,20 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
 
         <View style={styles.cardDetails}>
           <View style={styles.detailRow}>
-            <Ionicons name="timer-outline" size={20} color="#6B7280" />
+            <Ionicons name="timer-outline" size={20} color={theme.colors.text.secondary} />
             <Text style={styles.detailLabel}>Duration:</Text>
             <Text style={styles.detailValue}>{item.duration} minutes</Text>
           </View>
 
           <View style={styles.detailRow}>
-            <Ionicons name="document-text-outline" size={20} color="#6B7280" />
+            <Ionicons name="document-text-outline" size={20} color={theme.colors.text.secondary} />
             <Text style={styles.detailLabel}>Booking ID:</Text>
             <Text style={styles.detailValue}>#{bookingId}</Text>
           </View>
 
           {item.mode && (
             <View style={styles.detailRow}>
-              <Ionicons name="videocam-outline" size={20} color="#6B7280" />
+              <Ionicons name="videocam-outline" size={20} color={theme.colors.text.secondary} />
               <Text style={styles.detailLabel}>Mode:</Text>
               <Text style={styles.detailValue}>{item.mode.toUpperCase()}</Text>
             </View>
@@ -440,7 +440,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
 
           {item.amount && (
             <View style={styles.detailRow}>
-              <Ionicons name="cash-outline" size={20} color="#6B7280" />
+              <Ionicons name="cash-outline" size={20} color={theme.colors.text.secondary} />
               <Text style={styles.detailLabel}>Amount:</Text>
               <Text style={styles.detailValue}>₹{item.amount}</Text>
             </View>
@@ -448,7 +448,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
 
           {item.coupon_code && (
             <View style={styles.detailRow}>
-              <Ionicons name="pricetag-outline" size={20} color="#6B7280" />
+              <Ionicons name="pricetag-outline" size={20} color={theme.colors.text.secondary} />
               <Text style={styles.detailLabel}>Coupon:</Text>
               <Text style={styles.detailValue}>{item.coupon_code}</Text>
             </View>
@@ -456,7 +456,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
 
           {item.payment_status && (
             <View style={styles.detailRow}>
-              <Ionicons name="card-outline" size={20} color="#6B7280" />
+              <Ionicons name="card-outline" size={20} color={theme.colors.text.secondary} />
               <Text style={styles.detailLabel}>Payment:</Text>
               <Text style={styles.detailValue}>{item.payment_status}</Text>
             </View>
@@ -474,7 +474,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
                 );
               }}
             >
-              <Ionicons name="information-circle" size={20} color="#1E88E5" />
+              <Ionicons name="information-circle" size={20} color={theme.colors.primary} />
               <Text style={styles.actionButtonText}>View Details</Text>
             </TouchableOpacity>
 
@@ -499,7 +499,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
                 );
               }}
             >
-              <Ionicons name="information-circle" size={20} color="#1E88E5" />
+              <Ionicons name="information-circle" size={20} color={theme.colors.primary} />
               <Text style={styles.actionButtonText}>View Details</Text>
             </TouchableOpacity>
           </View>
@@ -511,9 +511,9 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
   if (isLoading || authLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#1E88E5" />
+        <StatusBar barStyle="light-content" backgroundColor={theme.colors.primary} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#1E88E5" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>
             {authLoading ? 'Loading...' : 'Loading your appointments...'}
           </Text>
@@ -543,12 +543,12 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
       {error ? (
         <View style={styles.errorContainer}>
           <View style={styles.errorIconContainer}>
-            <Ionicons name="alert-circle" size={48} color="#EF4444" />
+            <Ionicons name="alert-circle" size={48} color={theme.colors.feedback.error} />
           </View>
           <Text style={styles.errorTitle}>Oops!</Text>
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={handleRefresh} style={styles.retryButton}>
-            <Ionicons name="refresh" size={20} color="#FFFFFF" />
+            <Ionicons name="refresh" size={20} color={theme.colors.background.surface} />
             <Text style={styles.retryText}>Try Again</Text>
           </TouchableOpacity>
         </View>
@@ -582,7 +582,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIconContainer}>
-                <Ionicons name="calendar-outline" size={64} color="#D1D5DB" />
+                <Ionicons name="calendar-outline" size={64} color={theme.colors.text.secondary} />
               </View>
               <Text style={styles.emptyTitle}>No Appointments Yet</Text>
               <Text style={styles.emptySubtext}>
@@ -596,7 +596,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
                   params: { screen: 'Home' }
                 })}
               >
-                <Ionicons name="add-circle" size={20} color="#FFFFFF" />
+                <Ionicons name="add-circle" size={20} color={theme.colors.background.surface} />
                 <Text style={styles.bookButtonText}>Book First Appointment</Text>
               </TouchableOpacity>
             </View>

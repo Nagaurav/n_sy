@@ -27,7 +27,14 @@ const ModernProfessionalCard: React.FC<ModernProfessionalCardProps> = ({
   onProfilePress,
 }) => {
   const fullName = `${professional.first_name} ${professional.last_name}`.trim() || 'Unknown Professional';
-  const speciality = professional.specialization || professional.speciality || 'General Practitioner';
+  const speciality = professional.speciality_new?.name || professional.speciality || professional.speciality || 
+    (professional.role === 'yoga_teacher' ? 'Yoga Teacher' : 
+     professional.role === 'yoga_instructor' ? 'Yoga Instructor' : 
+     professional.role === 'yoga_therapist' ? 'Yoga Therapist' : 
+     professional.role === 'center_owner' ? 'Center Owner' : 
+     professional.role === 'nutritionist' ? 'Nutritionist' : 
+     professional.role === 'personal_trainer' ? 'Personal Trainer' : 
+     professional.role === 'therapist' ? 'Therapist' : '');
   const location = [professional.city, professional.state].filter(Boolean).join(', ') || 'Location not specified';
   const rating = professional.rating || 0;
   const experience = professional.experience_years;

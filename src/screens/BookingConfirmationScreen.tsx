@@ -12,6 +12,8 @@ import {
   Linking,
   Platform,
   Animated,
+  Dimensions,
+  StatusBar,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useAppSelector } from '../store';
@@ -21,6 +23,7 @@ import { theme } from '../theme';
 import { usePayment } from '../hooks/usePayment';
 import { bookingService } from '../services';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import LinearGradient from 'react-native-linear-gradient';
 
 // Define the structure of data received via route.params
 interface BookingData {
@@ -111,6 +114,16 @@ const BookingConfirmationScreen = () => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const buttonScaleAnim = useRef(new Animated.Value(1)).current;
+  const loadingSpinAnim = useRef(new Animated.Value(0)).current;
+  const cardScaleAnim = useRef(new Animated.Value(0.8)).current;
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useRef(new Animated.Value(0)).current;
+  const card1Opacity = useRef(new Animated.Value(0)).current;
+  const card2Opacity = useRef(new Animated.Value(0)).current;
+  const card3Opacity = useRef(new Animated.Value(0)).current;
+  const card4Opacity = useRef(new Animated.Value(0)).current;
+  const { width, height } = Dimensions.get('window');
 
   // Debug: Log received booking data
   console.log('📦 BookingConfirmationScreen received bookingData:', bookingData);
@@ -155,19 +168,95 @@ const BookingConfirmationScreen = () => {
 
   // Animation functions
   const animateIn = useCallback(() => {
+    // Reset animations
+    fadeAnim.setValue(0);
+    slideAnim.setValue(30);
+    cardScaleAnim.setValue(0.8);
+    headerAnim.setValue(-50);
+    card1Opacity.setValue(0);
+    card2Opacity.setValue(0);
+    card3Opacity.setValue(0);
+    card4Opacity.setValue(0);
+    
+    // Header animation
+    Animated.timing(headerAnim, {
+      toValue: 0,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+    
+    // Main content animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 600,
+        duration: 800,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 600,
+        duration: 800,
         useNativeDriver: true,
       }),
     ]).start();
-  }, [fadeAnim, slideAnim]);
+    
+    // Staggered card animations
+    const cardAnimations = [
+      { value: card1Opacity, delay: 200 },
+      { value: card2Opacity, delay: 300 },
+      { value: card3Opacity, delay: 400 },
+      { value: card4Opacity, delay: 500 },
+    ];
+    
+    cardAnimations.forEach(({ value, delay }) => {
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.parallel([
+          Animated.timing(value, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(cardScaleAnim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start();
+    });
+    
+    // Start pulse effect for primary button
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+    
+    // Start shimmer effect
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: false,
+        }),
+        Animated.timing(shimmerAnim, {
+          toValue: 0,
+          duration: 1500,
+          useNativeDriver: false,
+        }),
+      ])
+    ).start();
+  }, [fadeAnim, slideAnim, cardScaleAnim, shimmerAnim, pulseAnim, headerAnim, card1Opacity, card2Opacity, card3Opacity, card4Opacity]);
 
   const animateButtonPress = useCallback(() => {
     Animated.sequence([
@@ -183,6 +272,36 @@ const BookingConfirmationScreen = () => {
       }),
     ]).start();
   }, [buttonScaleAnim]);
+
+  const animateCardHover = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(cardScaleAnim, {
+        toValue: 1.05,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(pulseAnim, {
+        toValue: 0.5,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [cardScaleAnim, pulseAnim]);
+
+  // Loading spin animation
+  useEffect(() => {
+    if (isLoading || isPaymentProcessing) {
+      Animated.loop(
+        Animated.timing(loadingSpinAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        })
+      ).start();
+    } else {
+      loadingSpinAnim.setValue(0);
+    }
+  }, [isLoading, isPaymentProcessing, loadingSpinAnim]);
 
   // Trigger animation on mount
   useEffect(() => {
@@ -524,16 +643,35 @@ const BookingConfirmationScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
+      <StatusBar barStyle="light-content" backgroundColor={theme.colors.primary} />
+      
+      {/* Premium Header with Gradient */}
+      <LinearGradient
+        colors={[theme.colors.primary, theme.colors.secondary]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.gradientHeader}
+      >
+        <Animated.View 
+          style={[
+            styles.headerContent,
+            {
+              transform: [{ translateY: headerAnim }],
+            },
+          ]}
         >
-          <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Confirm Booking</Text>
-      </View>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Confirm Booking</Text>
+          <View style={styles.headerIcon}>
+            <Ionicons name="checkmark-circle" size={24} color={theme.colors.background.surface} />
+          </View>
+        </Animated.View>
+      </LinearGradient>
 
       <ScrollView 
         style={styles.scrollView}
@@ -551,101 +689,199 @@ const BookingConfirmationScreen = () => {
         >
           {isLoading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.colors.primary} />
-              <Text style={styles.loadingText}>Processing your booking...</Text>
+              <View style={styles.loadingContent}>
+                <Animated.View 
+                  style={[
+                    styles.loadingIcon,
+                    {
+                      transform: [{ rotate: loadingSpinAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '360deg']
+                      })}]
+                    }
+                  ]}
+                >
+                  <Ionicons name="sync" size={32} color={theme.colors.primary} />
+                </Animated.View>
+                <Text style={styles.loadingText}>Processing your booking...</Text>
+                <Text style={styles.loadingSubtext}>Please wait while we confirm your details</Text>
+              </View>
+              
+              {/* Shimmer placeholders */}
+              <View style={styles.shimmerContainer}>
+                <View style={[styles.shimmerCard, styles.shimmerPlaceholder]} />
+                <View style={[styles.shimmerCard, styles.shimmerPlaceholder]} />
+                <View style={[styles.shimmerCard, styles.shimmerPlaceholder]} />
+              </View>
             </View>
           ) : error ? (
             <View style={styles.errorContainer}>
-              <Ionicons name="alert-circle" size={48} color={theme.colors.feedback.error} />
+              <LinearGradient
+                colors={['rgba(239, 68, 68, 0.1)', 'rgba(239, 68, 68, 0.05)']}
+                style={styles.errorGradient}
+              >
+                <Ionicons name="alert-circle" size={48} color={theme.colors.feedback.error} />
+              </LinearGradient>
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : (
             <>
               {/* Professional Info Card */}
-              <View style={styles.bookingCard}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.iconContainer}>
-                    <Ionicons name="person-circle" size={24} color={theme.colors.primary} />
-                  </View>
-                  <View style={styles.cardHeaderContent}>
-                    <Text style={styles.cardTitle}>Professional</Text>
-                    <Text style={styles.cardValue}>{bookingData?.professionalName}</Text>
+              <Animated.View 
+                style={[
+                  styles.bookingCard,
+                  {
+                    transform: [{ scale: cardScaleAnim }],
+                  },
+                ]}
+              >
+                <LinearGradient
+                  colors={['rgba(0, 130, 114, 0.05)', 'rgba(0, 130, 114, 0.02)']}
+                  style={styles.cardGradient}
+                />
+                <View style={styles.cardContent}>
+                  <View style={styles.cardHeader}>
+                    <View style={styles.iconContainer}>
+                      <LinearGradient
+                        colors={[theme.colors.primary, theme.colors.secondary]}
+                        style={styles.iconGradient}
+                      >
+                        <Ionicons name="person-circle" size={24} color={theme.colors.background.surface} />
+                      </LinearGradient>
+                    </View>
+                    <View style={styles.cardHeaderContent}>
+                      <Text style={styles.cardTitle}>Professional</Text>
+                      <Text style={styles.cardValue}>{bookingData?.professionalName}</Text>
+                    </View>
                   </View>
                 </View>
-              </View>
+              </Animated.View>
 
               {/* Service Details Card */}
               {(bookingData?.serviceDetails || bookingData?.planTitle) && (
-                <View style={styles.bookingCard}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.iconContainer}>
-                      <Ionicons name="medical" size={24} color={theme.colors.primary} />
-                    </View>
-                    <View style={styles.cardHeaderContent}>
-                      <Text style={styles.cardTitle}>Service</Text>
-                      <Text style={styles.cardValue}>
-                        {bookingData.serviceDetails?.name || bookingData.planTitle || 'Yoga Session'}
-                      </Text>
-                      <Text style={styles.cardSubtext}>
-                        Duration: {bookingData.duration || bookingData.serviceDetails?.duration || 'N/A'} minutes
-                      </Text>
+                <Animated.View 
+                  style={[
+                    styles.bookingCard,
+                    {
+                      transform: [{ scale: cardScaleAnim }],
+                    },
+                  ]}
+                >
+                  <LinearGradient
+                    colors={['rgba(0, 130, 114, 0.05)', 'rgba(0, 130, 114, 0.02)']}
+                    style={styles.cardGradient}
+                  />
+                  <View style={styles.cardContent}>
+                    <View style={styles.cardHeader}>
+                      <View style={styles.iconContainer}>
+                        <LinearGradient
+                          colors={[theme.colors.primary, theme.colors.secondary]}
+                          style={styles.iconGradient}
+                        >
+                          <Ionicons name="medical" size={24} color={theme.colors.background.surface} />
+                        </LinearGradient>
+                      </View>
+                      <View style={styles.cardHeaderContent}>
+                        <Text style={styles.cardTitle}>Service</Text>
+                        <Text style={styles.cardValue}>
+                          {bookingData.serviceDetails?.name || bookingData.planTitle || 'Yoga Session'}
+                        </Text>
+                        <Text style={styles.cardSubtext}>
+                          Duration: {bookingData.duration || bookingData.serviceDetails?.duration || 'N/A'} minutes
+                        </Text>
+                      </View>
                     </View>
                   </View>
-                </View>
+                </Animated.View>
               )}
 
               {/* Session Details Card */}
-              <View style={styles.bookingCard}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.iconContainer}>
-                    <Ionicons name="calendar" size={24} color={theme.colors.primary} />
-                  </View>
-                  <View style={styles.cardHeaderContent}>
-                    <Text style={styles.cardTitle}>Session Details</Text>
-                  </View>
-                </View>
+              <Animated.View 
+                style={[
+                  styles.bookingCard,
+                  {
+                    transform: [{ scale: cardScaleAnim }],
+                  },
+                ]}
+              >
+                <LinearGradient
+                  colors={['rgba(0, 130, 114, 0.05)', 'rgba(0, 130, 114, 0.02)']}
+                  style={styles.cardGradient}
+                />
                 <View style={styles.cardContent}>
-                  {bookingData?.startDate && (
-                    <View style={styles.detailRow}>
-                      <Ionicons name="calendar-outline" size={20} color="#666" />
-                      <Text style={styles.detailLabel}>Date:</Text>
-                      <Text style={styles.detailValue}>
-                        {new Date(bookingData.startDate).toLocaleDateString()}
-                      </Text>
+                  <View style={styles.cardHeader}>
+                    <View style={styles.iconContainer}>
+                      <LinearGradient
+                        colors={[theme.colors.primary, theme.colors.secondary]}
+                        style={styles.iconGradient}
+                      >
+                        <Ionicons name="calendar" size={24} color={theme.colors.background.surface} />
+                      </LinearGradient>
                     </View>
-                  )}
-                  {bookingData?.startTime && (
-                    <View style={styles.detailRow}>
-                      <Ionicons name="time-outline" size={20} color="#666" />
-                      <Text style={styles.detailLabel}>Time:</Text>
-                      <Text style={styles.detailValue}>
-                        {formatTime(bookingData.startTime)}
-                        {bookingData?.endTime ? ` - ${formatTime(bookingData.endTime)}` : ''}
-                      </Text>
+                    <View style={styles.cardHeaderContent}>
+                      <Text style={styles.cardTitle}>Session Details</Text>
                     </View>
-                  )}
-                  {bookingData?.location && (
-                    <View style={styles.detailRow}>
-                      <Ionicons name="location-outline" size={20} color="#666" />
-                      <Text style={styles.detailLabel}>Location:</Text>
-                      <Text style={styles.detailValue}>{bookingData.location}</Text>
-                    </View>
-                  )}
-                  {bookingData?.sessionModeLabel && (
-                    <View style={styles.detailRow}>
-                      <Ionicons name="videocam-outline" size={20} color="#666" />
-                      <Text style={styles.detailLabel}>Session Type:</Text>
-                      <Text style={styles.detailValue}>{bookingData.sessionModeLabel}</Text>
-                    </View>
-                  )}
+                  </View>
+                  <View style={styles.detailContent}>
+                    {bookingData?.startDate && (
+                      <View style={styles.detailRow}>
+                        <Ionicons name="calendar-outline" size={20} color="#666" />
+                        <Text style={styles.detailLabel}>Date:</Text>
+                        <Text style={styles.detailValue}>
+                          {new Date(bookingData.startDate).toLocaleDateString()}
+                        </Text>
+                      </View>
+                    )}
+                    {bookingData?.startTime && (
+                      <View style={styles.detailRow}>
+                        <Ionicons name="time-outline" size={20} color="#666" />
+                        <Text style={styles.detailLabel}>Time:</Text>
+                        <Text style={styles.detailValue}>
+                          {formatTime(bookingData.startTime)}
+                          {bookingData?.endTime ? ` - ${formatTime(bookingData.endTime)}` : ''}
+                        </Text>
+                      </View>
+                    )}
+                    {bookingData?.location && (
+                      <View style={styles.detailRow}>
+                        <Ionicons name="location-outline" size={20} color="#666" />
+                        <Text style={styles.detailLabel}>Location:</Text>
+                        <Text style={styles.detailValue}>{bookingData.location}</Text>
+                      </View>
+                    )}
+                    {bookingData?.sessionModeLabel && (
+                      <View style={styles.detailRow}>
+                        <Ionicons name="videocam-outline" size={20} color="#666" />
+                        <Text style={styles.detailLabel}>Session Type:</Text>
+                        <Text style={styles.detailValue}>{bookingData.sessionModeLabel}</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </View>
+              </Animated.View>
 
               {/* Coupon Code Card */}
-              <View style={styles.bookingCard}>
+              <Animated.View 
+                style={[
+                  styles.bookingCard,
+                  {
+                    opacity: card4Opacity,
+                    transform: [{ scale: cardScaleAnim }],
+                  },
+                ]}
+              >
+                <LinearGradient
+                  colors={['rgba(0, 130, 114, 0.05)', 'rgba(0, 130, 114, 0.02)']}
+                  style={styles.cardGradient}
+                />
                 <View style={styles.cardHeader}>
                   <View style={styles.iconContainer}>
-                    <Ionicons name="pricetag" size={24} color={theme.colors.primary} />
+                    <LinearGradient
+                      colors={[theme.colors.primary, theme.colors.secondary]}
+                      style={styles.iconGradient}
+                    >
+                      <Ionicons name="pricetag" size={24} color={theme.colors.background.surface} />
+                    </LinearGradient>
                   </View>
                   <View style={styles.cardHeaderContent}>
                     <Text style={styles.cardTitle}>Apply Coupon</Text>
@@ -681,13 +917,30 @@ const BookingConfirmationScreen = () => {
                     </TouchableOpacity>
                   )}
                 </View>
-              </View>
+              </Animated.View>
 
               {/* Price Summary Card */}
-              <View style={styles.bookingCard}>
+              <Animated.View 
+                style={[
+                  styles.bookingCard,
+                  {
+                    opacity: card4Opacity,
+                    transform: [{ scale: cardScaleAnim }],
+                  },
+                ]}
+              >
+                <LinearGradient
+                  colors={['rgba(0, 130, 114, 0.05)', 'rgba(0, 130, 114, 0.02)']}
+                  style={styles.cardGradient}
+                />
                 <View style={styles.cardHeader}>
                   <View style={styles.iconContainer}>
-                    <Ionicons name="cash" size={24} color={theme.colors.primary} />
+                    <LinearGradient
+                      colors={[theme.colors.primary, theme.colors.secondary]}
+                      style={styles.iconGradient}
+                    >
+                      <Ionicons name="cash" size={24} color={theme.colors.background.surface} />
+                    </LinearGradient>
                   </View>
                   <View style={styles.cardHeaderContent}>
                     <Text style={styles.cardTitle}>Price Summary</Text>
@@ -709,9 +962,9 @@ const BookingConfirmationScreen = () => {
                     <Text style={styles.totalValue}>₹{priceDetails.final_amount.toFixed(2)}</Text>
                   </View>
                 </View>
-              </View>
+              </Animated.View>
 
-              {/* Action Buttons */}
+              {/* Premium Action Buttons */}
               <View style={styles.buttonContainer}>
                 <TouchableOpacity
                   style={[styles.secondaryButton]}
@@ -722,25 +975,30 @@ const BookingConfirmationScreen = () => {
                   <Text style={styles.secondaryButtonText}>Back</Text>
                 </TouchableOpacity>
                 <Animated.View style={{ transform: [{ scale: buttonScaleAnim }] }}>
-                  <TouchableOpacity
+                  <LinearGradient
+                    colors={[theme.colors.primary, theme.colors.secondary]}
                     style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
-                    onPress={() => {
-                      animateButtonPress();
-                      handleConfirmBooking();
-                    }}
-                    disabled={isLoading}
                   >
-                    {isLoading || isPaymentProcessing ? (
-                      <ActivityIndicator color="#fff" size="small" />
-                    ) : (
-                      <>
-                        <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                        <Text style={styles.primaryButtonText}>
-                          Confirm & Pay {formatPrice(priceDetails.final_amount)}
-                        </Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.primaryButtonContent}
+                      onPress={() => {
+                        animateButtonPress();
+                        handleConfirmBooking();
+                      }}
+                      disabled={isLoading}
+                    >
+                      {isLoading || isPaymentProcessing ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <>
+                          <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                          <Text style={styles.primaryButtonText}>
+                            Confirm & Pay {formatPrice(priceDetails.final_amount)}
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </LinearGradient>
                 </Animated.View>
               </View>
             </>
@@ -759,20 +1017,22 @@ const styles = StyleSheet.create({
   },
   
   // Header Styles
-  header: {
-    backgroundColor: theme.colors.primary,
+  gradientHeader: {
     paddingTop: 60,
     paddingBottom: 20,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   backButton: {
     padding: 8,
@@ -785,6 +1045,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: theme.colors.background.surface,
     letterSpacing: 0.3,
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerIcon: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
 
   // ScrollView
@@ -808,11 +1075,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 40,
   },
+  loadingContent: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  loadingIcon: {
+    marginBottom: 20,
+  },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  loadingSubtext: {
+    fontSize: 14,
     color: theme.colors.text.secondary,
-    fontWeight: '500',
+    textAlign: 'center',
+  },
+  shimmerContainer: {
+    width: '100%',
+    gap: 16,
+  },
+  shimmerCard: {
+    height: 80,
+    borderRadius: theme.borderRadius.l,
+    backgroundColor: theme.colors.background.surface,
+  },
+  shimmerPlaceholder: {
+    backgroundColor: '#F3F4F6',
   },
 
   // Error State
@@ -821,6 +1113,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 40,
+  },
+  errorGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   errorText: {
     marginTop: 16,
@@ -841,23 +1141,46 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  cardGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: theme.borderRadius.l,
+    zIndex: 0,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
+    zIndex: 1,
+    position: 'relative',
   },
   iconContainer: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(0, 130, 114, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
+    zIndex: 2,
+    position: 'relative',
+  },
+  iconGradient: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   cardHeaderContent: {
     flex: 1,
+    zIndex: 1,
+    position: 'relative',
   },
   cardTitle: {
     fontSize: 18,
@@ -877,6 +1200,13 @@ const styles = StyleSheet.create({
   },
   cardContent: {
     paddingTop: 8,
+    zIndex: 1,
+    position: 'relative',
+  },
+  detailContent: {
+    paddingTop: 8,
+    zIndex: 1,
+    position: 'relative',
   },
 
   // Detail Rows
@@ -989,19 +1319,22 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     flex: 2,
+    borderRadius: theme.borderRadius.m,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+    overflow: 'hidden',
+  },
+  primaryButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: theme.colors.primary,
     paddingVertical: 14,
     paddingHorizontal: 24,
-    borderRadius: theme.borderRadius.m,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    minHeight: 56,
   },
   primaryButtonText: {
     color: theme.colors.background.surface,

@@ -175,12 +175,16 @@ export const bookingService = {
       // Get all available slots for the professional
       const response = await apiClient.get('/user/check-slot/checkAvailability', {
         params: { 
-          professional_id: professionalId 
+          professional_id: professionalId,
+          // 🟢 FIX 1: Add limit to fetch ALL slots, not just the first 10
+          limit: 1000
         }
       });
 
-      // Check if the specific slot is in the available slots
-      const availableSlots = response.data?.data || [];
+      // 🟢 FIX 2: Read 'slots', not 'data'
+      // The backend returns { success: true, slots: [...], pagination: ... }
+      const availableSlots = response.data?.slots || [];
+      
       const targetSlot = availableSlots.find((slot: any) => 
         slot.id === Number(slotId) || slot.slot_id === Number(slotId)
       );
