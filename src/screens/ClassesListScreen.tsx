@@ -7,215 +7,115 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Modal,
-  TextInput,
   ScrollView,
   Dimensions,
-  Platform,
-  PermissionsAndroid,
   Alert,
-  AccessibilityInfo,
-  findNodeHandle
+  ImageBackground,
+  TextInput,
+  StatusBar,
+  SafeAreaView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import Geolocation from 'react-native-geolocation-service';
-
+import LinearGradient from 'react-native-linear-gradient';
+import { theme } from '../theme';
 import { apiService } from '../services';
 import { YogaClass, YogaClassesFilters, PaginationInfo } from '../types/yogaClasses';
 import { HomeStackParamList } from '../types/navigation';
-import { theme } from '../theme';
-import CollapsibleCard from '../components/CollapsibleCard';
 
 type ClassesListScreenNavigationProp = StackNavigationProp<HomeStackParamList, 'ClassesList'>;
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 const ClassesListScreen = () => {
   const navigation = useNavigation<ClassesListScreenNavigationProp>();
   
   const [classes, setClasses] = useState<YogaClass[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<YogaClassesFilters>({
     page: 1,
     limit: 10,
     sort_by: 'effective_price',
   });
   const [paginationInfo, setPaginationInfo] = useState<PaginationInfo | null>(null);
-  const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  // Request location permission and get current position
-  const requestLocationPermission = useCallback(async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: 'Location Permission',
-            message: 'This app needs access to your location to show nearby classes.',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          },
-        );
-        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-          return true;
-        } else {
-          console.log('Location permission denied');
-          return false;
-        }
-      } catch (err) {
-        console.warn('Error requesting location permission:', err);
-        return false;
-      }
-    }
-    return true; // For iOS, we'll rely on the native permission prompt
-  }, []);
+  // Categories for quick filter
+  const categories = [
+    { id: 'all', name: 'All Classes', icon: 'grid' },
+    { id: 'group_online', name: 'Group Online', icon: 'people' },
+    { id: 'group_offline', name: 'Group In-Person', icon: 'location' },
+    { id: 'one_to_one_online', name: '1:1 Online', icon: 'videocam' },
+    { id: 'one_to_one_offline', name: '1:1 In-Person', icon: 'person' },
+    { id: 'home_visit', name: 'Home Visit', icon: 'home' },
+  ];
 
-  // Location handling with react-native-geolocation-service
-  const getCurrentLocation = useCallback(async () => {
-    const hasPermission = await requestLocationPermission();
-    if (!hasPermission) {
-      setError('Location permission is required for nearby class features');
-      return;
-    }
-
-    try {
-      const position = await new Promise<Geolocation.GeoPosition>((resolve, reject) => {
-        Geolocation.getCurrentPosition(
-          resolve,
-          reject,
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-        );
-      });
-
-      setUserLocation({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude
-      });
-    } catch (error: any) {
-      console.error('Error getting location:', error);
-      setError('Could not get your location. Showing all classes.');
-    }
-  }, [requestLocationPermission]);
-
-  // Get location when component mounts or when sort changes to near_to_far
-  useEffect(() => {
-    if (filters.sort_by === 'near_to_far') {
-      getCurrentLocation();
-    }
-  }, [filters.sort_by, getCurrentLocation]);
-
-  // Fetch classes with current filters and retry logic
+  // Fetch classes from API
   const fetchClasses = useCallback(async (isRefreshing = false) => {
-    const MAX_RETRIES = 3;
-    let retryCount = 0;
-    let lastError: Error | null = null;
-
-    const attemptFetch = async (): Promise<void> => {
-      try {
-        if (isFetchingMore || (paginationInfo && filters.page && filters.page > paginationInfo.pages)) {
-          return;
-        }
-
+    console.log('fetchClasses called with:', { isRefreshing, filters, searchQuery, selectedCategory });
+    try {
+      if (isRefreshing) {
+        setIsRefreshing(true);
+      } else {
         setIsLoading(true);
-        setError(null);
+      }
+      setError(null);
 
-        const filtersWithLocation = { ...filters };
-        if (filters.sort_by === 'near_to_far' && userLocation) {
-          filtersWithLocation.latitude = userLocation.latitude;
-          filtersWithLocation.longitude = userLocation.longitude;
-        }
+      const filtersWithSearch = { ...filters };
+      if (searchQuery) {
+        filtersWithSearch.title = searchQuery;
+      }
+      if (selectedCategory !== 'all') {
+        filtersWithSearch.delivery_mode = selectedCategory as any;
+      }
 
-        const response = await apiService.getYogaClasses(filtersWithLocation);
+      const response = await apiService.getYogaClasses(filtersWithSearch);
+      console.log('API Response:', response);
+      
+      if (response?.success && response?.data) {
+        const classesData = response.data;
+        console.log('Classes data:', classesData);
         
-        if (response?.success && response?.data) {
-          const classesData = response.data;
-          
-          // Handle both array and paginated response formats
-          if (Array.isArray(classesData)) {
-            // Direct array response
-            const classesArray = classesData as YogaClass[];
-            if (filters.page === 1 || isRefreshing) {
-              setClasses(classesArray || []);
-            } else {
-              setClasses(prev => [...prev, ...(classesArray || [])]);
-            }
-            // Set basic pagination info for array responses
+        // Handle both array and paginated response formats
+        if (Array.isArray(classesData)) {
+          setClasses(classesData || []);
+          setPaginationInfo({
+            page: filters.page || 1,
+            limit: 20,
+            total: classesData?.length || 0,
+            pages: 1
+          });
+        } else {
+          const paginatedResponse = classesData as any;
+          if (paginatedResponse.data && paginatedResponse.pagination) {
+            setPaginationInfo(paginatedResponse.pagination);
+            setClasses(paginatedResponse.data || []);
+          } else if (paginatedResponse.data) {
+            setClasses(paginatedResponse.data || []);
             setPaginationInfo({
               page: filters.page || 1,
               limit: 20,
-              total: classesArray?.length || 0,
+              total: paginatedResponse.data?.length || 0,
               pages: 1
             });
-          } else {
-            // Paginated response with nested structure
-            const paginatedResponse = classesData as any;
-            if (paginatedResponse.data && paginatedResponse.pagination) {
-              setPaginationInfo(paginatedResponse.pagination);
-              
-              if (filters.page === 1 || isRefreshing) {
-                setClasses(paginatedResponse.data || []);
-              } else {
-                setClasses(prev => [...prev, ...(paginatedResponse.data || [])]);
-              }
-            }
           }
-          return; // Success, exit retry loop
-        } else {
-          throw new Error('No data in response');
         }
-      } catch (err) {
-        lastError = err as Error;
-        console.error(`Attempt ${retryCount + 1} failed:`, err);
-        
-        if (retryCount < MAX_RETRIES - 1) {
-          // Exponential backoff: 1s, 2s, 4s, etc.
-          const delay = 1000 * Math.pow(2, retryCount);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          retryCount++;
-          return attemptFetch(); // Retry
-        }4
-        throw lastError; // Max retries reached
-      } finally {
-        if (retryCount >= MAX_RETRIES - 1) {
-          setIsLoading(false);
-          setIsFetchingMore(false);
-          setIsRefreshing(false);
-        }
+      } else {
+        throw new Error('No data in response');
       }
-    };
-
-    try {
-      await attemptFetch();
     } catch (err) {
-      console.error('All fetch attempts failed:', err);
-      let errorMessage = 'Failed to fetch classes. Please check your connection and try again.';
-      
-      if (lastError) {
-        if (typeof lastError === 'object' && lastError !== null) {
-          errorMessage = (lastError as Error).message || JSON.stringify(lastError);
-        } else {
-          errorMessage = String(lastError);
-        }
-      } else if (err instanceof Error) {
-        errorMessage = err.message;
-      } else if (typeof err === 'string') {
-        errorMessage = err;
-      }
-      
-      setError(errorMessage);
+      console.error('Error fetching classes:', err);
+      setError('Failed to load classes. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
-      setIsFetchingMore(false);
       setIsRefreshing(false);
     }
-  }, [filters, userLocation, isFetchingMore, paginationInfo]);
+  }, [filters, searchQuery, selectedCategory]);
 
   // Initial fetch
   useEffect(() => {
@@ -227,33 +127,12 @@ const ClassesListScreen = () => {
     setFilters(prev => ({ ...prev, page: 1 }));
   }, []);
 
-  // Handle loading more data when reaching the end of the list
-  const handleLoadMore = () => {
-    if (!isLoading && !isFetchingMore && paginationInfo && filters.page && filters.page < paginationInfo.pages) {
-      setFilters(prev => ({
-        ...prev,
-        page: (prev.page || 1) + 1,
-      }));
-    }
-  };
-
-  // Handle applying filters
-  const handleApplyFilters = (appliedFilters: Partial<YogaClassesFilters>) => {
-    setFilters(prev => ({
-      ...prev,
-      ...appliedFilters,
-      page: 1, // Reset to first page when filters change
-    }));
-    setShowFilters(false);
-  };
-
-  // Handle class card press with error boundary
+  // Handle class card press
   const handleClassPress = useCallback((classItem: YogaClass) => {
     try {
       if (!classItem.professional_id) {
         throw new Error('Professional ID is missing');
       }
-      // 🚀 Navigate to ClassDetails instead of ProfessionalProfile
       navigation.navigate('ClassDetails', { 
         classData: classItem 
       });
@@ -267,163 +146,255 @@ const ClassesListScreen = () => {
     }
   }, [navigation]);
 
-  // Memoized price formatter to prevent recreation on each render
+  // Format price display
   const formatPrice = useCallback((price: number | null) => {
     if (price === null) return 'Price not available';
     return `₹${price.toLocaleString()}`;
   }, []);
 
-  // Memoized class item component for better performance
-  const ClassItem = React.memo(({ item, onPress }: { item: YogaClass; onPress: (item: YogaClass) => void }) => {
-    const viewRef = React.useRef<View>(null);
+  // Get available delivery modes for a class
+  const getAvailableModes = useCallback((classItem: YogaClass) => {
+    const modes = [];
+    if (classItem.group_online) modes.push('Group Online');
+    if (classItem.group_offline) modes.push('Group In-Person');
+    if (classItem.one_to_one_online) modes.push('1:1 Online');
+    if (classItem.one_to_one_offline) modes.push('1:1 In-Person');
+    if (classItem.home_visit) modes.push('Home Visit');
+    return modes;
+  }, []);
+
+  // Get effective price based on delivery mode
+  const getEffectivePrice = useCallback((classItem: YogaClass) => {
+    if (classItem.effective_price) return classItem.effective_price;
     
-    // Set accessibility focus when the component mounts
-    useEffect(() => {
-      if (viewRef.current) {
-        const reactTag = findNodeHandle(viewRef.current);
-        if (reactTag) {
-          setTimeout(() => {
-            AccessibilityInfo.setAccessibilityFocus(reactTag);
-          }, 100);
-        }
-      }
-    }, [item.id]);
+    // Fallback to minimum available price
+    const prices = [
+      classItem.price_group_online,
+      classItem.price_group_offline,
+      classItem.price_one_to_one_online,
+      classItem.price_one_to_one_offline,
+      classItem.price_home_visit,
+    ].filter(p => p !== null) as number[];
+    
+    return prices.length > 0 ? Math.min(...prices) : null;
+  }, []);
+
+  // Render class card
+  const renderClassItem = useCallback(({ item }: { item: YogaClass }) => {
+    const availableModes = getAvailableModes(item);
+    const effectivePrice = getEffectivePrice(item);
+    const imageUrl = item.location ? 'https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=800' : 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800';
 
     return (
       <TouchableOpacity 
-        ref={viewRef}
         style={styles.classCard}
-        onPress={() => onPress(item)}
-        accessible={true}
-        accessibilityRole="button"
-        accessibilityLabel={`${item.title}. ${item.description}. ${formatPrice(item.effective_price)}. ${item.duration.replace('_', ' ')}. ${item.days}. ${item.city ? `Located in ${item.city}.` : ''}${item.disease ? ` Specializes in ${item.disease}.` : ''}`}
-        accessibilityHint="Double tap to view professional details"
+        onPress={() => handleClassPress(item)}
+        activeOpacity={0.9}
       >
-        <View style={styles.classHeader}>
-          <Text 
-            style={styles.classTitle} 
-            numberOfLines={1}
-            accessibilityElementsHidden={true} // Hide from accessibility tree as we're handling it at the parent level
-          >
+        {/* Class Image */}
+        <ImageBackground source={{ uri: imageUrl }} style={styles.classImage} imageStyle={styles.classImageBorder}>
+          <View style={styles.imageOverlay}>
+            {/* Price Badge */}
+            <View style={styles.priceBadge}>
+              <Text style={styles.priceText}>{formatPrice(effectivePrice)}</Text>
+            </View>
+            
+            {/* Category Badge */}
+            {item.is_disease_specific && item.disease && (
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryBadgeText}>{item.disease}</Text>
+              </View>
+            )}
+          </View>
+        </ImageBackground>
+
+        {/* Class Content */}
+        <View style={styles.classContent}>
+          {/* Title */}
+          <Text style={styles.classTitle} numberOfLines={2}>
             {item.title}
           </Text>
-          <Text 
-            style={styles.classPrice}
-            accessibilityElementsHidden={true}
-          >
-            {formatPrice(item.effective_price)}
+
+          {/* Description */}
+          <Text style={styles.classDescription} numberOfLines={2}>
+            {item.description}
           </Text>
-        </View>
-        
-        <CollapsibleCard
-          title="Class Description"
-          content={(
-            <Text style={styles.classDescription} accessibilityElementsHidden={true}>
-              {item.description}
-            </Text>
-          )}
-        />
-        
-        <View style={styles.classMeta}>
-          <View style={styles.metaItem} accessibilityElementsHidden={true}>
-            <Ionicons name="time-outline" size={16} color="#666" />
-            <Text style={styles.metaText}>{item.duration.replace('_', ' ')}</Text>
+
+          {/* Meta Information */}
+          <View style={styles.metaContainer}>
+            <View style={styles.metaItem}>
+              <Ionicons name="time-outline" size={16} color="#666" />
+              <Text style={styles.metaText}>{item.duration.replace('_', ' ')}</Text>
+            </View>
+            
+            <View style={styles.metaItem}>
+              <Ionicons name="calendar-outline" size={16} color="#666" />
+              <Text style={styles.metaText} numberOfLines={1}>{item.days}</Text>
+            </View>
+            
+            {item.city && (
+              <View style={styles.metaItem}>
+                <Ionicons name="location-outline" size={16} color="#666" />
+                <Text style={styles.metaText} numberOfLines={1}>{item.city}</Text>
+              </View>
+            )}
           </View>
-          
-          <View style={styles.metaItem} accessibilityElementsHidden={true}>
-            <Ionicons name="calendar-outline" size={16} color="#666" />
-            <Text style={styles.metaText} numberOfLines={1}>{item.days}</Text>
+
+          {/* Available Modes */}
+          <View style={styles.modesContainer}>
+            <Text style={styles.modesLabel}>Available Modes:</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.modesScroll}>
+              {availableModes.map((mode, index) => (
+                <View key={index} style={styles.modeChip}>
+                  <Text style={styles.modeText}>{mode}</Text>
+                </View>
+              ))}
+            </ScrollView>
           </View>
-          
-          {item.city && (
-            <View style={styles.metaItem} accessibilityElementsHidden={true}>
-              <Ionicons name="location-outline" size={16} color="#666" />
-              <Text style={styles.metaText} numberOfLines={1}>{item.city}</Text>
+
+          {/* Languages */}
+          {item.languages && (
+            <View style={styles.languagesContainer}>
+              <Ionicons name="language-outline" size={16} color="#666" />
+              <Text style={styles.languagesText}>{item.languages}</Text>
             </View>
           )}
         </View>
-        
-        {item.disease && (
-          <View style={styles.tag} accessibilityElementsHidden={true}>
-            <Text style={styles.tagText}>{item.disease}</Text>
-          </View>
-        )}
+
+        {/* Footer */}
+        <View style={styles.classFooter}>
+          <TouchableOpacity style={styles.viewButton} onPress={() => handleClassPress(item)}>
+            <Text style={styles.viewButtonText}>View Details</Text>
+            <Ionicons name="arrow-forward" size={16} color="#4CAF50" />
+          </TouchableOpacity>
+        </View>
       </TouchableOpacity>
     );
-  });
+  }, [handleClassPress, getAvailableModes, getEffectivePrice, formatPrice]);
 
-  // Memoize the class item renderer to prevent unnecessary re-renders
-  const renderClassItem = useCallback(({ item }: { item: YogaClass }) => (
-    <ClassItem item={item} onPress={handleClassPress} />
-  ), []);
+  // Render empty state
+  const renderEmpty = useCallback(() => (
+    <View style={styles.emptyContainer}>
+      <Ionicons name="fitness-outline" size={64} color="#ccc" />
+      <Text style={styles.emptyTitle}>No Classes Found</Text>
+      <Text style={styles.emptySubtitle}>
+        {searchQuery || selectedCategory !== 'all' 
+          ? 'Try adjusting your filters or search query'
+          : 'Check back later for new classes'
+        }
+      </Text>
+      <TouchableOpacity style={styles.clearFiltersButton} onPress={() => {
+        setSearchQuery('');
+        setSelectedCategory('all');
+        setFilters({ page: 1, limit: 10, sort_by: 'effective_price' });
+      }}>
+        <Text style={styles.clearFiltersText}>Clear Filters</Text>
+      </TouchableOpacity>
+    </View>
+  ), [searchQuery, selectedCategory]);
 
-  // Render loading indicator for pagination
-  const renderFooter = () => {
-    if (!isFetchingMore) return null;
+  // Render loading state
+  if (isLoading && classes.length === 0) {
     return (
-      <View style={styles.footer}>
-        <ActivityIndicator size="small" color={theme.colors.primary} />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+        <Text style={styles.loadingText}>Loading amazing classes...</Text>
       </View>
     );
-  };
-
-  // Render empty state with accessibility
-  const renderEmpty = useCallback(() => (
-    <View 
-      style={styles.emptyContainer}
-      accessible={true}
-      accessibilityLabel="No classes found. Try adjusting your filters."
-    >
-      <Ionicons 
-        name="sad-outline" 
-        size={48} 
-        color="#999" 
-        accessible={false}
-      />
-      <Text 
-        style={styles.emptyText}
-        accessibilityElementsHidden={true}
-      >
-        No classes found
-      </Text>
-      <Text 
-        style={styles.emptySubtext}
-        accessibilityElementsHidden={true}
-      >
-        Try adjusting your filters
-      </Text>
-    </View>
-  ), []);
+  }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        
-        <Text style={styles.headerTitle}>Find a Class</Text>
-        
-        <TouchableOpacity 
-          style={styles.filterButton}
-          onPress={() => setShowFilters(true)}
-        >
-          <Ionicons name="filter" size={24} color="#fff" />
-        </TouchableOpacity>
+    <SafeAreaView style={styles.container}>
+      <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
+      
+      {/* Modern Header */}
+      <LinearGradient
+        colors={[theme.colors.primary, theme.colors.secondary]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.headerContainer}
+      >
+        <View style={styles.headerContent}>
+          {/* Back Button */}
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          {/* Title */}
+          <Text style={styles.headerTitle}>YOGA CLASSES</Text>
+
+          {/* Filter Button */}
+          <TouchableOpacity style={styles.filterButton} onPress={() => setShowFilters(true)}>
+            <Ionicons name="filter" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Decorative Elements */}
+        <View style={styles.decorativeCircle1} />
+        <View style={styles.decorativeCircle2} />
+        <View style={styles.topCircle} />
+        <View style={styles.bottomWave} />
+      </LinearGradient>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search classes..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#999"
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color="#666" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </View>
+
+      {/* Categories Section */}
+      <View style={styles.categoriesSection}>
+        <Text style={styles.sectionTitle}>Browse by Category</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesContainer}>
+          {categories.map((category) => (
+            <TouchableOpacity
+              key={category.id}
+              style={[
+                styles.categoryChip,
+                selectedCategory === category.id && styles.categoryChipActive
+              ]}
+              onPress={() => {
+                console.log('Category selected:', category.id);
+                setSelectedCategory(category.id);
+                setFilters(prev => ({ ...prev, page: 1 }));
+              }}
+            >
+              <Ionicons 
+                name={category.icon as any} 
+                size={16} 
+                color={selectedCategory === category.id ? '#fff' : '#666'} 
+              />
+              <Text style={[
+                styles.categoryText,
+                selectedCategory === category.id && styles.categoryTextActive
+              ]}>
+                {category.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {/* Main Content */}
       {error ? (
         <View style={styles.errorContainer}>
+          <Ionicons name="warning-outline" size={48} color="#ff6b6b" />
+          <Text style={styles.errorTitle}>Oops! Something went wrong</Text>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity 
-            style={styles.retryButton}
-            onPress={handleRefresh}
-          >
+          <TouchableOpacity style={styles.retryButton} onPress={() => fetchClasses()}>
             <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
         </View>
@@ -437,102 +408,32 @@ const ClassesListScreen = () => {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              colors={[theme.colors.primary]}
-              tintColor={theme.colors.primary}
-              accessibilityLabel="Pull to refresh"
+              colors={['#4CAF50']}
+              tintColor="#4CAF50"
             />
           }
-          ListEmptyComponent={!isLoading ? renderEmpty : null}
-          ListFooterComponent={renderFooter}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
+          ListEmptyComponent={renderEmpty}
           showsVerticalScrollIndicator={false}
-          maxToRenderPerBatch={10}
-          updateCellsBatchingPeriod={50}
-          initialNumToRender={10}
-          windowSize={11} // Render one screen worth of items
-          removeClippedSubviews={true}
-          accessibilityElementsHidden={false}
-          importantForAccessibility="yes"
         />
       )}
 
-      {/* Loading Indicator */}
-      {isLoading && classes.length === 0 && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={styles.loadingText}>Loading classes...</Text>
-        </View>
-      )}
-
       {/* Filter Modal */}
-      <Modal
-        visible={showFilters}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowFilters(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Filter Classes</Text>
-            <TouchableOpacity onPress={() => setShowFilters(false)}>
-              <Ionicons name="close" size={24} color="#333" />
-            </TouchableOpacity>
-          </View>
-          
-          <ScrollView style={styles.modalContent}>
-            {/* City Filter */}
-            <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>City</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter city"
-                value={filters.city || ''}
-                onChangeText={(text) => 
-                  setFilters(prev => ({ ...prev, city: text || undefined }))
-                }
-              />
+      {showFilters && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.filterModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter Classes</Text>
+              <TouchableOpacity onPress={() => setShowFilters(false)}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
             </View>
             
-            {/* Price Range */}
-            <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Price Range</Text>
-              <View style={styles.priceRangeContainer}>
-                <TextInput
-                  style={[styles.input, styles.priceInput]}
-                  placeholder="Min"
-                  keyboardType="numeric"
-                  value={filters.min_price?.toString() || ''}
-                  onChangeText={(text) => 
-                    setFilters(prev => ({ 
-                      ...prev, 
-                      min_price: text ? Number(text) : undefined 
-                    }))
-                  }
-                />
-                <Text style={styles.priceSeparator}>-</Text>
-                <TextInput
-                  style={[styles.input, styles.priceInput]}
-                  placeholder="Max"
-                  keyboardType="numeric"
-                  value={filters.max_price?.toString() || ''}
-                  onChangeText={(text) => 
-                    setFilters(prev => ({ 
-                      ...prev, 
-                      max_price: text ? Number(text) : undefined 
-                    }))
-                  }
-                />
-              </View>
-            </View>
-            
-            {/* Sort By */}
-            <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Sort By</Text>
-              <View style={styles.sortOptions}>
+            <ScrollView style={styles.modalContent}>
+              {/* Sort Options */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterLabel}>Sort By</Text>
                 {[
                   { value: 'effective_price', label: 'Price: Low to High' },
-                  { value: 'near_to_far', label: 'Distance: Near to Far' },
                   { value: 'created_at', label: 'Newest First' },
                   { value: 'title', label: 'Alphabetical' },
                 ].map((option) => (
@@ -560,207 +461,344 @@ const ClassesListScreen = () => {
                   </TouchableOpacity>
                 ))}
               </View>
-            </View>
+            </ScrollView>
             
-            {/* Delivery Mode */}
-            <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Delivery Mode</Text>
-              <View style={styles.deliveryModes}>
-                {[
-                  { key: 'group_online', label: 'Group Online' },
-                  { key: 'group_offline', label: 'Group In-Person' },
-                  { key: 'one_to_one_online', label: '1:1 Online' },
-                  { key: 'one_to_one_offline', label: '1:1 In-Person' },
-                  { key: 'home_visit', label: 'Home Visit' },
-                ].map((mode) => (
-                  <TouchableOpacity
-                    key={mode.key}
-                    style={[
-                      styles.deliveryMode,
-                      filters.delivery_mode === mode.key && styles.deliveryModeActive,
-                    ]}
-                    onPress={() => 
-                      setFilters(prev => ({ 
-                        ...prev, 
-                        delivery_mode: filters.delivery_mode === mode.key 
-                          ? undefined 
-                          : mode.key as any 
-                      }))
-                    }
-                  >
-                    <Text
-                      style={[
-                        styles.deliveryModeText,
-                        filters.delivery_mode === mode.key && styles.deliveryModeTextActive,
-                      ]}
-                    >
-                      {mode.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.resetButton}
+                onPress={() => {
+                  setFilters({
+                    page: 1,
+                    limit: 10,
+                    sort_by: 'effective_price',
+                  });
+                  setSearchQuery('');
+                  setSelectedCategory('all');
+                }}
+              >
+                <Text style={styles.resetButtonText}>Reset</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.applyButton}
+                onPress={() => setShowFilters(false)}
+              >
+                <Text style={styles.applyButtonText}>Apply</Text>
+              </TouchableOpacity>
             </View>
-          </ScrollView>
-          
-          <View style={styles.modalFooter}>
-            <TouchableOpacity 
-              style={styles.resetButton}
-              onPress={() => {
-                setFilters({
-                  page: 1,
-                  limit: 10,
-                });
-              }}
-            >
-              <Text style={styles.resetButtonText}>Reset Filters</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.applyButton}
-              onPress={() => handleApplyFilters({})}
-            >
-              <Text style={styles.applyButtonText}>Apply Filters</Text>
-            </TouchableOpacity>
           </View>
         </View>
-      </Modal>
-    </View>
+      )}
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#f8fafc',
   },
-  header: {
+  headerContainer: {
+    paddingTop: 40,
+    paddingBottom: 24,
+    paddingHorizontal: 24,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: theme.colors.primary,
-    paddingTop: Platform.OS === 'ios' ? 50 : 10,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    height: 85,
+    zIndex: 2,
   },
   backButton: {
-    padding: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    borderRadius: 24,
     width: 44,
     height: 44,
-    justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
-    color: '#fff',
     fontSize: 20,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    flex: 1,
+    letterSpacing: -0.5,
   },
   filterButton: {
-    padding: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    borderRadius: 24,
     width: 44,
     height: 44,
-    justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  decorativeCircle1: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    top: -30,
+    right: -30,
+  },
+  decorativeCircle2: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    bottom: -20,
+    left: 20,
+  },
+  topCircle: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    top: -40,
+    left: -40,
+  },
+  bottomWave: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderTopLeftRadius: 100,
+    borderTopRightRadius: 100,
+  },
+  searchContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+  },
+  categoriesSection: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 12,
+    letterSpacing: -0.2,
+  },
+  categoriesContainer: {
+    flexDirection: 'row',
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 25,
+    marginRight: 12,
+    borderWidth: 1.5,
+    borderColor: '#e9ecef',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  categoryChipActive: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  categoryText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  categoryTextActive: {
+    color: '#fff',
+    fontWeight: '700',
   },
   listContent: {
     padding: 20,
-    paddingBottom: 40,
   },
   classCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
+    marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.1,
     shadowRadius: 12,
-    elevation: 3,
-    borderLeftWidth: 4,
-    borderLeftColor: theme.colors.primary,
+    elevation: 4,
+    overflow: 'hidden',
   },
-  classHeader: {
-    flexDirection: 'row',
+  classImage: {
+    width: '100%',
+    height: 180,
+  },
+  classImageBorder: {
+    borderRadius: 16,
+  },
+  imageOverlay: {
+    flex: 1,
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    padding: 16,
+  },
+  priceBadge: {
+    backgroundColor: 'rgba(76, 175, 80, 0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  priceText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  categoryBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  categoryBadgeText: {
+    color: '#4CAF50',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  classContent: {
+    padding: 20,
   },
   classTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: '#1a1a1a',
-    flex: 1,
-    marginRight: 12,
-    lineHeight: 24,
-  },
-  classPrice: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.colors.primary,
-    backgroundColor: '#f0f7ff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    marginBottom: 8,
+    lineHeight: 28,
   },
   classDescription: {
-    color: '#666',
     fontSize: 14,
-    marginBottom: 12,
+    color: '#666',
     lineHeight: 20,
+    marginBottom: 16,
   },
-  classMeta: {
+  metaContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    marginBottom: 16,
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 20,
+    marginRight: 16,
     marginBottom: 8,
-    backgroundColor: '#f8f9fa',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
   },
   metaText: {
-    marginLeft: 6,
-    fontSize: 13,
-    color: '#555',
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 4,
     fontWeight: '500',
   },
-  tag: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'linear-gradient(135deg, #e8f5e9, #c8e6c9)',
-    borderRadius: 16,
+  modesContainer: {
+    marginBottom: 16,
+  },
+  modesLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  modesScroll: {
+    flexDirection: 'row',
+  },
+  modeChip: {
+    backgroundColor: '#f0f7ff',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#a5d6a7',
+    borderRadius: 12,
+    marginRight: 8,
   },
-  tagText: {
-    color: '#2e7d32',
+  modeText: {
     fontSize: 12,
+    color: '#4CAF50',
     fontWeight: '600',
-    letterSpacing: 0.2,
   },
-  footer: {
-    padding: 16,
+  languagesContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  languagesText: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 6,
+    fontWeight: '500',
+  },
+  classFooter: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  viewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f0fdf4',
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  viewButtonText: {
+    color: '#4CAF50',
+    fontSize: 14,
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '500',
   },
   emptyContainer: {
     flex: 1,
@@ -768,43 +806,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 40,
   },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#555',
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#333',
     marginTop: 16,
-    textAlign: 'center',
+    marginBottom: 8,
   },
-  emptySubtext: {
+  emptySubtitle: {
     fontSize: 14,
-    color: '#888',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  loadingContainer: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-  },
-  loadingText: {
-    marginTop: 10,
     color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  clearFiltersButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  clearFiltersText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 40,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#333',
+    marginTop: 16,
+    marginBottom: 8,
   },
   errorText: {
-    fontSize: 16,
-    color: '#d32f2f',
+    fontSize: 14,
+    color: '#666',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
+    lineHeight: 20,
   },
   retryButton: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: '#4CAF50',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
@@ -813,60 +860,45 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
-  // Modal styles
-  modalContainer: {
-    flex: 1,
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  filterModal: {
     backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: height * 0.7,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#f0f0f0',
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#333',
   },
   modalContent: {
     flex: 1,
-    padding: 16,
+    padding: 20,
   },
   modalFooter: {
     flexDirection: 'row',
-    padding: 16,
+    padding: 20,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: '#f0f0f0',
+    gap: 12,
   },
-  resetButton: {
-    flex: 1,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    marginRight: 10,
-  },
-  resetButtonText: {
-    color: '#666',
-    fontWeight: '600',
-  },
-  applyButton: {
-    flex: 1,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.primary,
-    borderRadius: 8,
-  },
-  applyButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  // Filter section styles
   filterSection: {
     marginBottom: 24,
   },
@@ -876,76 +908,46 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 12,
   },
-  input: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: '#333',
-  },
-  priceRangeContainer: {
+  sortOption: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  priceInput: {
-    flex: 1,
-  },
-  priceSeparator: {
-    marginHorizontal: 10,
-    fontSize: 16,
-    color: '#666',
-  },
-  sortOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -4,
-  },
-  sortOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    margin: 4,
-    backgroundColor: '#f9f9f9',
+    padding: 16,
+    borderRadius: 8,
+    backgroundColor: '#f8f9fa',
+    marginBottom: 8,
   },
   sortOptionActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
+    backgroundColor: '#4CAF50',
   },
   sortOptionText: {
     fontSize: 14,
     color: '#666',
+    fontWeight: '500',
   },
   sortOptionTextActive: {
     color: '#fff',
-    fontWeight: '500',
   },
-  deliveryModes: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -4,
+  resetButton: {
+    flex: 1,
+    padding: 16,
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
   },
-  deliveryMode: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    margin: 4,
-    backgroundColor: '#f9f9f9',
-  },
-  deliveryModeActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-  },
-  deliveryModeText: {
-    fontSize: 14,
+  resetButtonText: {
     color: '#666',
+    fontWeight: '600',
   },
-  deliveryModeTextActive: {
+  applyButton: {
+    flex: 1,
+    padding: 16,
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+  },
+  applyButtonText: {
     color: '#fff',
-    fontWeight: '500',
+    fontWeight: '600',
   },
 });
 

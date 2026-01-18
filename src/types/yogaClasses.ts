@@ -52,6 +52,7 @@ export interface YogaClassesFilters {
   latitude?: number;
   longitude?: number;
   delivery_mode?: 'group_online' | 'group_offline' | 'one_to_one_online' | 'one_to_one_offline' | 'home_visit';
+  title?: string;
 }
 
 export interface YogaClassesResponse {
