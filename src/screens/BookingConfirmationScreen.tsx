@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -10,7 +10,8 @@ import {
   TouchableOpacity,
   TextInput,
   Linking,
-  Platform
+  Platform,
+  Animated,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useAppSelector } from '../store';
@@ -19,6 +20,7 @@ import { CommonActions, useFocusEffect } from '@react-navigation/native';
 import { theme } from '../theme';
 import { usePayment } from '../hooks/usePayment';
 import { bookingService } from '../services';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
 // Define the structure of data received via route.params
 interface BookingData {
@@ -105,6 +107,11 @@ const BookingConfirmationScreen = () => {
   const route = useRoute<BookingConfirmationRouteProp>();
   const { bookingData } = route.params;
 
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const buttonScaleAnim = useRef(new Animated.Value(1)).current;
+
   // Debug: Log received booking data
   console.log('📦 BookingConfirmationScreen received bookingData:', bookingData);
 
@@ -129,6 +136,58 @@ const BookingConfirmationScreen = () => {
   const formatPrice = (amount: number) => {
     return `₹${amount.toFixed(2)}`;
   };
+
+  // Format time for display
+  const formatTime = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      let hours = date.getHours();
+      const minutes = date.getMinutes();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12 || 12;
+      const minutesStr = minutes < 10 ? `0${minutes}` : minutes;
+      return `${hours}:${minutesStr} ${ampm}`;
+    } catch (e) { 
+      console.warn('Invalid time format:', dateString);
+      return dateString; 
+    }
+  };
+
+  // Animation functions
+  const animateIn = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
+
+  const animateButtonPress = useCallback(() => {
+    Animated.sequence([
+      Animated.timing(buttonScaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(buttonScaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [buttonScaleAnim]);
+
+  // Trigger animation on mount
+  useEffect(() => {
+    setTimeout(() => animateIn(), 100);
+  }, [animateIn]);
 
   const handleApplyCoupon = useCallback(async () => {
     const code = couponCode.trim();
@@ -465,132 +524,228 @@ const BookingConfirmationScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-          </View>
-        ) : error ? (
-          <Text style={styles.errorText}>{error}</Text>
-        ) : (
-          <View style={styles.content}>
-            <Text style={styles.title}>Confirm Your Booking</Text>
-            
-            {/* Professional Info */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Professional</Text>
-              <Text style={styles.text}>{bookingData?.professionalName}</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Confirm Booking</Text>
+      </View>
+
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View 
+          style={[
+            styles.content,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+              <Text style={styles.loadingText}>Processing your booking...</Text>
             </View>
-
-            {/* Service Details */}
-            {bookingData?.serviceDetails && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Service</Text>
-                <Text style={styles.text}>{bookingData.serviceDetails.name}</Text>
-                <Text style={styles.text}>
-                  Duration: {bookingData.serviceDetails.duration} minutes
-                </Text>
-              </View>
-            )}
-
-            {/* Session Details */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Session Details</Text>
-              {bookingData?.startDate && (
-                <Text style={styles.text}>
-                  Date: {new Date(bookingData.startDate).toLocaleDateString()}
-                </Text>
-              )}
-              {bookingData?.startTime && (
-                <Text style={styles.text}>
-                  Time: {bookingData.startTime}
-                  {bookingData?.endTime ? ` - ${bookingData.endTime}` : ''}
-                </Text>
-              )}
-              {bookingData?.location && (
-                <Text style={styles.text}>Location: {bookingData.location}</Text>
-              )}
-              {bookingData?.sessionModeLabel && (
-                <Text style={styles.text}>Session Type: {bookingData.sessionModeLabel}</Text>
-              )}
+          ) : error ? (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle" size={48} color={theme.colors.feedback.error} />
+              <Text style={styles.errorText}>{error}</Text>
             </View>
-
-            {/* Coupon Code */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Apply Coupon</Text>
-              <View style={styles.couponContainer}>
-                <TextInput
-                  style={[styles.input, isCouponApplied && styles.inputDisabled]}
-                  placeholder="Enter coupon code"
-                  value={couponCode}
-                  onChangeText={setCouponCode}
-                  editable={!isCouponApplied}
-                  placeholderTextColor="#999"
-                />
-                <TouchableOpacity 
-                  style={[styles.button, styles.couponButton, isCouponApplied && styles.buttonDisabled]}
-                  onPress={handleApplyCoupon}
-                  disabled={isCouponApplied || !couponCode.trim()}
-                >
-                  <Text style={styles.buttonText}>
-                    {isCouponApplied ? 'Applied' : 'Apply'}
-                  </Text>
-                </TouchableOpacity>
+          ) : (
+            <>
+              {/* Professional Info Card */}
+              <View style={styles.bookingCard}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="person-circle" size={24} color={theme.colors.primary} />
+                  </View>
+                  <View style={styles.cardHeaderContent}>
+                    <Text style={styles.cardTitle}>Professional</Text>
+                    <Text style={styles.cardValue}>{bookingData?.professionalName}</Text>
+                  </View>
+                </View>
               </View>
-              {isCouponApplied && (
-                <TouchableOpacity 
-                  style={styles.removeCouponButton}
-                  onPress={handleRemoveCoupon}
-                >
-                  <Text style={styles.removeCouponText}>Remove coupon</Text>
-                </TouchableOpacity>
-              )}
-            </View>
 
-            {/* Price Summary */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Price Summary</Text>
-              <View style={styles.priceRow}>
-                <Text style={styles.priceLabel}>Base Price:</Text>
-                <Text style={styles.priceValue}>₹{priceDetails.original_amount.toFixed(2)}</Text>
-              </View>
-              {priceDetails.discount_amount > 0 && (
-                <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>Discount ({couponCode}):</Text>
-                  <Text style={[styles.priceValue, styles.discountText]}>-₹{priceDetails.discount_amount.toFixed(2)}</Text>
+              {/* Service Details Card */}
+              {(bookingData?.serviceDetails || bookingData?.planTitle) && (
+                <View style={styles.bookingCard}>
+                  <View style={styles.cardHeader}>
+                    <View style={styles.iconContainer}>
+                      <Ionicons name="medical" size={24} color={theme.colors.primary} />
+                    </View>
+                    <View style={styles.cardHeaderContent}>
+                      <Text style={styles.cardTitle}>Service</Text>
+                      <Text style={styles.cardValue}>
+                        {bookingData.serviceDetails?.name || bookingData.planTitle || 'Yoga Session'}
+                      </Text>
+                      <Text style={styles.cardSubtext}>
+                        Duration: {bookingData.duration || bookingData.serviceDetails?.duration || 'N/A'} minutes
+                      </Text>
+                    </View>
+                  </View>
                 </View>
               )}
-              <View style={[styles.priceRow, styles.totalRow]}>
-                <Text style={styles.totalLabel}>Total Amount:</Text>
-                <Text style={styles.totalValue}>₹{priceDetails.final_amount.toFixed(2)}</Text>
-              </View>
-            </View>
 
-            {/* Action Buttons */}
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
-                onPress={() => navigation.goBack()}
-                disabled={isLoading}
-              >
-                <Text style={styles.cancelButtonText}>Back</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.button, styles.confirmButton, isLoading && styles.disabledButton]}
-                onPress={handleConfirmBooking}
-                disabled={isLoading}
-              >
-                {isLoading || isPaymentProcessing ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.confirmButtonText}>
-                    Confirm & Pay {formatPrice(priceDetails.final_amount)}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+              {/* Session Details Card */}
+              <View style={styles.bookingCard}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="calendar" size={24} color={theme.colors.primary} />
+                  </View>
+                  <View style={styles.cardHeaderContent}>
+                    <Text style={styles.cardTitle}>Session Details</Text>
+                  </View>
+                </View>
+                <View style={styles.cardContent}>
+                  {bookingData?.startDate && (
+                    <View style={styles.detailRow}>
+                      <Ionicons name="calendar-outline" size={20} color="#666" />
+                      <Text style={styles.detailLabel}>Date:</Text>
+                      <Text style={styles.detailValue}>
+                        {new Date(bookingData.startDate).toLocaleDateString()}
+                      </Text>
+                    </View>
+                  )}
+                  {bookingData?.startTime && (
+                    <View style={styles.detailRow}>
+                      <Ionicons name="time-outline" size={20} color="#666" />
+                      <Text style={styles.detailLabel}>Time:</Text>
+                      <Text style={styles.detailValue}>
+                        {formatTime(bookingData.startTime)}
+                        {bookingData?.endTime ? ` - ${formatTime(bookingData.endTime)}` : ''}
+                      </Text>
+                    </View>
+                  )}
+                  {bookingData?.location && (
+                    <View style={styles.detailRow}>
+                      <Ionicons name="location-outline" size={20} color="#666" />
+                      <Text style={styles.detailLabel}>Location:</Text>
+                      <Text style={styles.detailValue}>{bookingData.location}</Text>
+                    </View>
+                  )}
+                  {bookingData?.sessionModeLabel && (
+                    <View style={styles.detailRow}>
+                      <Ionicons name="videocam-outline" size={20} color="#666" />
+                      <Text style={styles.detailLabel}>Session Type:</Text>
+                      <Text style={styles.detailValue}>{bookingData.sessionModeLabel}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Coupon Code Card */}
+              <View style={styles.bookingCard}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="pricetag" size={24} color={theme.colors.primary} />
+                  </View>
+                  <View style={styles.cardHeaderContent}>
+                    <Text style={styles.cardTitle}>Apply Coupon</Text>
+                  </View>
+                </View>
+                <View style={styles.cardContent}>
+                  <View style={styles.couponContainer}>
+                    <TextInput
+                      style={[styles.couponInput, isCouponApplied && styles.couponInputDisabled]}
+                      placeholder="Enter coupon code"
+                      value={couponCode}
+                      onChangeText={setCouponCode}
+                      editable={!isCouponApplied}
+                      placeholderTextColor="#999"
+                    />
+                    <TouchableOpacity 
+                      style={[styles.applyButton, isCouponApplied && styles.buttonDisabled]}
+                      onPress={handleApplyCoupon}
+                      disabled={isCouponApplied || !couponCode.trim()}
+                    >
+                      <Text style={styles.applyButtonText}>
+                        {isCouponApplied ? 'Applied' : 'Apply'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  {isCouponApplied && (
+                    <TouchableOpacity 
+                      style={styles.removeCouponButton}
+                      onPress={handleRemoveCoupon}
+                    >
+                      <Ionicons name="close-circle" size={16} color={theme.colors.feedback.error} />
+                      <Text style={styles.removeCouponText}>Remove coupon</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+
+              {/* Price Summary Card */}
+              <View style={styles.bookingCard}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="cash" size={24} color={theme.colors.primary} />
+                  </View>
+                  <View style={styles.cardHeaderContent}>
+                    <Text style={styles.cardTitle}>Price Summary</Text>
+                  </View>
+                </View>
+                <View style={styles.cardContent}>
+                  <View style={styles.priceRow}>
+                    <Text style={styles.priceLabel}>Base Price:</Text>
+                    <Text style={styles.priceValue}>₹{priceDetails.original_amount.toFixed(2)}</Text>
+                  </View>
+                  {priceDetails.discount_amount > 0 && (
+                    <View style={styles.priceRow}>
+                      <Text style={styles.priceLabel}>Discount ({couponCode}):</Text>
+                      <Text style={[styles.priceValue, styles.discountText]}>-₹{priceDetails.discount_amount.toFixed(2)}</Text>
+                    </View>
+                  )}
+                  <View style={[styles.priceRow, styles.totalRow]}>
+                    <Text style={styles.totalLabel}>Total Amount:</Text>
+                    <Text style={styles.totalValue}>₹{priceDetails.final_amount.toFixed(2)}</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Action Buttons */}
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity
+                  style={[styles.secondaryButton]}
+                  onPress={() => navigation.goBack()}
+                  disabled={isLoading}
+                >
+                  <Ionicons name="arrow-back" size={20} color={theme.colors.primary} />
+                  <Text style={styles.secondaryButtonText}>Back</Text>
+                </TouchableOpacity>
+                <Animated.View style={{ transform: [{ scale: buttonScaleAnim }] }}>
+                  <TouchableOpacity
+                    style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
+                    onPress={() => {
+                      animateButtonPress();
+                      handleConfirmBooking();
+                    }}
+                    disabled={isLoading}
+                  >
+                    {isLoading || isPaymentProcessing ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                        <Text style={styles.primaryButtonText}>
+                          Confirm & Pay {formatPrice(priceDetails.final_amount)}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </Animated.View>
+              </View>
+            </>
+          )}
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -600,288 +755,279 @@ const BookingConfirmationScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.colors.background.primary,
   },
-  scrollContainer: {
+  
+  // Header Styles
+  header: {
+    backgroundColor: theme.colors.primary,
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    marginRight: 16,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.background.surface,
+    letterSpacing: 0.3,
+  },
+
+  // ScrollView
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
     flexGrow: 1,
     padding: 16,
   },
-  couponContainer: {
-    flexDirection: 'row',
-    marginBottom: 8,
+
+  // Content
+  content: {
+    paddingBottom: 24,
   },
-  input: {
-    flex: 1,
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
-    fontSize: 16,
-    color: '#333',
-  },
-  inputDisabled: {
-    backgroundColor: '#f5f5f5',
-    color: '#888',
-  },
-  couponButton: {
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-    backgroundColor: theme.colors.primary,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-    backgroundColor: theme.colors.text.secondary,
-  },
-  removeCouponButton: {
-    alignSelf: 'flex-end',
-    marginTop: 4,
-  },
-  removeCouponText: {
-    color: theme.colors.primary,
-    fontSize: 14,
-    textDecorationLine: 'underline',
-  },
+
+  // Loading State
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: theme.colors.text.secondary,
+    fontWeight: '500',
+  },
+
+  // Error State
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
   },
   errorText: {
-    color: theme.colors.feedback.error,
+    marginTop: 16,
     fontSize: 16,
-    lineHeight: 20,
+    color: theme.colors.feedback.error,
     textAlign: 'center',
-    marginTop: 20,
+    fontWeight: '500',
   },
-  content: {
-    paddingBottom: 24,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 24,
-    color: theme.colors.primary,
-    textAlign: 'center',
-  },
-  section: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 16,
+
+  // Card Styles
+  bookingCard: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: theme.borderRadius.l,
+    padding: 20,
     marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  sectionTitle: {
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0, 130, 114, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  cardHeaderContent: {
+    flex: 1,
+  },
+  cardTitle: {
     fontSize: 18,
     fontWeight: '600',
-    marginBottom: 12,
-    color: theme.colors.primary,
+    color: theme.colors.text.primary,
+    marginBottom: 4,
   },
-  text: {
+  cardValue: {
     fontSize: 16,
-    marginBottom: 8,
-    color: '#333',
+    fontWeight: '500',
+    color: theme.colors.text.primary,
   },
+  cardSubtext: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    marginTop: 2,
+  },
+  cardContent: {
+    paddingTop: 8,
+  },
+
+  // Detail Rows
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  detailLabel: {
+    flex: 1,
+    fontSize: 16,
+    color: theme.colors.text.secondary,
+    marginLeft: 12,
+  },
+  detailValue: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: theme.colors.text.primary,
+  },
+
+  // Coupon Styles
+  couponContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  couponInput: {
+    flex: 1,
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: theme.borderRadius.m,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: theme.colors.text.primary,
+    backgroundColor: theme.colors.background.surface,
+  },
+  couponInputDisabled: {
+    backgroundColor: '#F9FAFB',
+    color: theme.colors.text.secondary,
+  },
+  applyButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: theme.borderRadius.m,
+    backgroundColor: theme.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  applyButtonText: {
+    color: theme.colors.background.surface,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  removeCouponButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    marginTop: 8,
+    gap: 4,
+  },
+  removeCouponText: {
+    color: theme.colors.feedback.error,
+    fontSize: 14,
+    textDecorationLine: 'underline',
+  },
+
+  // Price Styles
   priceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
   },
   priceLabel: {
     fontSize: 16,
-    color: '#666',
+    color: theme.colors.text.secondary,
   },
   priceValue: {
     fontSize: 16,
     fontWeight: '500',
+    color: theme.colors.text.primary,
   },
   discountText: {
-    color: '#4CAF50',
+    color: theme.colors.feedback.success,
   },
   totalRow: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: '#E5E7EB',
   },
   totalLabel: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: theme.colors.text.primary,
   },
   totalValue: {
     fontSize: 18,
     fontWeight: '700',
     color: theme.colors.primary,
   },
+
+  // Button Styles
   buttonContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
+    gap: 12,
     marginTop: 24,
     marginBottom: 24,
   },
-  button: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    minHeight: 56,
-  },
-  cancelButton: {
-    backgroundColor: theme.colors.background.white,
-    borderWidth: 1,
-    borderColor: '#f0f0f0',
-    marginRight: 8,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: 48,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-      },
-    }),
-  },
-  confirmButton: {
+  primaryButton: {
     flex: 2,
-    backgroundColor: theme.colors.primary,
-    marginLeft: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: theme.colors.primary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
-  },
-  cancelButtonText: {
-    color: theme.colors.text.secondary,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  confirmButtonText: {
-    color: theme.colors.background.white,
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    marginRight: 40, // To center the title (back button is 40px wide)
-  },
-  bookingCard: {
-    backgroundColor: theme.colors.background.white,
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-    color: theme.colors.primary,
-  },
-  detailRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-  },
-  couponText: {
-    color: theme.colors.primary,
-    fontWeight: '600',
-    fontSize: 14,
-    marginTop: 8,
-  },
-  errorContainer: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: theme.colors.feedback.error,
-  },
-  confirmButtonContent: {
-    flexDirection: 'column',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: theme.borderRadius.m,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  confirmButtonSubtext: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
+  primaryButtonText: {
+    color: theme.colors.background.surface,
+    fontSize: 16,
+    fontWeight: '600',
   },
-  priceCard: {
-    backgroundColor: theme.colors.background.white,
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 24,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+  secondaryButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: theme.borderRadius.m,
   },
-  userCard: {
-    backgroundColor: theme.colors.background.white,
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 24,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+  secondaryButtonText: {
+    color: theme.colors.primary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
 });
 export default BookingConfirmationScreen;

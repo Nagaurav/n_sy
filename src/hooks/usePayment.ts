@@ -118,8 +118,8 @@ export const usePayment = () => {
             userId,
             professionalId: params.professionalId,
             slotId: params.slotId,
-            // serviceType, // Remove this as it's not in the interface
-            // serviceId, // Remove this as it's not in the interface
+            serviceType,
+            serviceId,
             couponCode: params.couponCode,
             duration: params.duration,
             metadata: params.metadata
