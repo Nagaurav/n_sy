@@ -49,16 +49,22 @@ export interface AppointmentState {
 
 // Transform API response to match UI expectations
 const transformAppointmentData = (apiData: any): Appointment => {
-  return {
+  console.log('🔄 [transformAppointmentData] Input API data:', apiData);
+  
+  const transformed = {
     ...apiData,
     // Map nested API data to flat UI properties for backward compatibility
     professional_name: apiData.professional?.name || apiData.professional_name || '',
     date: apiData.slot?.date || apiData.date || '',
-    time: apiData.slot?.start_time || apiData.time || '',
+    // Try multiple sources for time data
+    time: apiData.time || apiData.slot?.start_time || '',
     amount: apiData.amounts?.final || apiData.amount || 0,
     // Ensure professional_id is properly mapped from nested structure
     professional_id: apiData.professional?.id || apiData.professional_id || apiData.professional_id,
   };
+  
+  console.log('🔄 [transformAppointmentData] Transformed data:', transformed);
+  return transformed;
 };
 
 // Async thunks

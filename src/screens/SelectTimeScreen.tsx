@@ -222,6 +222,7 @@ const SelectTimeScreen = () => {
                 duration,
                 price: priceDetails?.final_amount || 0,
                 isOnline: selectedSlot.is_online,
+                serviceType: 'consultation',
                 serviceDetails: { ...serviceDetails, price: priceDetails?.final_amount || 0 }
               }
             }

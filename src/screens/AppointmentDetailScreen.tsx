@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,13 @@ import {
   ActivityIndicator,
   Dimensions,
   StatusBar,
+  Animated,
+  SafeAreaView,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
-import Icon from 'react-native-vector-icons/Ionicons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { RootState } from '../store';
 import { apiService, apiClient } from '../services';
 import { setCurrentAppointment, setChatActive, fetchAppointmentById } from '../store/appointmentSlice';
@@ -37,6 +40,10 @@ const AppointmentDetailScreen: React.FC = () => {
   const { theme } = useTheme();
   const { user, token, isAuthenticated } = useAuth();
   const { appointmentId, professionalId: routeProfessionalId, userId, appointmentData } = route.params as RouteParams;
+  
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
   
   console.log('📋 [AppointmentDetail] Screen mounted with appointmentId:', appointmentId, 'professionalId:', routeProfessionalId, 'userId:', userId);
   
@@ -212,7 +219,12 @@ const AppointmentDetailScreen: React.FC = () => {
       if (typeof timeStr === 'string' && timeStr.includes('T')) {
         appointmentDate = new Date(timeStr);
       } else {
-        const [hours, minutes] = String(timeStr).split(':').map(Number);
+        // Extract start time from time range like "09:00 - 09:15" or use simple time like "09:00"
+        const startTime = String(timeStr).includes('-') 
+          ? String(timeStr).split(' - ')[0].trim()
+          : String(timeStr);
+        
+        const [hours, minutes] = startTime.split(':').map(Number);
         appointmentDate = new Date(dateStr);
         appointmentDate.setHours(hours, minutes, 0, 0);
       }
@@ -241,7 +253,13 @@ const AppointmentDetailScreen: React.FC = () => {
     
     if (!isSessionFeatureAvailable('chat')) {
       if (!currentAppointment.time) return 'Chat time not available';
-      const [hours, minutes] = currentAppointment.time.split(':').map(Number);
+      
+      // Extract start time from time range like "09:00 - 09:15" or use simple time like "09:00"
+      const startTime = currentAppointment.time.includes('-') 
+        ? currentAppointment.time.split(' - ')[0].trim()
+        : currentAppointment.time;
+      
+      const [hours, minutes] = startTime.split(':').map(Number);
       const appointmentDate = new Date(currentAppointment.date || '');
       appointmentDate.setHours(hours, minutes, 0, 0);
       const now = new Date();
@@ -317,7 +335,13 @@ const AppointmentDetailScreen: React.FC = () => {
     
     if (!isSessionFeatureAvailable('video')) {
       if (!currentAppointment.time) return 'Video call time not available';
-      const [hours, minutes] = currentAppointment.time.split(':').map(Number);
+      
+      // Extract start time from time range like "09:00 - 09:15" or use simple time like "09:00"
+      const startTime = currentAppointment.time.includes('-') 
+        ? currentAppointment.time.split(' - ')[0].trim()
+        : currentAppointment.time;
+      
+      const [hours, minutes] = startTime.split(':').map(Number);
       const appointmentDate = new Date(currentAppointment.date || '');
       appointmentDate.setHours(hours, minutes, 0, 0);
       const now = new Date();
@@ -473,6 +497,24 @@ const AppointmentDetailScreen: React.FC = () => {
     }
   }, [currentAppointment, refreshAppointment]);
 
+  // Start entrance animation when data loads
+  useEffect(() => {
+    if (!loading && currentAppointment) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [loading, currentAppointment, fadeAnim, slideAnim]);
+
   // Update time until chat
   useEffect(() => {
     console.log('⏰ [AppointmentDetail] Setting up chat countdown timer');
@@ -507,7 +549,7 @@ const AppointmentDetailScreen: React.FC = () => {
   if (error && !currentAppointment) {
     return (
       <View style={styles.centerContainer}>
-        <Icon name="alert-circle-outline" size={60} color={theme.colors.feedback.error} />
+        <Ionicons name="alert-circle-outline" size={60} color={theme.colors.feedback.error} />
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={refreshAppointment}>
           <Text style={styles.retryButtonText}>Retry</Text>
@@ -519,14 +561,13 @@ const AppointmentDetailScreen: React.FC = () => {
   if (!currentAppointment) {
     return (
       <View style={styles.centerContainer}>
-        <Icon name="document-outline" size={60} color={theme.colors.text.primary} />
+        <Ionicons name="document-outline" size={60} color={theme.colors.text.primary} />
         <Text style={styles.errorText}>Appointment not found</Text>
       </View>
     );
   }
 
-  // Helper function to format date
-  const formatDate = (dateString: string | undefined) => {
+    const formatDate = (dateString: string | undefined) => {
     if (!dateString) return 'Date not available';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -538,11 +579,25 @@ const AppointmentDetailScreen: React.FC = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={theme.colors.primary} />
       
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Modern Header with Gradient */}
+      <Animated.View
+        style={[
+          styles.headerWrapper,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={[theme.colors.primary, theme.colors.secondary]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
+        >        
         <View style={styles.headerContent}>
           <TouchableOpacity 
             onPress={() => {
@@ -551,11 +606,27 @@ const AppointmentDetailScreen: React.FC = () => {
             }} 
             style={styles.backButton}
           >
-            <Icon name="arrow-back" size={24} color={theme.colors.background.surface} />
+            <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Appointment Details</Text>
+          
+          <View style={styles.titleContainer}>
+            <Text style={styles.headerTitle}>Appointment Details</Text>
+          </View>
+          
+          <TouchableOpacity 
+            onPress={refreshAppointment}
+            style={styles.refreshButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="refresh" size={20} color={theme.colors.background.surface} />
+          </TouchableOpacity>
         </View>
-      </View>
+        
+        {/* Decorative elements */}
+        <View style={styles.topCircle} />
+        <View style={styles.bottomWave} />
+      </LinearGradient>
+      </Animated.View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Professional Profile Card */}
@@ -563,7 +634,7 @@ const AppointmentDetailScreen: React.FC = () => {
           <View style={styles.professionalHeader}>
             <View style={styles.avatarContainer}>
               <View style={styles.avatar}>
-                <Icon name="person" size={40} color={theme.colors.primary} />
+                <Ionicons name="person" size={40} color={theme.colors.primary} />
               </View>
               <View style={[styles.statusIndicator, { backgroundColor: getStatusColor(currentAppointment.booking_status, theme) }]} />
             </View>
@@ -583,27 +654,51 @@ const AppointmentDetailScreen: React.FC = () => {
           
           <View style={styles.detailRow}>
             <View style={styles.detailIcon}>
-              <Icon name="calendar" size={20} color={theme.colors.primary} />
+              <Ionicons name="calendar" size={20} color={theme.colors.primary} />
             </View>
             <View style={styles.detailContent}>
               <Text style={styles.detailLabel}>Date</Text>
-              <Text style={styles.detailValue}>{formatDate(currentAppointment.date)}</Text>
+              <Text style={styles.detailValue}>{formatDate(currentAppointment.date) || 'Date not available'}</Text>
             </View>
           </View>
 
           <View style={styles.detailRow}>
             <View style={styles.detailIcon}>
-              <Icon name="time" size={20} color={theme.colors.primary} />
+              <Ionicons name="time" size={20} color={theme.colors.primary} />
             </View>
             <View style={styles.detailContent}>
               <Text style={styles.detailLabel}>Time</Text>
-              <Text style={styles.detailValue}>{currentAppointment.time}</Text>
+              {(() => {
+                const time = currentAppointment.time || currentAppointment.slot?.start_time;
+                const endTime = currentAppointment.slot?.end_time;
+                
+                console.log('🕐 [AppointmentDetail] Time data:', {
+                  time: currentAppointment.time,
+                  slotTime: currentAppointment.slot?.start_time,
+                  slotEndTime: currentAppointment.slot?.end_time,
+                  fullSlot: currentAppointment.slot
+                });
+                
+                if (time && time.includes('-')) {
+                  // Time is already formatted as "09:00 - 09:15" from API
+                  return <Text style={styles.detailValue}>{time}</Text>;
+                } else if (time && endTime) {
+                  // Combine start and end time if both are available separately
+                  return <Text style={styles.detailValue}>{`${time} - ${endTime}`}</Text>;
+                } else if (time) {
+                  // Show just start time if end time is not available
+                  return <Text style={styles.detailValue}>{time}</Text>;
+                } else {
+                  // Fallback if no time data is available
+                  return <Text style={styles.detailValue}>Time not available</Text>;
+                }
+              })()}
             </View>
           </View>
 
           <View style={styles.detailRow}>
             <View style={styles.detailIcon}>
-              <Icon name={currentAppointment.mode === 'online' ? 'videocam' : 'location'} size={20} color={theme.colors.primary} />
+              <Ionicons name={currentAppointment.mode === 'online' ? 'videocam' : 'location'} size={20} color={theme.colors.primary} />
             </View>
             <View style={styles.detailContent}>
               <Text style={styles.detailLabel}>Mode</Text>
@@ -613,7 +708,7 @@ const AppointmentDetailScreen: React.FC = () => {
 
           <View style={styles.detailRow}>
             <View style={styles.detailIcon}>
-              <Icon name="payments" size={20} color={theme.colors.primary} />
+              <Ionicons name="payments" size={20} color={theme.colors.primary} />
             </View>
             <View style={styles.detailContent}>
               <Text style={styles.detailLabel}>Consultation Fee</Text>
@@ -637,11 +732,7 @@ const AppointmentDetailScreen: React.FC = () => {
               disabled={!isChatAvailable()}
             >
               <View style={styles.actionButtonContent}>
-                <Icon 
-                  name="chatbubble" 
-                  size={24} 
-                  color={isChatAvailable() ? '#fff' : '#94A3B8'} 
-                />
+                <Ionicons name="chatbubble" size={24} color={isChatAvailable() ? '#fff' : '#94A3B8'} />
                 <Text style={[styles.actionButtonText, { 
                   color: isChatAvailable() ? '#fff' : '#94A3B8' 
                 }]}>
@@ -666,11 +757,7 @@ const AppointmentDetailScreen: React.FC = () => {
                 disabled={!isVideoAvailable()}
               >
                 <View style={styles.actionButtonContent}>
-                  <Icon 
-                    name="videocam" 
-                    size={24} 
-                    color={isVideoAvailable() ? '#fff' : '#94A3B8'}
-                  />
+                  <Ionicons name="videocam" size={24} color={isVideoAvailable() ? '#fff' : '#94A3B8'} />
                   <Text style={[styles.actionButtonText, { 
                     color: isVideoAvailable() ? '#fff' : '#94A3B8' 
                   }]}>
@@ -691,7 +778,7 @@ const AppointmentDetailScreen: React.FC = () => {
         {videoCallActive && (
           <View style={styles.videoCard}>
             <View style={styles.cardHeader}>
-              <Icon name="videocam" size={20} color={theme.colors.primary} />
+              <Ionicons name="videocam" size={20} color={theme.colors.primary} />
               <Text style={styles.cardTitle}>Video Consultation</Text>
             </View>
             <VideoPlaceholder />
@@ -702,7 +789,7 @@ const AppointmentDetailScreen: React.FC = () => {
         {currentAppointment.booking_status === 'COMPLETED' && (
           <View style={styles.prescriptionCard}>
             <View style={styles.cardHeader}>
-              <Icon name="medkit" size={20} color={theme.colors.primary} />
+              <Ionicons name="medkit" size={20} color={theme.colors.primary} />
               <Text style={styles.cardTitle}>Prescriptions</Text>
               {prescriptionData && (
                 <TouchableOpacity
@@ -715,7 +802,7 @@ const AppointmentDetailScreen: React.FC = () => {
                     });
                   }}
                 >
-                  <Icon name="download" size={20} color={theme.colors.primary} />
+                  <Ionicons name="download" size={20} color={theme.colors.primary} />
                   <Text style={styles.downloadButtonText}>View Details</Text>
                 </TouchableOpacity>
               )}
@@ -733,11 +820,11 @@ const AppointmentDetailScreen: React.FC = () => {
 
         {/* Security Information */}
         <View style={styles.securityCard}>
-          <Icon name="shield-checkmark" size={20} color="#4CAF50" />
+          <Ionicons name="shield-checkmark" size={20} color="#4CAF50" />
           <Text style={styles.securityText}>Your consultation is secure and private</Text>
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -771,35 +858,71 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  
+  // Header Styles
+  headerWrapper: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
   header: {
-    backgroundColor: theme.colors.primary,
-    paddingTop: 60,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+    paddingTop: 40,
+    paddingBottom: theme.spacing.l,
+    paddingHorizontal: 24,
+    position: 'relative',
+    overflow: 'hidden',
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
+    zIndex: 2,
   },
   backButton: {
-    padding: 10,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    marginRight: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titleContainer: {
+    flex: 1,
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: theme.colors.background.surface,
-    letterSpacing: 0.3,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  // Decorative elements
+  topCircle: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    top: -50,
+    right: -30,
+  },
+  bottomWave: {
+    position: 'absolute',
+    bottom: -25,
+    left: 0,
+    right: 0,
+    height: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderTopLeftRadius: 80,
+    borderTopRightRadius: 80,
   },
 
   // Professional Card

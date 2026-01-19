@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
@@ -11,7 +11,11 @@ import {
   Alert,
   RefreshControl,
   StatusBar,
+  Animated,
+  Dimensions,
+  ScrollView,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
@@ -19,10 +23,17 @@ import { bookingService, medicalService } from '../services';
 import { ConsultationBooking } from '../types/booking';
 import { theme } from '../theme';
 
+const { width, height } = Dimensions.get('window');
+
 const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigation, route }) => {
   const { user, signOut, isLoading: authLoading } = useAuth();
   const { theme: themeHook } = useTheme();
   const appTheme = themeHook || theme;
+  
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
   
   const [appointments, setAppointments] = useState<ConsultationBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -31,6 +42,24 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState('all');
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [stats, setStats] = useState({
+    total: 0,
+    confirmed: 0,
+    completed: 0,
+    pending: 0,
+    cancelled: 0,
+  });
+  
+  // Filter options
+  const filterOptions = [
+    { key: 'all', label: 'All', icon: 'calendar-outline' },
+    { key: 'confirmed', label: 'Booked', icon: 'checkmark-circle' },
+    { key: 'completed', label: 'Done', icon: 'checkmark-done' },
+    { key: 'pending', label: 'Pending', icon: 'time' },
+    { key: 'cancelled', label: 'Cancelled', icon: 'close-circle' },
+  ];
 
   useEffect(() => {
     // Reduced logging to prevent console spam
@@ -91,6 +120,16 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
           return new Date(b.date).getTime() - new Date(a.date).getTime();
         });
 
+        // Calculate stats
+        const newStats = {
+          total: sortedAppointments.length,
+          confirmed: sortedAppointments.filter((apt: any) => apt.booking_status === 'CONFIRMED').length,
+          completed: sortedAppointments.filter((apt: any) => apt.booking_status === 'COMPLETED').length,
+          pending: sortedAppointments.filter((apt: any) => apt.booking_status === 'PENDING').length,
+          cancelled: sortedAppointments.filter((apt: any) => apt.booking_status === 'CANCELLED').length,
+        };
+        setStats(newStats);
+
         if (pageToLoad === 1) {
           setAppointments(sortedAppointments as any);
         } else {
@@ -127,7 +166,36 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
       }
     }, [user, fetchAppointments]) // Dependencies
   );
-
+  
+  // Start entrance animation when data loads
+  useEffect(() => {
+    if (!isLoading && !authLoading) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [isLoading, authLoading, fadeAnim, slideAnim, scaleAnim]);
+  
+  // Filter appointments based on selected filter
+  const filteredAppointments = appointments.filter(appointment => {
+    if (selectedFilter === 'all') return true;
+    return appointment.booking_status?.toLowerCase() === selectedFilter.toLowerCase();
+  });
+  
   const handleRefresh = useCallback(() => {
     console.log('🔄 [AppointmentsScreen] User triggered refresh - fetching latest appointment data');
     console.log('🔄 [AppointmentsScreen] Current appointments count:', appointments.length);
@@ -229,7 +297,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
         return {
           backgroundColor: theme.colors.feedback.success + '20',
           textColor: theme.colors.primary,
-          icon: 'calendar-check',
+          icon: 'checkmark-circle',
         };
       case 'completed':
         return {
@@ -286,7 +354,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     }
   };
 
-  const renderAppointment = ({ item }: { item: any }) => {
+  const renderAppointment = ({ item, index }: { item: any; index: number }) => {
     // Handle both API response formats
     const status = (item.booking_status || item.status || '').toLowerCase();
     const paymentStatus = (item.payment_status || '').toLowerCase();
@@ -388,123 +456,119 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     };
 
     return (
-      <TouchableOpacity style={styles.appointmentCard} onPress={handleAppointmentPress}>
-        <View style={styles.cardHeader}>
-          <View style={styles.dateTimeContainer}>
-            {/* Professional Name */}
-            {item.professional_name && (
-              <View style={styles.iconTextRow}>
-                <Ionicons name="person-circle" size={18} color={theme.colors.primary} />
-                <Text style={styles.professionalName}>{item.professional_name}</Text>
+      <View style={styles.appointmentCard}>
+        <TouchableOpacity 
+          style={styles.cardContent}
+          onPress={handleAppointmentPress}
+          activeOpacity={0.7}
+        >
+          {/* Card Header with Status */}
+          <View style={styles.cardHeader}>
+            <View style={styles.professionalSection}>
+              <View style={styles.avatarContainer}>
+                <Ionicons name="person-circle" size={32} color={appTheme.colors.primary} />
+              </View>
+              <View style={styles.professionalInfo}>
+                <Text style={styles.professionalName}>{item.professional_name || 'Professional'}</Text>
+                <Text style={styles.specializationText}>
+                  {item.specialization || 
+                   item.professional_specialization || 
+                   item.category || 
+                   item.service_type || 
+                   item.professional?.specialization || 
+                   item.professional?.category || 
+                   'Wellness Consultation'}
+                </Text>
+              </View>
+            </View>
+            <View style={[styles.statusBadge, { backgroundColor: statusBadgeStyle.backgroundColor }]}>
+              <Ionicons name={statusBadgeStyle.icon as any} size={12} color={statusBadgeStyle.textColor} />
+              <Text style={[styles.statusText, { color: statusBadgeStyle.textColor }]}>
+                {status.toUpperCase()}
+              </Text>
+            </View>
+          </View>
+
+          {/* Date and Time Section */}
+          <View style={styles.dateTimeSection}>
+            <View style={styles.dateTimeItem}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="calendar" size={16} color={appTheme.colors.primary} />
+              </View>
+              <Text style={styles.dateTimeText}>{formatDate(item.date)}</Text>
+            </View>
+            <View style={styles.dateTimeItem}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="time" size={16} color={appTheme.colors.primary} />
+              </View>
+              <Text style={styles.dateTimeText}>{timeDisplay}</Text>
+            </View>
+            {item.mode && (
+              <View style={styles.dateTimeItem}>
+                <View style={styles.iconContainer}>
+                  <Ionicons name="videocam" size={16} color={appTheme.colors.primary} />
+                </View>
+                <Text style={styles.dateTimeText}>{item.mode.toUpperCase()}</Text>
               </View>
             )}
-            <View style={styles.iconTextRow}>
-              <Ionicons name="calendar" size={18} color={theme.colors.primary} />
-              <Text style={styles.appointmentDate}>{formatDate(item.date)}</Text>
-            </View>
-            <View style={styles.iconTextRow}>
-              <Ionicons name="time" size={18} color={theme.colors.primary} />
-              <Text style={styles.appointmentTime}>{timeDisplay}</Text>
-            </View>
-          </View>
-          <View style={[styles.statusBadge, { backgroundColor: statusBadgeStyle.backgroundColor }]}>
-            <Ionicons name={statusBadgeStyle.icon as any} size={14} color={statusBadgeStyle.textColor} />
-            <Text style={[styles.statusText, { color: statusBadgeStyle.textColor }]}>
-              {status.toUpperCase()}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.cardDetails}>
-          <View style={styles.detailRow}>
-            <Ionicons name="timer-outline" size={20} color={theme.colors.text.secondary} />
-            <Text style={styles.detailLabel}>Duration:</Text>
-            <Text style={styles.detailValue}>{item.duration} minutes</Text>
           </View>
 
-          <View style={styles.detailRow}>
-            <Ionicons name="document-text-outline" size={20} color={theme.colors.text.secondary} />
-            <Text style={styles.detailLabel}>Booking ID:</Text>
-            <Text style={styles.detailValue}>#{bookingId}</Text>
-          </View>
-
-          {item.mode && (
+          {/* Details Section */}
+          <View style={styles.detailsSection}>
             <View style={styles.detailRow}>
-              <Ionicons name="videocam-outline" size={20} color={theme.colors.text.secondary} />
-              <Text style={styles.detailLabel}>Mode:</Text>
-              <Text style={styles.detailValue}>{item.mode.toUpperCase()}</Text>
+              <Text style={styles.detailLabel}>Booking ID</Text>
+              <Text style={styles.detailValue}>#{bookingId}</Text>
+            </View>
+            {item.amount && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Amount</Text>
+                <Text style={styles.detailValue}>₹{item.amount}</Text>
+              </View>
+            )}
+            {item.payment_status && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Payment</Text>
+                <Text style={[styles.detailValue, { 
+                  color: item.payment_status === 'COMPLETED' ? appTheme.colors.feedback.success : appTheme.colors.feedback.warning 
+                }]}>
+                  {item.payment_status}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Action Buttons */}
+          {(showPrescriptionButton || status === 'confirmed') && (
+            <View style={styles.actionsRow}>
+              {showPrescriptionButton && (
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => handleViewPrescription(bookingId)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="medkit-outline" size={18} color={appTheme.colors.background.surface} />
+                  <Text style={styles.actionButtonText}>Prescription</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.actionButton, showPrescriptionButton ? styles.secondaryActionButton : styles.primaryActionButton]}
+                onPress={() => {
+                  Alert.alert(
+                    'Appointment Details',
+                    `Professional: ${item.professional_name}\nDate: ${formatDate(item.date)}\nTime: ${timeDisplay}\nMode: ${item.mode}\nAmount: ₹${item.amount}`,
+                  );
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="information-circle" size={18} color={showPrescriptionButton ? appTheme.colors.primary : appTheme.colors.background.surface} />
+                <Text style={[styles.actionButtonText, showPrescriptionButton && styles.secondaryActionButtonText]}>
+                  Details
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
-
-          {item.amount && (
-            <View style={styles.detailRow}>
-              <Ionicons name="cash-outline" size={20} color={theme.colors.text.secondary} />
-              <Text style={styles.detailLabel}>Amount:</Text>
-              <Text style={styles.detailValue}>₹{item.amount}</Text>
-            </View>
-          )}
-
-          {item.coupon_code && (
-            <View style={styles.detailRow}>
-              <Ionicons name="pricetag-outline" size={20} color={theme.colors.text.secondary} />
-              <Text style={styles.detailLabel}>Coupon:</Text>
-              <Text style={styles.detailValue}>{item.coupon_code}</Text>
-            </View>
-          )}
-
-          {item.payment_status && (
-            <View style={styles.detailRow}>
-              <Ionicons name="card-outline" size={20} color={theme.colors.text.secondary} />
-              <Text style={styles.detailLabel}>Payment:</Text>
-              <Text style={styles.detailValue}>{item.payment_status}</Text>
-            </View>
-          )}
-        </View>
-
-        {showPrescriptionButton && (
-          <View style={styles.actionsRow}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => {
-                Alert.alert(
-                  'Appointment Details',
-                  `Professional: ${item.professional_name}\nDate: ${formatDate(item.date)}\nTime: ${timeDisplay}\nMode: ${item.mode}\nAmount: ₹${item.amount}`,
-                );
-              }}
-            >
-              <Ionicons name="information-circle" size={20} color={theme.colors.primary} />
-              <Text style={styles.actionButtonText}>View Details</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.secondaryActionButton}
-              onPress={() => handleViewPrescription(bookingId)}
-            >
-              <Ionicons name="medkit-outline" size={20} color={theme.colors.primary} />
-              <Text style={styles.secondaryActionButtonText}>View Prescription</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {status === 'confirmed' && (
-          <View style={styles.actionsRow}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => {
-                Alert.alert(
-                  'Appointment Details',
-                  `Professional: ${item.professional_name}\nDate: ${formatDate(item.date)}\nTime: ${timeDisplay}\nMode: ${item.mode}\nAmount: ₹${item.amount}`,
-                );
-              }}
-            >
-              <Ionicons name="information-circle" size={20} color={theme.colors.primary} />
-              <Text style={styles.actionButtonText}>View Details</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -524,84 +588,205 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={theme.colors.primary} />
+      <StatusBar barStyle="light-content" backgroundColor={appTheme.colors.primary} />
       
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Modern Header with Gradient */}
+      <Animated.View
+        style={[
+          styles.headerWrapper,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={[appTheme.colors.primary, appTheme.colors.secondary]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
+        >
+        <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
+        
         <View style={styles.headerContent}>
           <TouchableOpacity 
             onPress={() => navigation.goBack()}
             style={styles.backButton}
+            activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
+            <Ionicons name="arrow-back" size={24} color={appTheme.colors.background.surface} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>My Appointments</Text>
+          
+          <View style={styles.titleContainer}>
+            <Text style={styles.headerTitle}>My Appointments</Text>
+          </View>
+          
+          <TouchableOpacity 
+            onPress={handleRefresh}
+            style={styles.refreshButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="refresh" size={20} color={appTheme.colors.background.surface} />
+          </TouchableOpacity>
         </View>
-      </View>
+        
+        {/* Decorative elements */}
+        <View style={styles.topCircle} />
+        <View style={styles.bottomWave} />
+      </LinearGradient>
+      </Animated.View>
 
       {/* Content Area */}
       {error ? (
         <View style={styles.errorContainer}>
           <View style={styles.errorIconContainer}>
-            <Ionicons name="alert-circle" size={48} color={theme.colors.feedback.error} />
+            <Ionicons name="alert-circle" size={48} color={appTheme.colors.feedback.error} />
           </View>
           <Text style={styles.errorTitle}>Oops!</Text>
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={handleRefresh} style={styles.retryButton}>
-            <Ionicons name="refresh" size={20} color={theme.colors.background.surface} />
-            <Text style={styles.retryText}>Try Again</Text>
+            <Ionicons name="refresh" size={20} color={appTheme.colors.background.surface} />
+            <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
-          data={appointments}
-          renderItem={renderAppointment}
-          keyExtractor={(item: any) => String(item.booking_id || item._id || Math.random())}
-          contentContainerStyle={[
-            styles.listContainer,
-            appointments.length === 0 && styles.emptyListContainer,
-          ]}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              colors={[theme.colors.primary]}
-              tintColor={theme.colors.primary}
-            />
-          }
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={
-            isLoadingMore ? (
-              <View style={styles.footerLoader}>
-                <ActivityIndicator size="small" color={theme.colors.primary} />
-                <Text style={styles.footerLoaderText}>Loading more appointments...</Text>
-              </View>
-            ) : null
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <View style={styles.emptyIconContainer}>
-                <Ionicons name="calendar-outline" size={64} color={theme.colors.text.secondary} />
-              </View>
-              <Text style={styles.emptyTitle}>No Appointments Yet</Text>
-              <Text style={styles.emptySubtext}>
-                Your booking history will appear here.{"\n"}
-                Start by booking your first consultation!
-              </Text>
-              <TouchableOpacity 
-                style={styles.bookButton}
-                onPress={() => navigation.getParent()?.navigate('MainDrawer', {
-                  screen: 'HomeStack',
-                  params: { screen: 'Home' }
-                })}
-              >
-                <Ionicons name="add-circle" size={20} color={theme.colors.background.surface} />
-                <Text style={styles.bookButtonText}>Book First Appointment</Text>
-              </TouchableOpacity>
+        <Animated.View style={[styles.contentContainer, { opacity: fadeAnim }]}>
+          {/* Statistics Dashboard */}
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>{stats.total}</Text>
+              <Text style={styles.statLabel}>Total</Text>
             </View>
-          }
-        />
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>{stats.confirmed}</Text>
+              <Text style={styles.statLabel}>Booked</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>{stats.completed}</Text>
+              <Text style={styles.statLabel}>Done</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>{stats.pending}</Text>
+              <Text style={styles.statLabel}>Pending</Text>
+            </View>
+          </View>
+
+          {/* Appointments List */}
+          <View style={styles.listContainer}>
+            <FlatList
+              data={filteredAppointments}
+              renderItem={renderAppointment}
+              keyExtractor={(item) => item.booking_id?.toString() || item._id?.toString() || Math.random().toString()}
+              contentContainerStyle={filteredAppointments.length === 0 ? styles.emptyListContainer : undefined}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handleRefresh}
+                  colors={[appTheme.colors.primary]}
+                  tintColor={appTheme.colors.primary}
+                />
+              }
+              onEndReached={handleLoadMore}
+              onEndReachedThreshold={0.1}
+              ListHeaderComponent={
+                <View>
+                  {/* Filter Section - Dropdown */}
+                  <View style={styles.filterDropdownContainer}>
+                    <TouchableOpacity 
+                      style={styles.filterDropdownButton}
+                      onPress={() => setShowFilterDropdown(!showFilterDropdown)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.filterDropdownContent}>
+                        <Ionicons 
+                          name={filterOptions.find(f => f.key === selectedFilter)?.icon as any} 
+                          size={16} 
+                          color={appTheme.colors.text.secondary} 
+                        />
+                        <Text style={styles.filterDropdownText}>
+                          {filterOptions.find(f => f.key === selectedFilter)?.label}
+                        </Text>
+                        <Ionicons 
+                          name={showFilterDropdown ? "chevron-up" : "chevron-down"} 
+                          size={14} 
+                          color={appTheme.colors.text.secondary} 
+                        />
+                      </View>
+                    </TouchableOpacity>
+                    
+                    {showFilterDropdown && (
+                      <View style={styles.filterDropdownMenu}>
+                        {filterOptions.map((filter) => (
+                          <TouchableOpacity
+                            key={filter.key}
+                            style={[
+                              styles.filterDropdownItem,
+                              selectedFilter === filter.key && styles.filterDropdownItemActive
+                            ]}
+                            onPress={() => {
+                              setSelectedFilter(filter.key);
+                              setShowFilterDropdown(false);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <Ionicons 
+                              name={filter.icon as any} 
+                              size={16} 
+                              color={selectedFilter === filter.key ? appTheme.colors.background.surface : appTheme.colors.text.secondary} 
+                            />
+                            <Text style={[
+                              styles.filterDropdownItemText,
+                              selectedFilter === filter.key && styles.filterDropdownItemTextActive
+                            ]}>
+                              {filter.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                </View>
+              }
+              ListFooterComponent={
+                isLoadingMore ? (
+                  <View style={styles.footerLoader}>
+                    <ActivityIndicator size="small" color={appTheme.colors.primary} />
+                    <Text style={styles.footerLoaderText}>Loading more...</Text>
+                  </View>
+                ) : null
+              }
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <View style={styles.emptyIconContainer}>
+                    <Ionicons name="calendar-outline" size={64} color={appTheme.colors.text.secondary} />
+                  </View>
+                  <Text style={styles.emptyTitle}>
+                    {selectedFilter === 'all' ? 'No Appointments Yet' : `No ${selectedFilter} Appointments`}
+                  </Text>
+                  <Text style={styles.emptySubtext}>
+                    {selectedFilter === 'all' 
+                      ? 'Your booking history will appear here.\nStart by booking your first consultation!'
+                      : `There are no ${selectedFilter} appointments to show.`
+                    }
+                  </Text>
+                  {selectedFilter === 'all' && (
+                    <TouchableOpacity 
+                      style={styles.bookButton}
+                      onPress={() => navigation.getParent()?.navigate('MainDrawer', {
+                        screen: 'HomeStack',
+                        params: { screen: 'Home' }
+                      })}
+                    >
+                      <Ionicons name="add-circle" size={20} color={appTheme.colors.background.surface} />
+                      <Text style={styles.bookButtonText}>Book First Appointment</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              }
+            />
+          </View>
+        </Animated.View>
       )}
     </SafeAreaView>
   );
@@ -614,37 +799,179 @@ const styles = StyleSheet.create({
   },
   
   // Header Styles
+  headerWrapper: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
   header: {
-    backgroundColor: theme.colors.primary,
-    paddingTop: 60,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+    paddingTop: 40,
+    paddingBottom: theme.spacing.l,
+    paddingHorizontal: 24,
+    position: 'relative',
+    overflow: 'hidden',
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
+    zIndex: 2,
   },
   backButton: {
-    padding: 8,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    marginRight: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titleContainer: {
+    flex: 1,
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: theme.colors.background.surface,
-    letterSpacing: 0.3,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+    marginBottom: 2,
   },
-
+  headerSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontWeight: '500',
+    letterSpacing: 0.5,
+  },
+  // Decorative elements
+  topCircle: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    top: -50,
+    right: -30,
+  },
+  bottomWave: {
+    position: 'absolute',
+    bottom: -25,
+    left: 0,
+    right: 0,
+    height: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderTopLeftRadius: 80,
+    borderTopRightRadius: 80,
+  },
+  
+  // Content Container
+  contentContainer: {
+    flex: 1,
+  },
+  
+  // Statistics Dashboard
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
+    gap: theme.spacing.s,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: theme.borderRadius.l,
+    padding: theme.spacing.m,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: theme.colors.primary,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: theme.colors.text.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    textAlign: 'center',
+    lineHeight: 12,
+  },
+  
+  // Filter Section - Dropdown
+  filterDropdownContainer: {
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
+    backgroundColor: theme.colors.background.primary,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.text.secondary + '15',
+  },
+  filterDropdownButton: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: theme.borderRadius.m,
+    borderWidth: 1,
+    borderColor: theme.colors.text.secondary + '30',
+    paddingVertical: theme.spacing.s,
+    paddingHorizontal: theme.spacing.m,
+  },
+  filterDropdownContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  filterDropdownText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text.secondary,
+    flex: 1,
+    marginLeft: theme.spacing.s,
+  },
+  filterDropdownMenu: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: theme.borderRadius.m,
+    borderWidth: 1,
+    borderColor: theme.colors.text.secondary + '30',
+    marginTop: theme.spacing.xs,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  filterDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.s,
+    paddingHorizontal: theme.spacing.m,
+    gap: theme.spacing.s,
+  },
+  filterDropdownItemActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  filterDropdownItemText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text.secondary,
+    flex: 1,
+  },
+  filterDropdownItemTextActive: {
+    color: theme.colors.background.surface,
+  },
+  
   // Loading State
   loadingContainer: {
     flex: 1,
@@ -714,7 +1041,7 @@ const styles = StyleSheet.create({
   // List Container
   listContainer: {
     padding: theme.spacing.l,
-    paddingTop: theme.spacing.m,
+    paddingTop: 0,
   },
   emptyListContainer: {
     flexGrow: 1,
@@ -785,83 +1112,131 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Appointment Card Styles
+  // Modern Appointment Card Styles
   appointmentCard: {
+    marginBottom: theme.spacing.l,
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+  },
+  cardContent: {
     backgroundColor: theme.colors.background.surface,
     borderRadius: theme.borderRadius.xl,
-    marginBottom: theme.spacing.l,
     padding: 0,
     ...theme.shadows.card,
-    overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(0, 130, 114, 0.1)',
   },
+  
+  // Card Header
   cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     padding: theme.spacing.l,
     paddingBottom: theme.spacing.m,
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.colors.text.primary,
-    marginBottom: 8,
+  professionalSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  avatarContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0, 130, 114, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: theme.spacing.m,
+  },
+  professionalInfo: {
+    flex: 1,
   },
   professionalName: {
     fontSize: 18,
-    color: theme.colors.text.primary,
-    marginBottom: 6,
     fontWeight: '700',
+    color: theme.colors.text.primary,
+    marginBottom: 2,
   },
+  specializationText: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    fontWeight: '500',
+  },
+  
+  // Status Badge
   statusBadge: {
     alignSelf: 'flex-start',
     paddingHorizontal: theme.spacing.m,
     paddingVertical: theme.spacing.s,
     borderRadius: theme.borderRadius.xl,
-    marginBottom: theme.spacing.m,
-    ...theme.shadows.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   statusText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
-  cardContent: {
-    padding: 20,
-    paddingTop: 0,
+  
+  // Date and Time Section
+  dateTimeSection: {
+    paddingHorizontal: theme.spacing.l,
+    paddingBottom: theme.spacing.m,
+  },
+  dateTimeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.s,
+  },
+  iconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0, 130, 114, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: theme.spacing.s,
+  },
+  dateTimeText: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    fontWeight: '600',
+  },
+  
+  // Details Section
+  detailsSection: {
+    paddingHorizontal: theme.spacing.l,
+    paddingBottom: theme.spacing.m,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.text.secondary + '20',
+    paddingTop: theme.spacing.m,
   },
   detailRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-  },
-  detailIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+    marginBottom: theme.spacing.s,
   },
   detailLabel: {
-    fontSize: 12,
-    color: '#64748B',
+    fontSize: 13,
+    color: theme.colors.text.secondary,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    minWidth: 60,
   },
   detailValue: {
     fontSize: 14,
     color: theme.colors.text.primary,
     fontWeight: '600',
-    flex: 1,
   },
+  
+  // Action Buttons
   actionsRow: {
     flexDirection: 'row',
     gap: theme.spacing.m,
-    marginTop: theme.spacing.m,
     paddingHorizontal: theme.spacing.l,
     paddingBottom: theme.spacing.l,
   },
@@ -872,19 +1247,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: theme.spacing.m,
     paddingHorizontal: theme.spacing.m,
-    backgroundColor: theme.colors.primary,
     borderRadius: theme.borderRadius.l,
+    gap: theme.spacing.s,
     ...theme.shadows.card,
   },
+  primaryActionButton: {
+    backgroundColor: theme.colors.primary,
+  },
   secondaryActionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: theme.spacing.m,
-    paddingHorizontal: theme.spacing.m,
     backgroundColor: 'rgba(0, 130, 114, 0.08)',
-    borderRadius: theme.borderRadius.l,
     borderWidth: 1.5,
     borderColor: theme.colors.primary,
   },
@@ -892,15 +1263,29 @@ const styles = StyleSheet.create({
     color: theme.colors.background.surface,
     fontSize: 14,
     fontWeight: '600',
-    marginLeft: 8,
   },
   secondaryActionButtonText: {
     color: theme.colors.primary,
-    fontSize: 14,
-    fontWeight: '600',
   },
   
-  // Missing styles for appointment card
+  // Legacy styles for backward compatibility
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+    marginBottom: 8,
+  },
+  detailIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  
+  // Missing styles for appointment card (legacy)
   dateTimeContainer: {
     flex: 1,
   },

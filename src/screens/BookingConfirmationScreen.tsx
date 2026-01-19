@@ -666,7 +666,9 @@ const BookingConfirmationScreen = () => {
           >
             <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Confirm Booking</Text>
+          <Text style={styles.headerTitle}>
+            {bookingData.serviceType === 'yoga_class' ? 'Enroll in Class' : 'Confirm Booking'}
+          </Text>
           <View style={styles.headerIcon}>
             <Ionicons name="checkmark-circle" size={24} color={theme.colors.background.surface} />
           </View>

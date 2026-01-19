@@ -215,7 +215,8 @@ const BookingSuccessScreen = ({ route }: BookingSuccessScreenProps) => {
 
   const handleShareBooking = async () => {
     try {
-      const shareMessage = `🧘‍♀️ Yoga Session Confirmed!\n\n📅 Booking ID: #${bookingId}\n💰 Amount: ₹${amount}\n👨‍⚕️ Professional: ${bookingDetails?.professionalName || 'Expert'}\n📝 Service: ${bookingDetails?.serviceName || 'Yoga Session'}\n⏰ Time: ${bookingDetails?.date || 'Scheduled'} at ${bookingDetails?.time || 'To be confirmed'}\n\nBooked via Samyayog App!`;
+      const isYogaClass = bookingDetails?.serviceName?.includes('Class') || bookingDetails?.serviceName?.includes('Yoga');
+      const shareMessage = `${isYogaClass ? '🧘‍♀️ Yoga Class Enrollment Confirmed!' : '🧘‍♀️ Consultation Booking Confirmed!'}\n\n📅 Booking ID: #${bookingId}\n💰 Amount: ₹${amount}\n👨‍⚕️ Professional: ${bookingDetails?.professionalName || 'Expert'}\n📝 Service: ${bookingDetails?.serviceName || 'Yoga Session'}\n⏰ Time: ${bookingDetails?.date || 'Scheduled'} at ${bookingDetails?.time || 'To be confirmed'}\n\nBooked via Samyayog App!`;
       
       await Share.share({
         message: shareMessage,
@@ -229,7 +230,8 @@ const BookingSuccessScreen = ({ route }: BookingSuccessScreenProps) => {
 
   const handleAddToCalendar = () => {
     // Create calendar event details
-    const eventTitle = `Yoga Session with ${bookingDetails?.professionalName || 'Expert'}`;
+    const isYogaClass = bookingDetails?.serviceName?.includes('Class') || bookingDetails?.serviceName?.includes('Yoga');
+    const eventTitle = `${isYogaClass ? 'Yoga Class' : 'Consultation'} with ${bookingDetails?.professionalName || 'Expert'}`;
     const eventDetails = `Booking ID: #${bookingId}\nService: ${bookingDetails?.serviceName || 'Yoga Session'}\nAmount: ₹${amount}`;
     
     // Try to open calendar app (basic implementation)
@@ -349,10 +351,21 @@ const BookingSuccessScreen = ({ route }: BookingSuccessScreenProps) => {
           ]}
         >
           <Text style={styles.title}>
-            {status === 'success' ? '🎉 Payment Successful!' : '✨ Booking Confirmed!'}
+            {status === 'success' 
+              ? (bookingDetails?.serviceName?.includes('Class') || bookingDetails?.serviceName?.includes('Yoga') 
+                ? '🎉 Enrollment Successful!' 
+                : '🎉 Payment Successful!')
+              : (bookingDetails?.serviceName?.includes('Class') || bookingDetails?.serviceName?.includes('Yoga')
+                ? '✨ Class Enrolled!' 
+                : '✨ Booking Confirmed!')
+            }
           </Text>
           <Text style={styles.subtitle}>
-            {message || 'Your yoga session has been confirmed successfully'}
+            {message || (
+              bookingDetails?.serviceName?.includes('Class') || bookingDetails?.serviceName?.includes('Yoga')
+                ? 'Your yoga class enrollment has been confirmed successfully'
+                : 'Your consultation session has been confirmed successfully'
+            )}
           </Text>
           <View style={styles.userGreeting}>
             <Ionicons name="heart" size={16} color="#FF6B6B" style={styles.heartIcon} />

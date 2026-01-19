@@ -181,8 +181,11 @@ const ClassesListScreen = () => {
 
   // Render class card
   const renderClassItem = useCallback(({ item }: { item: YogaClass }) => {
+    console.log('📋 ClassesListScreen rendering item:', item);
     const availableModes = getAvailableModes(item);
     const effectivePrice = getEffectivePrice(item);
+    console.log('📊 Available modes in list:', availableModes);
+    console.log('💰 Effective price in list:', effectivePrice);
     const imageUrl = item.location ? 'https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=800' : 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800';
 
     return (
@@ -336,58 +339,6 @@ const ClassesListScreen = () => {
         <View style={styles.bottomWave} />
       </LinearGradient>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search classes..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#999"
-          />
-          {searchQuery ? (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color="#666" />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </View>
-
-      {/* Categories Section */}
-      <View style={styles.categoriesSection}>
-        <Text style={styles.sectionTitle}>Browse by Category</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesContainer}>
-          {categories.map((category) => (
-            <TouchableOpacity
-              key={category.id}
-              style={[
-                styles.categoryChip,
-                selectedCategory === category.id && styles.categoryChipActive
-              ]}
-              onPress={() => {
-                console.log('Category selected:', category.id);
-                setSelectedCategory(category.id);
-                setFilters(prev => ({ ...prev, page: 1 }));
-              }}
-            >
-              <Ionicons 
-                name={category.icon as any} 
-                size={16} 
-                color={selectedCategory === category.id ? '#fff' : '#666'} 
-              />
-              <Text style={[
-                styles.categoryText,
-                selectedCategory === category.id && styles.categoryTextActive
-              ]}>
-                {category.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
       {/* Main Content */}
       {error ? (
         <View style={styles.errorContainer}>
@@ -414,6 +365,61 @@ const ClassesListScreen = () => {
           }
           ListEmptyComponent={renderEmpty}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <View style={{ marginBottom: 16 }}>
+              {/* Search Bar */}
+              <View style={styles.searchContainer}>
+                <View style={styles.searchBar}>
+                  <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search classes..."
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholderTextColor="#999"
+                  />
+                  {searchQuery ? (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <Ionicons name="close-circle" size={20} color="#666" />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+
+              {/* Categories Section */}
+              <View style={styles.categoriesSection}>
+                <Text style={styles.sectionTitle}>Browse by Category</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesContainer}>
+                  {categories.map((category) => (
+                    <TouchableOpacity
+                      key={category.id}
+                      style={[
+                        styles.categoryChip,
+                        selectedCategory === category.id && styles.categoryChipActive
+                      ]}
+                      onPress={() => {
+                        console.log('Category selected:', category.id);
+                        setSelectedCategory(category.id);
+                        setFilters(prev => ({ ...prev, page: 1 }));
+                      }}
+                    >
+                      <Ionicons 
+                        name={category.icon as any} 
+                        size={16} 
+                        color={selectedCategory === category.id ? '#fff' : '#666'} 
+                      />
+                      <Text style={[
+                        styles.categoryText,
+                        selectedCategory === category.id && styles.categoryTextActive
+                      ]}>
+                        {category.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+          }
         />
       )}
 
@@ -574,7 +580,7 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 8,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
@@ -583,30 +589,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   searchIcon: {
     marginRight: 12,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     color: '#333',
   },
   categoriesSection: {
     backgroundColor: '#fff',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '600',
     color: '#1a1a1a',
-    marginBottom: 12,
+    marginBottom: 6,
     letterSpacing: -0.2,
   },
   categoriesContainer: {
@@ -616,17 +622,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f8f9fa',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 25,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
     marginRight: 12,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: '#e9ecef',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
   },
   categoryChipActive: {
     backgroundColor: '#4CAF50',
@@ -648,7 +649,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   listContent: {
-    padding: 20,
+    paddingTop: 16,
+    paddingHorizontal: 20,
   },
   classCard: {
     backgroundColor: '#fff',
