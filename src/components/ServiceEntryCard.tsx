@@ -163,14 +163,14 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   classIconBg: {
-    backgroundColor: `${theme.colors.secondary}10`,
+    backgroundColor: theme.colors.secondary + '10',
     borderWidth: 2,
-    borderColor: `${theme.colors.secondary}30`,
+    borderColor: theme.colors.secondary + '30',
   },
   consultIconBg: {
-    backgroundColor: `${theme.colors.primary}10`,
+    backgroundColor: theme.colors.primary + '10',
     borderWidth: 2,
-    borderColor: `${theme.colors.primary}30`,
+    borderColor: theme.colors.primary + '30',
   },
   sectionTitle: {
     fontSize: 20,
@@ -197,14 +197,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   classCtaBg: {
-    backgroundColor: `${theme.colors.secondary}15`,
+    backgroundColor: theme.colors.secondary + '15',
     borderWidth: 1,
-    borderColor: `${theme.colors.secondary}40`,
+    borderColor: theme.colors.secondary + '40',
   },
   consultCtaBg: {
-    backgroundColor: `${theme.colors.primary}15`,
+    backgroundColor: theme.colors.primary + '15',
     borderWidth: 1,
-    borderColor: `${theme.colors.primary}40`,
+    borderColor: theme.colors.primary + '40',
   },
   ctaText: {
     fontSize: 13,

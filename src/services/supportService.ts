@@ -24,8 +24,9 @@ export const supportService = {
 
   // Get user's support tickets
   getUserTickets: async (userId: string | number, page: number = 1, limit: number = 20): Promise<ApiResult<any>> => {
-    return apiClient.get('/user/customer-support/user', {
-      params: { user_id: userId, page, limit }
+    // ✅ FIX: Pass userId in URL path, not as a query param
+    return apiClient.get(`/user/customer-support/${userId}`, {
+      params: { page, limit } // (Note: Your backend currently ignores page/limit, but it's good to keep)
     });
   },
 

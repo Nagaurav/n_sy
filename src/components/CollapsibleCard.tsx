@@ -21,9 +21,11 @@ export interface CollapsibleCardProps {
   title: string;
   content: React.ReactNode;
   containerStyle?: ViewStyle;
+  themeColors?: any; // Allow dynamic theme colors
 }
 
-const CollapsibleCard: React.FC<CollapsibleCardProps> = ({ title, content, containerStyle }) => {
+const CollapsibleCard: React.FC<CollapsibleCardProps> = ({ title, content, containerStyle, themeColors }) => {
+  const currentTheme = themeColors || theme;
   const [isOpen, setIsOpen] = useState(false);
   const rotation = useRef(new Animated.Value(0)).current;
 
@@ -53,18 +55,18 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({ title, content, conta
   };
 
   return (
-    <View style={[styles.card, containerStyle]}>
+    <View style={[styles.card, containerStyle, { backgroundColor: currentTheme.colors.background.surface }]}>
       <TouchableOpacity
-        style={[styles.header, isOpen && styles.headerActive]}
+        style={[styles.header, isOpen && { backgroundColor: currentTheme.colors.primary + '0F' }]}
         activeOpacity={0.7}
         onPress={toggleOpen}
       >
-        <Text style={styles.title}>{title}</Text>
+        <Text style={[styles.title, { color: currentTheme.colors.text.primary }]}>{title}</Text>
         <Animated.View style={rotateStyle}>
           <Ionicons
             name="chevron-down-outline"
             size={20}
-            color={theme.colors.primary}
+            color={currentTheme.colors.primary}
           />
         </Animated.View>
       </TouchableOpacity>
@@ -72,7 +74,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({ title, content, conta
       {isOpen && (
         <View style={styles.contentContainer}>
           {typeof content === 'string' ? (
-            <Text style={styles.contentText}>{content}</Text>
+            <Text style={[styles.contentText, { color: currentTheme.colors.text.secondary }]}>{content}</Text>
           ) : (
             content
           )}
@@ -84,7 +86,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({ title, content, conta
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: theme.colors.background.surface,
     borderRadius: theme.borderRadius.m,
     marginTop: theme.spacing.s,
     ...theme.shadows.card,
@@ -96,24 +97,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.m,
     paddingVertical: theme.spacing.s,
   },
-  headerActive: {
-    backgroundColor: 'rgba(0, 130, 114, 0.06)',
-  },
   title: {
-    fontSize: theme.typography.h3.fontSize,
+    ...theme.typography.h3,
+    fontSize: 16,
     fontWeight: '600',
     lineHeight: theme.typography.h3.lineHeight,
-    color: theme.colors.text.primary,
+    flex: 1,
+    marginRight: theme.spacing.s,
   },
   contentContainer: {
     paddingHorizontal: theme.spacing.m,
     paddingBottom: theme.spacing.m,
   },
   contentText: {
-    fontSize: theme.typography.body.fontSize,
+    ...theme.typography.small,
+    fontSize: 13,
     fontWeight: '400',
-    lineHeight: theme.typography.body.lineHeight,
-    color: theme.colors.text.secondary,
+    lineHeight: theme.typography.small.lineHeight,
   },
 });
 
