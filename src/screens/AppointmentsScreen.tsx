@@ -677,8 +677,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
               data={filteredAppointments}
               renderItem={renderAppointment}
               keyExtractor={(item) => item.booking_id?.toString() || item._id?.toString() || Math.random().toString()}
-              contentContainerStyle={filteredAppointments.length === 0 ? styles.emptyListContainer : undefined}
-              showsVerticalScrollIndicator={false}
+              showsVerticalScrollIndicator={true}
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshing}
@@ -873,6 +872,7 @@ const styles = StyleSheet.create({
   // Content Container
   contentContainer: {
     flex: 1,
+    minHeight: height - 200, // Ensure minimum height for scrolling
   },
   
   // Statistics Dashboard
@@ -1040,11 +1040,15 @@ const styles = StyleSheet.create({
 
   // List Container
   listContainer: {
+    flex: 1,
     padding: theme.spacing.l,
     paddingTop: 0,
   },
   emptyListContainer: {
-    flexGrow: 1,
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 50,
   },
 
   // Empty State

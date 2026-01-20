@@ -9,7 +9,10 @@ import {
   TouchableOpacity,
   Platform,
   Animated,
+  SafeAreaView,
+  Alert,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { useRoute, RouteProp, useNavigation, useIsFocused } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import { GiftedChat, IMessage, Bubble, InputToolbar, Send, SystemMessage } from 'react-native-gifted-chat';
@@ -18,7 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../hooks/useAuth';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import { chatService } from '../services';
+import { chatService, apiService } from '../services';
 import { socketService } from '../services/socketService';
 import type { RootStackParamList } from '../../App';
 import { useTheme } from '../contexts/ThemeContext';
@@ -56,6 +59,10 @@ const ChatScreen: React.FC = () => {
   const [actualChatId, setActualChatId] = useState<string | null>(null);
   const [socketReady, setSocketReady] = useState(false);
   
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  
   // Typing & Online state
   const [isTyping, setIsTyping] = useState(false);
   const [otherUserTyping, setOtherUserTyping] = useState(false);
@@ -67,6 +74,22 @@ const ChatScreen: React.FC = () => {
 
   const socketRef = useRef<any>(null);
   const chatRoomJoined = useRef<string | null>(null);
+
+  // Start entrance animation
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   // --- User ID Extraction ---
   const getCanonicalUserId = useCallback(() => {
@@ -88,6 +111,70 @@ const ChatScreen: React.FC = () => {
   useEffect(() => {
     if (title) navigation.setOptions({ headerTitle: title } as any);
   }, [title, navigation]);
+
+  // --- Prescription Navigation ---
+  const handlePrescriptionPress = useCallback(async () => {
+    // 🔍 Debug Log
+    console.log("👉 Checking Prescription for Booking ID:", appointmentId); 
+
+    if (!appointmentId) {
+      Alert.alert("Error", "No Appointment ID found for this chat.");
+      return;
+    }
+
+    try {
+      console.log('📋 [ChatScreen] Starting prescription fetch for:', appointmentId);
+      
+      const response = await apiService.getBookingPrescription(appointmentId);
+      
+      console.log('📋 [ChatScreen] API Response:', JSON.stringify(response, null, 2));
+      
+      // ✅ Check for data directly (no .success check needed)
+      if (response.data && response.data.data) {
+        const prescription = response.data.data;
+        console.log('✅ [ChatScreen] Prescription found:', prescription);
+        
+        // Navigate
+        console.log('🧭 [ChatScreen] Navigating to PrescriptionDetail with:', {
+          prescriptionId: prescription.id,
+          appointmentId: appointmentId
+        });
+        
+        navigation.navigate('PrescriptionDetail', { 
+          prescriptionId: prescription.id,
+          appointmentId: appointmentId 
+        } as any);
+      } else {
+        // ❌ Handle Empty Data (404 usually ends up here or catch block)
+        console.log('❌ [ChatScreen] No prescription data found in response');
+        Alert.alert(
+          "No Prescription",
+          "The professional has not uploaded a prescription for this appointment yet."
+        );
+      }
+    } catch (error: any) {
+      console.error('❌ [ChatScreen] Error fetching prescription:', error);
+      console.log('🔍 [ChatScreen] Error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message
+      });
+      
+      // ❌ Handle Network/Server Errors
+      if (error.response?.status === 404) {
+        Alert.alert(
+          "Not Available",
+          "No prescription has been created for this appointment yet."
+        );
+      } else {
+        Alert.alert(
+          "Error",
+          "Failed to load prescription. Please try again."
+        );
+      }
+    }
+  }, [navigation, appointmentId]);
 
   // --- Validation ---
   useEffect(() => {
@@ -449,14 +536,8 @@ const ChatScreen: React.FC = () => {
       <View style={{ alignItems: 'center', paddingVertical: theme.spacing.s }}>
         <TouchableOpacity 
           onPress={() => loadMessages(page + 1, true)}
-          style={{
-            backgroundColor: appTheme.colors.primary,
-            paddingHorizontal: theme.spacing.l,
-            paddingVertical: theme.spacing.s,
-            borderRadius: theme.borderRadius.m,
-            flexDirection: 'row',
-            alignItems: 'center',
-          }}
+          style={styles.loadEarlierButton}
+          activeOpacity={0.7}
         >
           {isLoadingEarlier && (
             <ActivityIndicator 
@@ -465,11 +546,7 @@ const ChatScreen: React.FC = () => {
               style={{ marginRight: theme.spacing.s }}
             />
           )}
-          <Text style={{ 
-            color: appTheme.colors.background.surface,
-            fontSize: 14,
-            fontWeight: '600',
-          }}>
+          <Text style={styles.loadEarlierText}>
             Load Earlier Messages
           </Text>
         </TouchableOpacity>
@@ -488,11 +565,30 @@ const ChatScreen: React.FC = () => {
       ).start();
 
         return (
-            <View style={{ paddingHorizontal: theme.spacing.m, paddingVertical: theme.spacing.s }}>
-                <Text style={{ color: appTheme.colors.text.secondary, fontStyle: 'italic', fontSize: 12 }}>
-                    {professionalName} is typing...
+            <Animated.View 
+              style={[
+                styles.typingIndicator,
+                {
+                  opacity: fadeAnim,
+                  transform: [{ translateY: slideAnim }],
+                }
+              ]}
+            >
+                <View style={styles.typingDots}>
+                  <Animated.View 
+                    style={[styles.dot, { opacity: dotAnim1 }]}
+                  />
+                  <Animated.View 
+                    style={[styles.dot, { opacity: dotAnim2 }]}
+                  />
+                  <Animated.View 
+                    style={[styles.dot, { opacity: dotAnim3 }]}
+                  />
+                </View>
+                <Text style={styles.typingText}>
+                  {professionalName} is typing...
                 </Text>
-            </View>
+            </Animated.View>
         );
     }
     return null;
@@ -502,45 +598,106 @@ const ChatScreen: React.FC = () => {
     <Bubble
         {...props}
         wrapperStyle={{
-            right: { backgroundColor: appTheme.colors.primary, borderRadius: theme.borderRadius.l },
-            left: { backgroundColor: appTheme.colors.background.surface, borderRadius: theme.borderRadius.l },
+            right: { 
+              backgroundColor: appTheme.colors.primary, 
+              borderRadius: theme.borderRadius.l,
+              borderBottomRightRadius: 4,
+              ...theme.shadows.card,
+            },
+            left: { 
+              backgroundColor: appTheme.colors.background.surface,
+              borderRadius: theme.borderRadius.l,
+              borderBottomLeftRadius: 4,
+              ...theme.shadows.card,
+            },
+        }}
+        textStyle={{
+            right: { 
+              color: appTheme.colors.background.surface,
+              ...theme.typography.body,
+            },
+            left: { 
+              color: appTheme.colors.text.primary,
+              ...theme.typography.body,
+            },
         }}
     />
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: appTheme.colors.background.primary }]}>
-      <StatusBar barStyle="light-content" backgroundColor={appTheme.colors.primary} />
+    <SafeAreaView style={styles.container}>
+      <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
       
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: appTheme.colors.primary }]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Ionicons name="chevron-back" size={24} color={appTheme.colors.background.surface} />
-        </TouchableOpacity>
-        <View style={styles.headerContent}>
-            <View style={[styles.avatar, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
+      {/* Modern Header with Gradient */}
+      <Animated.View
+        style={[
+          styles.headerWrapper,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={[appTheme.colors.primary, appTheme.colors.secondary]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
+        >
+          <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
+          
+          <View style={styles.headerContent}>
+            <TouchableOpacity 
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="chevron-back" size={24} color={appTheme.colors.background.surface} />
+            </TouchableOpacity>
+            
+            <View style={styles.profileContainer}>
+              <View style={styles.avatar}>
                 <Ionicons name="person" size={20} color={appTheme.colors.background.surface} />
-            </View>
-            <View style={styles.headerTextContainer}>
-                <Text style={[styles.headerTitle, { color: appTheme.colors.background.surface }]}>{professionalName}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={{ 
-                        width: 8, height: 8, borderRadius: 4, 
-                        backgroundColor: isOnline ? '#4CAF50' : '#ccc', marginRight: 6 
-                    }} />
-                    <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 12 }}>
-                        {isOnline ? 'Online' : 'Offline'}
-                    </Text>
+              </View>
+              <View style={styles.headerTextContainer}>
+                <Text style={styles.headerTitle}>{professionalName}</Text>
+                <View style={styles.statusContainer}>
+                  <View style={[
+                    styles.statusDot,
+                    { backgroundColor: isOnline ? appTheme.colors.feedback.success : '#6B7280' }
+                  ]} />
+                  <Text style={styles.statusText}>
+                    {isOnline ? 'Online' : 'Offline'}
+                  </Text>
                 </View>
+              </View>
             </View>
-        </View>
-      </View>
+            
+            <TouchableOpacity 
+              style={styles.prescriptionButton} 
+              activeOpacity={0.7}
+              onPress={handlePrescriptionPress}
+            >
+              <Ionicons name="medical" size={20} color={appTheme.colors.background.surface} />
+            </TouchableOpacity>
+          </View>
+          
+          {/* Decorative elements */}
+          <View style={styles.topCircle} />
+          <View style={styles.bottomWave} />
+        </LinearGradient>
+      </Animated.View>
 
       <GiftedChat
           messages={messages}
           onSend={onSend}
           user={{ _id: String(currentUserId.current) }}
-          renderLoading={() => <ActivityIndicator size="large" color={appTheme.colors.primary} />}
+          renderLoading={() => (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={appTheme.colors.primary} />
+              <Text style={styles.loadingText}>Loading messages...</Text>
+            </View>
+          )}
           onInputTextChanged={handleInputTextChanged}
           renderFooter={renderFooter}
           renderLoadEarlier={renderLoadEarlier}
@@ -549,48 +706,247 @@ const ChatScreen: React.FC = () => {
           renderSystemMessage={(props) => (
             <SystemMessage
                 {...props}
-                containerStyle={{ marginBottom: 15, paddingVertical: 10 }}
-                textStyle={{ color: '#999', fontWeight: 'bold', fontSize: 13, textAlign: 'center' }}
+                containerStyle={styles.systemMessageContainer}
+                textStyle={styles.systemMessageText}
             />
           )}
           textInputProps={{
-            style: { 
-                color: appTheme.colors.text.primary,
-                backgroundColor: appTheme.colors.background.secondary,
-                borderRadius: 20,
-                paddingHorizontal: 15,
-                marginTop: 6,
-                marginBottom: 6,
-                marginRight: 10,
-                flex: 1
-            }
+            style: styles.textInput,
+            placeholder: 'Type a message...',
+            placeholderTextColor: appTheme.colors.text.secondary,
           }}
+          renderInputToolbar={(props) => (
+            <InputToolbar
+                {...props}
+                containerStyle={styles.inputToolbar}
+                primaryStyle={styles.inputToolbarPrimary}
+            />
+          )}
+          renderSend={(props) => (
+            <Send
+                {...props}
+                containerStyle={styles.sendButton}
+            >
+              <View style={styles.sendButtonInner}>
+                <Ionicons name="send" size={18} color={appTheme.colors.background.surface} />
+              </View>
+            </Send>
+          )}
           alignTop={false}
           showAvatarForEveryMessage={false}
           showUserAvatar={false}
           alwaysShowSend={false}
+          minInputToolbarHeight={56}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
 const { width, height } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { 
+    flex: 1,
+    backgroundColor: theme.colors.background.primary,
+  },
+  headerWrapper: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
   header: { 
     paddingTop: Platform.OS === 'ios' ? 50 : 20,
-    paddingBottom: 15,
-    paddingHorizontal: 15,
+    paddingBottom: theme.spacing.l,
+    paddingHorizontal: theme.spacing.m,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    elevation: 4,
+    justifyContent: 'space-between',
+    zIndex: 2,
   },
-  backButton: { padding: 5 },
-  headerContent: { flexDirection: 'row', alignItems: 'center', marginLeft: 15 },
-  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  headerTextContainer: { marginLeft: 10 },
-  headerTitle: { fontSize: 18, fontWeight: 'bold' },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: theme.spacing.m,
+  },
+  avatar: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center', 
+    justifyContent: 'center',
+  },
+  headerTextContainer: { 
+    marginLeft: theme.spacing.s,
+  },
+  headerTitle: { 
+    ...theme.typography.h3,
+    color: theme.colors.background.surface,
+    fontWeight: '600',
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: theme.spacing.xs,
+  },
+  statusText: {
+    ...theme.typography.caption,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 12,
+  },
+  prescriptionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Decorative elements
+  topCircle: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    top: -60,
+    right: -40,
+  },
+  bottomWave: {
+    position: 'absolute',
+    bottom: -30,
+    left: 0,
+    right: 0,
+    height: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderTopLeftRadius: 100,
+    borderTopRightRadius: 100,
+  },
+  // Chat styles
+  loadEarlierButton: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.s,
+    borderRadius: theme.borderRadius.m,
+    flexDirection: 'row',
+    alignItems: 'center',
+    ...theme.shadows.card,
+  },
+  loadEarlierText: {
+    ...theme.typography.small,
+    color: theme.colors.background.surface,
+    fontWeight: '600',
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.m,
+    paddingVertical: theme.spacing.s,
+    backgroundColor: theme.colors.background.surface,
+    marginHorizontal: theme.spacing.m,
+    marginBottom: theme.spacing.s,
+    borderRadius: theme.borderRadius.l,
+    ...theme.shadows.card,
+  },
+  typingDots: {
+    flexDirection: 'row',
+    marginRight: theme.spacing.s,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.colors.text.secondary,
+    marginHorizontal: 2,
+  },
+  typingText: {
+    ...theme.typography.caption,
+    color: theme.colors.text.secondary,
+    fontStyle: 'italic',
+  },
+  systemMessageContainer: {
+    marginBottom: 15,
+    paddingVertical: theme.spacing.s,
+    paddingHorizontal: theme.spacing.m,
+  },
+  systemMessageText: {
+    ...theme.typography.caption,
+    color: theme.colors.text.secondary,
+    fontWeight: '600',
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  textInput: {
+    ...theme.typography.body,
+    color: theme.colors.text.primary,
+    backgroundColor: theme.colors.background.secondary,
+    borderRadius: theme.borderRadius.xl,
+    paddingHorizontal: theme.spacing.m,
+    paddingVertical: theme.spacing.s,
+    marginLeft: theme.spacing.s,
+    marginRight: theme.spacing.s,
+    flex: 1,
+    borderWidth: 0,
+  },
+  inputToolbar: {
+    backgroundColor: theme.colors.background.surface,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.background.secondary,
+    paddingHorizontal: theme.spacing.s,
+    paddingVertical: theme.spacing.s,
+    paddingBottom: Platform.OS === 'ios' ? theme.spacing.l : theme.spacing.s,
+  },
+  inputToolbarPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sendButton: {
+    height: 40,
+    width: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: theme.spacing.s,
+    ...theme.shadows.card,
+  },
+  sendButtonInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: theme.spacing.m,
+  },
+  loadingText: {
+    marginTop: theme.spacing.m,
+    ...theme.typography.body,
+    color: theme.colors.text.secondary,
+  },
 });
 
 export default ChatScreen;

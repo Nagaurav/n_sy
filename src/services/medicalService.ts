@@ -16,9 +16,16 @@ export const medicalService = {
     });
   },
 
-  // Get single prescription by ID
+  // ✅ 1. Get Prescription by ID
   getPrescription: async (id: string | number): Promise<ApiResult<SinglePrescriptionResponse>> => {
-    return apiClient.get(`/user/prescriptions/${id}`);
+    // WAS: return apiClient.get(`/user/prescriptions/${id}`);  <-- ERROR (Plural)
+    return apiClient.get(`/user/prescription/${id}`);        // <-- CORRECT (Singular)
+  },
+
+  // ✅ 2. Get Prescription by Booking
+  getPrescriptionByBooking: async (bookingId: string | number): Promise<ApiResult<SinglePrescriptionResponse>> => {
+    // WAS: return apiClient.get(`/user/prescriptions/booking/${booking_id}`); <-- ERROR
+    return apiClient.get(`/user/prescription/booking/${bookingId}`);       // <-- CORRECT
   },
 
   // Create new prescription

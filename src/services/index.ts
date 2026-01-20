@@ -68,7 +68,9 @@ export const apiService = {
   
   // Medical methods
   getPrescription: medicalService.getPrescription,
-  getBookingPrescription: medicalService.getPrescription, // Alias for backward compatibility
+  
+  // 🟢 CHANGE THIS LINE:
+  getBookingPrescription: medicalService.getPrescriptionByBooking,
   
   // Support methods
   submitSupportTicket: supportService.submitTicket,
