@@ -18,6 +18,7 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import { GiftedChat, IMessage, Bubble, InputToolbar, Send, SystemMessage } from 'react-native-gifted-chat';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { dietService } from '../services/dietService';
 import { useAuth } from '../hooks/useAuth';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
@@ -172,6 +173,44 @@ const ChatScreen: React.FC = () => {
           "Error",
           "Failed to load prescription. Please try again."
         );
+      }
+    }
+  }, [navigation, appointmentId]);
+
+  // --- Diet Plan Navigation ---
+  const handleDietPlanPress = useCallback(async () => {
+    console.log("👉 Checking Diet Plan for Booking ID:", appointmentId);
+
+    if (!appointmentId) {
+      Alert.alert("Error", "No Appointment ID found.");
+      return;
+    }
+
+    try {
+      // Backend Route: /user/diet-plan/booking/:bookingId
+      const response = await dietService.getDietPlanByBooking(appointmentId);
+
+      // Check if data exists
+      // Adjust 'response.data.data' based on your specific axios wrapper
+      if (response.data && (response.data.data || response.data.id)) {
+        navigation.navigate('DietPlan', { 
+          bookingId: appointmentId 
+        } as any);
+      } else {
+        Alert.alert(
+          "No Diet Plan",
+          "The professional has not assigned a diet plan for this appointment yet."
+        );
+      }
+    } catch (error: any) {
+      console.error('❌ Error fetching diet plan:', error);
+      if (error.response?.status === 404) {
+        Alert.alert(
+          "Not Available",
+          "No diet plan has been created for this appointment yet."
+        );
+      } else {
+        Alert.alert("Error", "Failed to check diet plan availability.");
       }
     }
   }, [navigation, appointmentId]);
@@ -673,13 +712,25 @@ const ChatScreen: React.FC = () => {
               </View>
             </View>
             
-            <TouchableOpacity 
-              style={styles.prescriptionButton} 
-              activeOpacity={0.7}
-              onPress={handlePrescriptionPress}
-            >
-              <Ionicons name="medical" size={20} color={appTheme.colors.background.surface} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row' }}>
+              {/* 🥗 NEW DIET PLAN BUTTON */}
+              <TouchableOpacity 
+                style={[styles.prescriptionButton, { marginRight: 8 }]} 
+                activeOpacity={0.7}
+                onPress={handleDietPlanPress}
+              >
+                <Ionicons name="nutrition" size={20} color={appTheme.colors.background.surface} />
+              </TouchableOpacity>
+
+              {/* 💊 EXISTING PRESCRIPTION BUTTON */}
+              <TouchableOpacity 
+                style={styles.prescriptionButton} 
+                activeOpacity={0.7}
+                onPress={handlePrescriptionPress}
+              >
+                <Ionicons name="medical" size={20} color={appTheme.colors.background.surface} />
+              </TouchableOpacity>
+            </View>
           </View>
           
           {/* Decorative elements */}

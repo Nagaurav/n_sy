@@ -91,6 +91,7 @@ export type HomeStackParamList = {
     currentUser: UserProfileData;
   };
   PrescriptionDetail: { prescriptionId: string };
+  DietPlan: { bookingId: string; title?: string };
   ChatScreen: { chatId: string; appointmentId: string; title?: string; receiverId?: string };
 };
 

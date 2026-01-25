@@ -27,6 +27,7 @@ import BookingSuccessScreen from './src/screens/BookingSuccessScreen';
 import BookingFailedScreen from './src/screens/BookingFailedScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import PrescriptionDetailScreen from './src/screens/PrescriptionDetailScreen';
+import DietPlanScreen from './src/screens/DietPlanScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import AppointmentsScreen from './src/screens/AppointmentsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -138,6 +139,7 @@ const HomeStackNavigator = () => {
       <HomeStack.Screen name="EditProfile" component={EditProfileScreen} />
       <HomeStack.Screen name="ChatScreen" component={ChatScreen} />
       <HomeStack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
+      <HomeStack.Screen name="DietPlan" component={DietPlanScreen} />
     </HomeStack.Navigator>
   );
 };
