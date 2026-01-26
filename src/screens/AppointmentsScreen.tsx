@@ -20,7 +20,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
 import { bookingService, medicalService } from '../services';
-import { ConsultationBooking } from '../types/booking';
+import { ConsultationBooking, UnifiedAppointment } from '../types/booking';
 import { theme } from '../theme';
 
 const { width, height } = Dimensions.get('window');
@@ -35,7 +35,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
   const slideAnim = useRef(new Animated.Value(30)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   
-  const [appointments, setAppointments] = useState<ConsultationBooking[]>([]);
+  const [appointments, setAppointments] = useState<UnifiedAppointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,20 +61,47 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     { key: 'cancelled', label: 'Cancelled', icon: 'close-circle' },
   ];
 
-  useEffect(() => {
-    // Reduced logging to prevent console spam
-    if (authLoading) {
+  // 🟢 Calls the merged API logic
+  const loadData = async () => {
+    const userId = (user as any)?.user_id || (user as any)?._id || (user as any)?.id;
+    if (!userId) {
+      setError('User not authenticated');
+      setIsLoading(false);
       return;
     }
-
-    // Check for user_id, _id, or id (API returns user_id)
-    const userId = (user as any)?.user_id || (user as any)?._id || (user as any)?.id;
     
-    if (userId) {
-      fetchAppointments(1);
-    } else {
+    try {
+      setError(null);
+      setIsLoading(true);
+      
+      const res = await bookingService.getAllUserBookings(userId);
+      if (res.success && res.data) {
+        setAppointments(res.data);
+        
+        // Calculate stats for unified appointments
+        const newStats = {
+          total: res.data.length,
+          confirmed: res.data.filter((apt: UnifiedAppointment) => apt.status === 'CONFIRMED').length,
+          completed: res.data.filter((apt: UnifiedAppointment) => apt.status === 'COMPLETED').length,
+          pending: res.data.filter((apt: UnifiedAppointment) => apt.status === 'PENDING').length,
+          cancelled: res.data.filter((apt: UnifiedAppointment) => apt.status === 'CANCELLED').length,
+        };
+        setStats(newStats);
+      } else {
+        setError(res.error || 'Failed to fetch appointments');
+      }
+    } catch (err) {
+      console.error('Error fetching appointments:', err);
+      setError('Network error. Please check your connection and try again.');
+    } finally {
       setIsLoading(false);
-      setError('User not authenticated');
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      loadData();
     }
   }, [user, authLoading]);
 
@@ -193,7 +220,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
   // Filter appointments based on selected filter
   const filteredAppointments = appointments.filter(appointment => {
     if (selectedFilter === 'all') return true;
-    return appointment.booking_status?.toLowerCase() === selectedFilter.toLowerCase();
+    return appointment.status?.toLowerCase() === selectedFilter.toLowerCase();
   });
   
   const handleRefresh = useCallback(() => {
@@ -203,10 +230,11 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     // Log current appointment statuses before refresh
     appointments.forEach((apt, index) => {
       console.log(`🔄 [AppointmentsScreen] Before refresh - Appointment ${index + 1}:`, {
-        bookingId: apt.booking_id || apt._id,
-        bookingStatus: apt.booking_status || apt.status,
-        paymentStatus: apt.payment_status,
-        professionalName: apt.professional_name
+        id: apt.id,
+        referenceId: apt.reference_id,
+        type: apt.type,
+        status: apt.status,
+        title: apt.title
       });
     });
     
@@ -219,8 +247,8 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     setAppointments([]);
     
     // Fetch fresh data
-    fetchAppointments(1);
-  }, [appointments, fetchAppointments]);
+    loadData();
+  }, [appointments, loadData]);
 
   const handleLoadMore = useCallback(() => {
     if (isLoadingMore || isLoading || !hasMore) {
@@ -354,220 +382,71 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     }
   };
 
-  const renderAppointment = ({ item, index }: { item: any; index: number }) => {
-    // Handle both API response formats
-    const status = (item.booking_status || item.status || '').toLowerCase();
-    const paymentStatus = (item.payment_status || '').toLowerCase();
-    const statusBadgeStyle = getStatusBadgeStyle(status);
-    const bookingId = item.booking_id || item._id;
-    const appointmentId = item.appointment_id || bookingId?.toString();
-    
-    // Debug: Log status information (reduced frequency)
-    if (bookingId === 53 || bookingId === 49) { // Only log for specific appointments
-      console.log('📅 Appointment Status Debug:', {
-        bookingId,
-        booking_status: item.booking_status,
-        status: item.status,
-        displayStatus: status,
-        professionalName: item.professional_name,
-        showPrescriptionButton: item.booking_status === 'COMPLETED'
-      });
-    }
-    const showPrescriptionButton = item.booking_status === 'COMPLETED';
-    const timeDisplay = item.time; // Already formatted as "09:00 - 09:15"
+  const renderItem = ({ item }: { item: UnifiedAppointment }) => {
+    const isYoga = item.type === 'yoga_class';
+    const color = isYoga ? '#4CAF50' : '#2196F3'; // Green vs Blue
 
     const handleAppointmentPress = () => {
-      // Log the full item to see available fields
-      console.log('🔍 [AppointmentsScreen] Full appointment item:', JSON.stringify(item, null, 2));
-      
-      // Extract professional ID with multiple fallbacks for nested API structure
-      const professionalId = String(
-        item.professional_id || 
-        item.professionalId || 
-        (item.professional && (item.professional.id || item.professional._id || item.professional.professional_id)) ||
-        (item.professional_data && (item.professional_data.id || item.professional_data._id || item.professional_data.professional_id)) ||
-        (item.professionalInfo && (item.professionalInfo.id || item.professionalInfo._id || item.professionalInfo.professional_id)) ||
-        ''
-      );
-      
-      // Extract current user ID with multiple fallbacks
-      const currentUserId = String(
-        (user as any)?.user_id || 
-        (user as any)?.user_id || 
-        user?._id || 
-        (user as any)?.id || 
-        ''
-      );
-      
-      // Get professional name with fallbacks
-      const professionalName = 
-        item.professional_name ||
-        (item.professional && (item.professional.name || item.professional.fullName)) ||
-        (item.professional_data && item.professional_data.name) ||
-        (item.professionalInfo && item.professionalInfo.name) ||
-        'Unknown Professional';
-      
-      console.log('👆 [AppointmentsScreen] Appointment card pressed:', {
-        appointmentId,
-        bookingId,
-        professionalId: professionalId || 'NOT FOUND',
-        professionalName,
-        userId: currentUserId || 'NOT FOUND',
-        date: item.date,
-        status,
-        hasProfessionalId: !!professionalId,
-        itemKeys: Object.keys(item)
+      navigation.navigate('AppointmentDetail', { 
+        appointmentId: item.reference_id,
+        type: item.type // Pass type so Detail screen knows what to do
       });
-      
-      if (appointmentId && currentUserId) {
-        console.log('🚀 [AppointmentsScreen] Navigating to AppointmentDetail:', { 
-          appointmentId, 
-          professionalId, 
-          userId: currentUserId,
-          professionalName
-        });
-        navigation.navigate('HomeStack', {
-          screen: 'AppointmentDetail',
-          params: {
-            appointmentId,
-            professionalId: professionalId || 'unknown',
-            userId: currentUserId,
-            professionalName,
-            appointmentData: item // Pass the complete appointment data
-          }
-        });
-      } else {
-        const missingFields = [];
-        if (!appointmentId) missingFields.push('appointmentId');
-        if (!currentUserId) missingFields.push('userId');
-        
-        console.error('❌ [AppointmentsScreen] Missing required parameters:', { 
-          appointmentId, 
-          professionalId, 
-          userId: currentUserId,
-          missingFields
-        });
-        
-        Alert.alert(
-          'Missing Information', 
-          `Unable to open appointment details. Missing: ${missingFields.join(', ')}`
-        );
-      }
     };
 
     return (
-      <View style={styles.appointmentCard}>
-        <TouchableOpacity 
-          style={styles.cardContent}
-          onPress={handleAppointmentPress}
-          activeOpacity={0.7}
-        >
-          {/* Card Header with Status */}
-          <View style={styles.cardHeader}>
-            <View style={styles.professionalSection}>
-              <View style={styles.avatarContainer}>
-                <Ionicons name="person-circle" size={32} color={appTheme.colors.primary} />
-              </View>
-              <View style={styles.professionalInfo}>
-                <Text style={styles.professionalName}>{item.professional_name || 'Professional'}</Text>
-                <Text style={styles.specializationText}>
-                  {item.specialization || 
-                   item.professional_specialization || 
-                   item.category || 
-                   item.service_type || 
-                   item.professional?.specialization || 
-                   item.professional?.category || 
-                   'Wellness Consultation'}
-                </Text>
-              </View>
-            </View>
-            <View style={[styles.statusBadge, { backgroundColor: statusBadgeStyle.backgroundColor }]}>
-              <Ionicons name={statusBadgeStyle.icon as any} size={12} color={statusBadgeStyle.textColor} />
-              <Text style={[styles.statusText, { color: statusBadgeStyle.textColor }]}>
-                {status.toUpperCase()}
-              </Text>
-            </View>
+      <View style={[styles.card, { borderLeftColor: color, borderLeftWidth: 5 }]}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardTitleSection}>
+            <Text style={styles.title}>{item.title}</Text>
+            <Text style={styles.sub}>{item.subtitle}</Text>
           </View>
-
-          {/* Date and Time Section */}
-          <View style={styles.dateTimeSection}>
-            <View style={styles.dateTimeItem}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="calendar" size={16} color={appTheme.colors.primary} />
-              </View>
-              <Text style={styles.dateTimeText}>{formatDate(item.date)}</Text>
-            </View>
-            <View style={styles.dateTimeItem}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="time" size={16} color={appTheme.colors.primary} />
-              </View>
-              <Text style={styles.dateTimeText}>{timeDisplay}</Text>
-            </View>
-            {item.mode && (
-              <View style={styles.dateTimeItem}>
-                <View style={styles.iconContainer}>
-                  <Ionicons name="videocam" size={16} color={appTheme.colors.primary} />
-                </View>
-                <Text style={styles.dateTimeText}>{item.mode.toUpperCase()}</Text>
-              </View>
-            )}
+          <View style={[styles.typeBadge, { backgroundColor: color + '20' }]}>
+            <Ionicons 
+              name={isYoga ? 'fitness' : 'medkit'} 
+              size={16} 
+              color={color} 
+            />
+            <Text style={[styles.typeText, { color }]}>
+              {isYoga ? 'Yoga' : 'Consultation'}
+            </Text>
           </View>
-
-          {/* Details Section */}
-          <View style={styles.detailsSection}>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Booking ID</Text>
-              <Text style={styles.detailValue}>#{bookingId}</Text>
-            </View>
-            {item.amount && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Amount</Text>
-                <Text style={styles.detailValue}>₹{item.amount}</Text>
-              </View>
-            )}
-            {item.payment_status && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Payment</Text>
-                <Text style={[styles.detailValue, { 
-                  color: item.payment_status === 'COMPLETED' ? appTheme.colors.feedback.success : appTheme.colors.feedback.warning 
-                }]}>
-                  {item.payment_status}
-                </Text>
-              </View>
-            )}
+        </View>
+        
+        <View style={styles.cardDetails}>
+          <View style={styles.detailItem}>
+            <Ionicons name="calendar" size={16} color="#666" />
+            <Text style={styles.detailText}>{new Date(item.date).toLocaleDateString()}</Text>
           </View>
+          <View style={styles.detailItem}>
+            <Ionicons name="time" size={16} color="#666" />
+            <Text style={styles.detailText}>{item.time || 'N/A'}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Ionicons name="cash" size={16} color="#666" />
+            <Text style={styles.detailText}>₹{item.amount}</Text>
+          </View>
+        </View>
 
-          {/* Action Buttons */}
-          {(showPrescriptionButton || status === 'confirmed') && (
-            <View style={styles.actionsRow}>
-              {showPrescriptionButton && (
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => handleViewPrescription(bookingId)}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="medkit-outline" size={18} color={appTheme.colors.background.surface} />
-                  <Text style={styles.actionButtonText}>Prescription</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[styles.actionButton, showPrescriptionButton ? styles.secondaryActionButton : styles.primaryActionButton]}
-                onPress={() => {
-                  Alert.alert(
-                    'Appointment Details',
-                    `Professional: ${item.professional_name}\nDate: ${formatDate(item.date)}\nTime: ${timeDisplay}\nMode: ${item.mode}\nAmount: ₹${item.amount}`,
-                  );
-                }}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="information-circle" size={18} color={showPrescriptionButton ? appTheme.colors.primary : appTheme.colors.background.surface} />
-                <Text style={[styles.actionButtonText, showPrescriptionButton && styles.secondaryActionButtonText]}>
-                  Details
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </TouchableOpacity>
+        <View style={styles.cardFooter}>
+          <View style={[styles.statusBadge, { 
+            backgroundColor: item.status === 'CONFIRMED' ? '#4CAF5020' : 
+                           item.status === 'COMPLETED' ? '#2196F320' :
+                           item.status === 'PENDING' ? '#FF980020' : '#F4433620'
+          }]}>
+            <Text style={[styles.statusText, { 
+              color: item.status === 'CONFIRMED' ? '#4CAF50' : 
+                     item.status === 'COMPLETED' ? '#2196F3' :
+                     item.status === 'PENDING' ? '#FF9800' : '#F44336'
+            }]}>
+              {item.status}
+            </Text>
+          </View>
+          
+          <TouchableOpacity onPress={handleAppointmentPress} style={styles.viewButton}>
+            <Text style={styles.viewButtonText}>View Details</Text>
+            <Ionicons name="chevron-forward" size={16} color={color} />
+          </TouchableOpacity>
+        </View>
       </View>
     );
   };
@@ -675,8 +554,8 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
           <View style={styles.listContainer}>
             <FlatList
               data={filteredAppointments}
-              renderItem={renderAppointment}
-              keyExtractor={(item) => item.booking_id?.toString() || item._id?.toString() || Math.random().toString()}
+              renderItem={renderItem}
+              keyExtractor={(item) => item.id}
               showsVerticalScrollIndicator={true}
               refreshControl={
                 <RefreshControl
@@ -1036,6 +915,91 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
     letterSpacing: 0.2,
+  },
+
+  // 🟢 Unified Card Styles
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  cardTitleSection: {
+    flex: 1,
+    marginRight: 12,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A202C',
+    marginBottom: 4,
+    lineHeight: 24,
+  },
+  sub: {
+    fontSize: 14,
+    color: '#64748B',
+    lineHeight: 20,
+  },
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  typeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cardDetails: {
+    marginBottom: 12,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    color: '#475569',
+    flex: 1,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  viewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  viewButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
   },
 
   // List Container

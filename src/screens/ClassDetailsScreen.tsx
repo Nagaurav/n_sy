@@ -133,20 +133,20 @@ const ClassDetailsScreen = () => {
     // Navigate to booking with class data and selected mode
     navigation.navigate('BookingConfirmation', {
       bookingData: {
-        professionalId: classData.professional_id.toString(),
-        professionalName: 'Yoga Instructor', // TODO: Fetch actual professional name using professional_id
+        // 🟢 Critical Flags
         serviceType: 'yoga_class',
-        yogaPlanId: classData.id,
-        serviceName: classData.title,
-        price: getSelectedModePrice(),
-        date: new Date().toISOString(),
+        yogaPlanId: classData.id, 
+        
+        // Display Data
+        professionalId: classData.professional_id,
+        professionalName: 'Yoga Instructor', // TODO: Fetch professional name using professional_id
+        serviceName: classData.title, // e.g. "Morning Hatha Yoga"
+        price: getSelectedModePrice(),     // Calculated based on mode selection
+        date: new Date().toISOString(), // Starts "Now" or logic based on start_date
         time: `${formatTime(classData.start_time)} - ${formatTime(classData.end_time)}`,
-        days: classData.days,
-        duration: classData.duration,
-        location: classData.location,
-        city: classData.city,
-        deliveryMode: selectedMode,
-        slot_id: "CLASS_ENROLLMENT",
+        
+        // Logic Data
+        deliveryMode: selectedMode // e.g. 'GROUP_ONLINE'
       }
     });
     

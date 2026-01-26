@@ -105,119 +105,22 @@ const PrescriptionDetailScreen: React.FC = () => {
       console.log(' [PrescriptionDetail] Extracted prescription data:', prescriptionData);
 
       if (!prescriptionData) {
-        console.log(' [PrescriptionDetail] No data from API, using mock data');
-        prescriptionData = {
-          id: prescriptionId.toString(),
-          prescriptionId: `RX${prescriptionId}`,
-          prescriptionType: 'General',
-          prescriptionDate: new Date().toISOString(),
-          patientName: 'John Doe',
-          patientAge: 35,
-          patientGender: 'Male',
-          practitionerName: 'Dr. Sarah Smith',
-          practitionerQualification: 'MBBS, MD',
-          professional_id: 1,
-          user_id: 1,
-          booking_id: parseInt(prescriptionId.toString()),
-          professional: {
-            first_name: 'Sarah',
-            last_name: 'Smith',
-            speciality_new: {
-              name: 'General Medicine',
-            },
-          },
-          diagnoses: [
-            {
-              id: 1,
-              condition: 'Hypertension',
-              severity: 'Moderate',
-              duration: '2 years',
-            },
-          ],
-          medicines: [
-            {
-              id: 1,
-              name: 'Amlodipine',
-              dosage: '5mg',
-              frequency: 'Once daily',
-              duration: '30 days',
-              instructions: 'Take after breakfast',
-            },
-          ],
-          advices: [
-            {
-              id: 1,
-              title: 'Dietary Advice',
-              description: 'Reduce salt intake and avoid processed foods',
-            },
-          ],
-          followUpDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          followUpReason: 'Blood pressure check',
-          notes: 'Patient responded well to treatment. Continue current medication.',
-        } as Prescription;
+        console.log(' [PrescriptionDetail] No prescription data found');
+        setError('No prescription found for this appointment. The doctor may not have issued a prescription yet.');
+        setPrescription(null);
+        return;
       }
 
       setPrescription(prescriptionData as Prescription);
     } catch (err: any) {
       console.error(' [PrescriptionDetail] Fetch error:', err);
 
-      const mockData = {
-        id: prescriptionId.toString(),
-        prescriptionId: `RX${prescriptionId}`,
-        prescriptionType: 'General',
-        prescriptionDate: new Date().toISOString(),
-        patientName: 'John Doe',
-        patientAge: 35,
-        patientGender: 'Male',
-        practitionerName: 'Dr. Sarah Smith',
-        practitionerQualification: 'MBBS, MD',
-        professional_id: 1,
-        user_id: 1,
-        booking_id: parseInt(prescriptionId.toString()),
-        professional: {
-          first_name: 'Sarah',
-          last_name: 'Smith',
-          speciality_new: {
-            name: 'General Medicine',
-          },
-        },
-        diagnoses: [
-          {
-            id: 1,
-            condition: 'Hypertension',
-            severity: 'Moderate',
-            duration: '2 years',
-          },
-        ],
-        medicines: [
-          {
-            id: 1,
-            name: 'Amlodipine',
-            dosage: '5mg',
-            frequency: 'Once daily',
-            duration: '30 days',
-            instructions: 'Take after breakfast',
-          },
-        ],
-        advices: [
-          {
-            id: 1,
-            title: 'Dietary Advice',
-            description: 'Reduce salt intake and avoid processed foods',
-          },
-        ],
-        followUpDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        followUpReason: 'Blood pressure check',
-        notes: 'Patient responded well to treatment. Continue current medication.',
-      } as Prescription;
-
-      setPrescription(mockData);
-
       if (err.response?.status === 404) {
         setError('No prescription found for this appointment. The doctor may not have issued a prescription yet.');
       } else {
         setError(err.message || 'Failed to load prescription details.');
       }
+      setPrescription(null);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -265,8 +168,8 @@ const PrescriptionDetailScreen: React.FC = () => {
         <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
         <View style={styles.errorContainer}>
           <View style={styles.errorCard}>
-            <Ionicons name="alert-circle" size={48} color={appTheme.colors.error} />
-            <Text style={styles.errorTitle}>Error Loading Prescription</Text>
+            <Ionicons name="document-text-outline" size={48} color={appTheme.colors.primary} />
+            <Text style={styles.errorTitle}>No Prescription Found</Text>
             <Text style={styles.errorMessage}>{error}</Text>
             <TouchableOpacity
               style={styles.retryButton}
@@ -274,10 +177,20 @@ const PrescriptionDetailScreen: React.FC = () => {
             >
               <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: appTheme.colors.background.secondary }]}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={[styles.retryButtonText, { color: appTheme.colors.text.primary }]}>Go Back</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </SafeAreaView>
     );
+  }
+
+  if (!prescription) {
+    return null; // This will be handled by the error state above
   }
 
   return (

@@ -117,65 +117,18 @@ const ChatScreen: React.FC = () => {
   const handlePrescriptionPress = useCallback(async () => {
     // 🔍 Debug Log
     console.log("👉 Checking Prescription for Booking ID:", appointmentId); 
-
     if (!appointmentId) {
       Alert.alert("Error", "No Appointment ID found for this chat.");
       return;
     }
 
-    try {
-      console.log('📋 [ChatScreen] Starting prescription fetch for:', appointmentId);
-      
-      const response = await apiService.getBookingPrescription(appointmentId);
-      
-      console.log('📋 [ChatScreen] API Response:', JSON.stringify(response, null, 2));
-      
-      // ✅ Check for data directly (no .success check needed)
-      if (response.data && response.data.data) {
-        const prescription = response.data.data;
-        console.log('✅ [ChatScreen] Prescription found:', prescription);
-        
-        // Navigate
-        console.log('🧭 [ChatScreen] Navigating to PrescriptionDetail with:', {
-          prescriptionId: prescription.id,
-          appointmentId: appointmentId
-        });
-        
-        navigation.navigate('PrescriptionDetail', { 
-          prescriptionId: prescription.id,
-          appointmentId: appointmentId 
-        } as any);
-      } else {
-        // ❌ Handle Empty Data (404 usually ends up here or catch block)
-        console.log('❌ [ChatScreen] No prescription data found in response');
-        Alert.alert(
-          "No Prescription",
-          "The professional has not uploaded a prescription for this appointment yet."
-        );
-      }
-    } catch (error: any) {
-      console.error('❌ [ChatScreen] Error fetching prescription:', error);
-      console.log('🔍 [ChatScreen] Error details:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        message: error.message
-      });
-      
-      // ❌ Handle Network/Server Errors
-      if (error.response?.status === 404) {
-        Alert.alert(
-          "Not Available",
-          "No prescription has been created for this appointment yet."
-        );
-      } else {
-        Alert.alert(
-          "Error",
-          "Failed to load prescription. Please try again."
-        );
-      }
-    }
-  }, [navigation, appointmentId]);
+    console.log('🧭 [ChatScreen] Navigating to PrescriptionDetail with appointmentId:', appointmentId);
+    
+    navigation.navigate('PrescriptionDetail', { 
+      prescriptionId: appointmentId, 
+      appointmentId: appointmentId 
+    } as any);
+  }, [appointmentId, navigation]);
 
   // --- Diet Plan Navigation ---
   const handleDietPlanPress = useCallback(async () => {
@@ -186,33 +139,12 @@ const ChatScreen: React.FC = () => {
       return;
     }
 
-    try {
-      // Backend Route: /user/diet-plan/booking/:bookingId
-      const response = await dietService.getDietPlanByBooking(appointmentId);
-
-      // Check if data exists
-      // Adjust 'response.data.data' based on your specific axios wrapper
-      if (response.data && (response.data.data || response.data.id)) {
-        navigation.navigate('DietPlan', { 
-          bookingId: appointmentId 
-        } as any);
-      } else {
-        Alert.alert(
-          "No Diet Plan",
-          "The professional has not assigned a diet plan for this appointment yet."
-        );
-      }
-    } catch (error: any) {
-      console.error('❌ Error fetching diet plan:', error);
-      if (error.response?.status === 404) {
-        Alert.alert(
-          "Not Available",
-          "No diet plan has been created for this appointment yet."
-        );
-      } else {
-        Alert.alert("Error", "Failed to check diet plan availability.");
-      }
-    }
+    // Always navigate to diet plan screen, let it handle the data loading
+    console.log('🧭 [ChatScreen] Navigating to DietPlan with bookingId:', appointmentId);
+    
+    navigation.navigate('DietPlan', { 
+      bookingId: appointmentId 
+    } as any);
   }, [navigation, appointmentId]);
 
   // --- Validation ---

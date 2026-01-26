@@ -202,3 +202,34 @@ export interface FilterModalState {
   city?: string;
   role?: string;
 }
+
+// 🟢 Unified Payment Parameters for both Consultation and Yoga Bookings
+export interface BookingPaymentParams {
+  userId: string | number;
+  professionalId: string | number;
+  serviceType: 'consultation' | 'yoga_class'; // 🟢 The Switch
+  amount: number;
+  couponCode?: string;
+  
+  // 🟢 Optionals based on type
+  slotId?: number;       // For Consultations
+  yogaPlanId?: number;   // For Yoga
+  deliveryMode?: string; // For Yoga (e.g., 'GROUP_ONLINE')
+}
+
+// 🟢 Unified Appointment Structure for UI Display
+export interface UnifiedAppointment {
+  id: string; // Unique UI ID (e.g., "yoga-5", "consult-10")
+  reference_id: number; // Database ID
+  type: 'consultation' | 'yoga_class';
+  status: string;
+  payment_status: string;
+  amount: number;
+  date: string;
+  time: string; // Time slot or schedule time
+  title: string;
+  subtitle: string;
+  imageUrl?: string;
+  professional?: any;
+  yoga_plan?: any; // Extra details for Yoga
+}

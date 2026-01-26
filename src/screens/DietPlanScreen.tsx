@@ -13,11 +13,13 @@ import {
   Platform,
   Dimensions,
   Alert,
+  PermissionsAndroid,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Share from 'react-native-share';
+const RNHTMLtoPDF = require('react-native-html-to-pdf');
 import { useAuth } from '../hooks/useAuth';
 import { dietService } from '../services/dietService';
 import { useTheme } from '../contexts/ThemeContext';
@@ -57,7 +59,11 @@ interface DietPlan {
   };
 }
 
-const DietPlanScreen: React.FC = () => {
+interface DietPlanScreenProps {
+  // Add any props if needed in the future
+}
+
+const DietPlanScreen = () => {
   const route = useRoute<any>();
   const navigation = useNavigation();
   const { bookingId } = route.params;
@@ -104,39 +110,247 @@ const DietPlanScreen: React.FC = () => {
     }
   }, [bookingId]);
 
-  // Handle PDF Download - Temporary workaround using Share API
+  // Handle PDF Download - Proper PDF generation and download
   const handleDownloadPDF = async () => {
-    if (!dietPlan) return;
+    console.log('PDF download button pressed!');
+    if (!dietPlan) {
+      console.log('No diet plan data available');
+      return;
+    }
+    
     try {
-      // Create formatted text content as fallback
-      const textContent = `
-DIET PLAN
-================
-Plan: ${dietPlan.plan_name}
-Professional: Dr. ${dietPlan.professional?.first_name} ${dietPlan.professional?.last_name}
-Duration: ${new Date(dietPlan.start_date).toLocaleDateString()} - ${new Date(dietPlan.end_date).toLocaleDateString()}
-Daily Target: ${dietPlan.daily_calorie_target || 'N/A'} kcal
-Instructions: ${dietPlan.instructions || 'None'}
+      // Request storage permissions for Android (only if needed)
+      if (Platform.OS === 'android') {
+        try {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
+          );
+          console.log('Permission granted:', granted);
+          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+            Alert.alert('Permission Required', 'Storage permission is required to download PDF files. Please enable it in your phone settings.');
+            return;
+          }
+        } catch (permissionError) {
+          console.log('Permission check failed, proceeding anyway:', permissionError);
+          // On newer Android versions, this might fail but PDF generation still works
+        }
+      }
 
-MEAL SCHEDULE
-================
-${dietPlan.meals.map(meal => `
-${meal.day || ''} • ${meal.time}
-${meal.meal_type || meal.name} (${meal.calories || 0} kcal)
-${meal.food_items || meal.description}
-${meal.notes ? `Note: ${meal.notes}` : ''}
-`).join('\n')}
-      `.trim();
+      // Show loading indicator
+      Alert.alert('Generating PDF', 'Please wait while we generate and download your diet plan PDF...');
 
-      await Share.open({
-        title: "Diet Plan",
-        message: textContent,
-        subject: `Diet Plan - ${dietPlan.plan_name}`,
-        failOnCancel: false
-      });
+      // Generate HTML content for PDF
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Diet Plan - ${dietPlan.plan_name}</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              margin: 20px;
+              color: #333;
+              line-height: 1.6;
+            }
+            .header {
+              text-align: center;
+              border-bottom: 3px solid #008272;
+              padding-bottom: 20px;
+              margin-bottom: 30px;
+            }
+            .title {
+              color: #008272;
+              font-size: 28px;
+              font-weight: bold;
+              margin-bottom: 10px;
+            }
+            .subtitle {
+              color: #666;
+              font-size: 16px;
+              margin-bottom: 5px;
+            }
+            .section {
+              margin-bottom: 30px;
+              padding: 20px;
+              border: 1px solid #e0e0e0;
+              border-radius: 8px;
+              background-color: #f9f9f9;
+            }
+            .section-title {
+              color: #008272;
+              font-size: 20px;
+              font-weight: bold;
+              margin-bottom: 15px;
+              border-bottom: 2px solid #008272;
+              padding-bottom: 5px;
+            }
+            .info-row {
+              margin-bottom: 10px;
+              display: flex;
+              justify-content: space-between;
+            }
+            .info-label {
+              font-weight: bold;
+              color: #555;
+            }
+            .meal-item {
+              margin-bottom: 20px;
+              padding: 15px;
+              border-left: 4px solid #008272;
+              background-color: white;
+              border-radius: 4px;
+            }
+            .meal-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 10px;
+            }
+            .meal-name {
+              font-weight: bold;
+              color: #008272;
+              font-size: 16px;
+            }
+            .meal-time {
+              color: #666;
+              font-size: 14px;
+            }
+            .meal-details {
+              margin-top: 10px;
+            }
+            .calories {
+              background-color: #ff7043;
+              color: white;
+              padding: 4px 8px;
+              border-radius: 12px;
+              font-size: 12px;
+              font-weight: bold;
+            }
+            .notes {
+              margin-top: 10px;
+              padding: 10px;
+              background-color: #fff3cd;
+              border-left: 3px solid #ffc107;
+              font-style: italic;
+              color: #856404;
+            }
+            .footer {
+              margin-top: 40px;
+              text-align: center;
+              color: #666;
+              font-size: 12px;
+              border-top: 1px solid #e0e0e0;
+              padding-top: 20px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="title">DIET PLAN</div>
+            <div class="subtitle">${dietPlan.plan_name}</div>
+            <div class="subtitle">Dr. ${dietPlan.professional?.first_name || ''} ${dietPlan.professional?.last_name || ''}</div>
+            ${dietPlan.professional?.speciality_new?.name ? `<div class="subtitle">${dietPlan.professional.speciality_new.name}</div>` : ''}
+          </div>
 
-    } catch (e) {
-      console.error("Share Error:", e);
+          <div class="section">
+            <div class="section-title">Plan Details</div>
+            <div class="info-row">
+              <span class="info-label">Duration:</span>
+              <span>${new Date(dietPlan.start_date).toLocaleDateString()} - ${new Date(dietPlan.end_date).toLocaleDateString()}</span>
+            </div>
+            ${dietPlan.daily_calorie_target ? `
+            <div class="info-row">
+              <span class="info-label">Daily Target:</span>
+              <span>${dietPlan.daily_calorie_target} Calories</span>
+            </div>
+            ` : ''}
+            <div class="info-row">
+              <span class="info-label">Status:</span>
+              <span>${dietPlan.is_active ? 'Active' : 'Inactive'}</span>
+            </div>
+          </div>
+
+          ${dietPlan.instructions ? `
+          <div class="section">
+            <div class="section-title">Instructions</div>
+            <div>${dietPlan.instructions}</div>
+          </div>
+          ` : ''}
+
+          <div class="section">
+            <div class="section-title">Meal Schedule</div>
+            ${dietPlan.meals.map(meal => `
+              <div class="meal-item">
+                <div class="meal-header">
+                  <div>
+                    <div class="meal-name">${meal.meal_type || meal.name || 'Meal'}</div>
+                    <div class="meal-time">${meal.day || ''} • ${meal.time}</div>
+                  </div>
+                  ${meal.calories ? `<span class="calories">${meal.calories} cal</span>` : ''}
+                </div>
+                <div class="meal-details">
+                  <div><strong>Food Items:</strong> ${meal.food_items || meal.description || 'N/A'}</div>
+                  ${meal.notes ? `<div class="notes"><strong>Note:</strong> ${meal.notes}</div>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="footer">
+            Generated on ${new Date().toLocaleDateString()} by SamyaYog App
+          </div>
+        </body>
+        </html>
+      `;
+
+      // Generate PDF with Downloads directory for better accessibility
+      const options = {
+        html: htmlContent,
+        fileName: `DietPlan_${dietPlan.plan_name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}`,
+        directory: Platform.OS === 'android' ? 'Download' : 'Documents', // Use Download folder on Android
+      };
+
+      const file = await RNHTMLtoPDF.generatePDF(options);
+      
+      console.log('PDF Generated:', file.filePath);
+
+      if (!file.filePath) throw new Error("File path is empty");
+
+      // Handle file path for sharing
+      const filePath = Platform.OS === 'android' && !file.filePath.startsWith('file://')
+        ? `file://${file.filePath}` 
+        : file.filePath;
+
+      // Show success message with download location info
+      Alert.alert(
+        '✅ PDF Downloaded Successfully!',
+        Platform.OS === 'android' 
+          ? `Your diet plan PDF has been saved to your Downloads folder.\n\nFile: ${options.fileName}.pdf\n\nWould you like to open or share it?`
+          : `Your diet plan PDF has been saved to your Documents folder.\n\nFile: ${options.fileName}.pdf\n\nWould you like to open or share it?`,
+        [
+          { text: 'OK', style: 'cancel' },
+          {
+            text: 'Open / Share',
+            onPress: async () => {
+              try {
+                await Share.open({
+                  url: filePath,
+                  type: 'application/pdf',
+                  title: `Diet Plan - ${dietPlan.plan_name}`,
+                  failOnCancel: false,
+                });
+              } catch (shareError) {
+                console.log('Share dismissed');
+              }
+            },
+          },
+        ]
+      );
+
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      Alert.alert('Error', 'Failed to generate PDF. Please check storage permissions and try again.');
     }
   };
 
@@ -231,9 +445,33 @@ ${meal.notes ? `Note: ${meal.notes}` : ''}
       <SafeAreaView style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#008272" />
-          <Text style={[styles.loadingText, { color: '#64748B' }]}>
-            Loading your diet plan...
-          </Text>
+          <Text style={[styles.loadingText, { color: '#64748B' }]}>Loading your diet plan...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error && !dietPlan) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
+        <View style={styles.errorContainer}>
+          <View style={styles.errorCard}>
+            <Ionicons name="nutrition-outline" size={48} color="#008272" />
+            <Text style={styles.errorTitle}>No Diet Plan Found</Text>
+            <Text style={styles.errorMessage}>{error}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => { setIsRefreshing(true); fetchDietPlan(); }}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: '#F1F5F9' }]}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={[styles.retryButtonText, { color: '#475569' }]}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -282,8 +520,8 @@ ${meal.notes ? `Note: ${meal.notes}` : ''}
           </View>
           
           {/* Decorative elements */}
-          <View style={[styles.topCircle, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} />
-          <View style={[styles.bottomWave, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} />
+          <View style={[styles.topCircle, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} pointerEvents="none" />
+          <View style={[styles.bottomWave, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} pointerEvents="none" />
         </LinearGradient>
       </Animated.View>
 
@@ -319,7 +557,7 @@ ${meal.notes ? `Note: ${meal.notes}` : ''}
               </Text>
               {dietPlan?.professional?.speciality_new?.name && (
                 <Text style={styles.planSpeciality}>
-                  {dietPlan.professional.speciality_new.name}
+                  {dietPlan?.professional?.speciality_new?.name}
                 </Text>
               )}
             </View>
@@ -349,7 +587,10 @@ ${meal.notes ? `Note: ${meal.notes}` : ''}
             <View style={styles.detailContent}>
               <Text style={styles.detailLabel}>Duration</Text>
               <Text style={styles.detailValue}>
-                {dietPlan?.start_date ? new Date(dietPlan.start_date).toLocaleDateString() : ''} - {dietPlan?.end_date ? new Date(dietPlan.end_date).toLocaleDateString() : ''}
+                {dietPlan?.start_date && dietPlan?.end_date 
+                  ? `${new Date(dietPlan?.start_date || '').toLocaleDateString()} - ${new Date(dietPlan?.end_date || '').toLocaleDateString()}`
+                  : ''
+                }
               </Text>
             </View>
           </View>
@@ -362,7 +603,7 @@ ${meal.notes ? `Note: ${meal.notes}` : ''}
               <View style={styles.detailContent}>
                 <Text style={styles.detailLabel}>Daily Target</Text>
                 <Text style={styles.detailValue}>
-                  {dietPlan.daily_calorie_target} Calories
+                  {dietPlan?.daily_calorie_target || 0} Calories
                 </Text>
               </View>
             </View>
@@ -385,7 +626,7 @@ ${meal.notes ? `Note: ${meal.notes}` : ''}
               <Text style={styles.cardTitle}>Instructions</Text>
             </View>
             <Text style={styles.instructionsText}>
-              {dietPlan.instructions}
+              {dietPlan?.instructions || ''}
             </Text>
           </Animated.View>
         )}
@@ -410,9 +651,8 @@ ${meal.notes ? `Note: ${meal.notes}` : ''}
               </Text>
             </View>
           </View>
-          
           {dietPlan?.meals && dietPlan.meals.length > 0 ? (
-            dietPlan.meals.map((meal, index) => renderMealItem(meal, index))
+            dietPlan.meals?.map((meal: DietMeal, index: number) => renderMealItem(meal, index))
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="restaurant-outline" size={60} color="#64748B" />
@@ -451,22 +691,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  errorText: {
+  errorCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
     marginTop: 16,
-    fontSize: 16,
-    fontWeight: '500',
+    marginBottom: 8,
     textAlign: 'center',
-    marginBottom: 20,
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
   },
   retryButton: {
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
+    backgroundColor: '#008272',
+    marginBottom: 12,
+    minWidth: 120,
   },
   retryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   
   // Modern Header Styles
@@ -889,9 +1158,8 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(0, 130, 114, 0.1)',
     borderStyle: 'dashed',
-    justifyContent: 'center',
     alignItems: 'center',
-    alignSelf: 'stretch',
+    justifyContent: 'center',
   },
   emptyStateText: {
     marginTop: 16,

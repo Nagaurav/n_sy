@@ -1,4 +1,5 @@
 import { apiClient, ApiResult } from './apiClient';
+import { BookingPaymentParams, UnifiedAppointment } from '../types/booking';
 import { TimeSlot, ProfessionalFilters, ProfessionalsResponse } from '../types/booking';
 
 export interface BookingData {
@@ -20,17 +21,6 @@ export interface BookingPrice {
   original_amount: number;
   discount_amount: number;
   final_amount: number;
-}
-
-export interface BookingPaymentParams {
-  userId: string | number;
-  professionalId: string | number;
-  slotId?: string | number; // 👈 Change to Optional (?)
-  serviceType?: 'yoga_class' | 'consultation' | 'membership';
-  serviceId?: string; // This carries yoga_plan_id
-  duration: number;
-  couponCode?: string;
-  metadata?: Record<string, any>;
 }
 
 export const bookingService = {
@@ -209,144 +199,93 @@ export const bookingService = {
     }
   },
 
-  // Create booking and initiate payment
+  // ✅ 1. Unified Booking Action
   createBookingAndInitiatePayment: async (params: BookingPaymentParams): Promise<ApiResult<any>> => {
-    // 1. Base Payload
-    const payload: any = {
+    
+    // 🧘 YOGA FLOW
+    if (params.serviceType === 'yoga_class') {
+      const payload = {
+        yoga_plan_id: Number(params.yogaPlanId),
+        mode: params.deliveryMode || 'GROUP_ONLINE',
+        coupon_code: params.couponCode
+      };
+      // Matches Backend: src/user_controllers/routes/yoga-booking/yoga-booking-api.ts
+      return apiClient.post('/user/yoga-booking/book', payload);
+    }
+
+    // 👨‍⚕️ CONSULTATION FLOW (Default)
+    const payload = {
       user_id: Number(params.userId),
       professional_id: Number(params.professionalId),
-      duration: params.duration || 30, // Now accepts "ONE_MONTH"
-      coupon_code: params.couponCode || undefined,
+      duration: 30, // Default duration
+      coupon_code: params.couponCode,
+      slot_id: Number(params.slotId)
     };
-
-    // 2. Add Slot ID ONLY if it is a valid number (Consultations)
-    const numericSlot = Number(params.slotId);
-    if (Number.isFinite(numericSlot) && numericSlot > 0) {
-      payload.slot_id = numericSlot;
-    }
-
-    // 3. ✅ Add Class ID if it exists (Yoga Classes)
-    if (params.serviceType === 'yoga_class' && params.serviceId) {
-       payload.yoga_plan_id = Number(params.serviceId);
-       console.log('🧘 [bookingService] Yoga class booking detected, added yoga_plan_id:', payload.yoga_plan_id);
-    }
-
-    // Debug: Log the exact payload being sent
-    console.log('🚀 [bookingService] Sending payload to backend:', {
-      endpoint: '/user/consultation-booking/create',
-      payload,
-      serviceType: params.serviceType,
-      serviceId: params.serviceId,
-      duration: params.duration,
-      isYogaClass: params.serviceType === 'yoga_class',
-      isConsultation: !params.serviceType || params.serviceType === 'consultation',
-      slotId: params.slotId,
-      professionalId: params.professionalId
-    });
-
-    // Validate required fields before sending
-    if (!params.userId || !params.professionalId) {
-      console.error('❌ [bookingService] Missing required fields:', {
-        userId: params.userId,
-        professionalId: params.professionalId
-      });
-      return {
-        success: false,
-        error: 'Missing required booking information'
-      };
-    }
-
-    // For consultations, validate slot_id is provided
-    if (!params.serviceType || params.serviceType === 'consultation') {
-      if (!params.slotId || Number(params.slotId) <= 0) {
-        console.error('❌ [bookingService] Invalid or missing slot_id for consultation:', params.slotId);
-        return {
-          success: false,
-          error: 'Please select a valid time slot for consultation'
-        };
-      }
-    }
-
-    // ... send request ...
-    const response = await apiClient.post('/user/consultation-booking/create', payload);
-
-    console.log('🔍 [bookingService] Raw API response:', {
-      success: response.success,
-      data: response.data,
-      hasPaymentUrl: !!response.data?.payment_url,
-      hasDataPaymentUrl: !!response.data?.data?.payment_url,
-      dataKeys: response.data ? Object.keys(response.data) : 'no data',
-      innerDataKeys: response.data?.data ? Object.keys(response.data.data) : 'no inner data',
-      expectedStructure: 'Based on BookingResponse type, payment_url should be at root level',
-      fullResponse: response
-    });
-
-    if (!response.success) {
-      console.error('❌ [bookingService] API call failed:', response);
-      return {
-        success: false,
-        error: response.error || 'API call failed'
-      };
-    }
-
-    if (!response.data) {
-      console.error('❌ [bookingService] No data received from API');
-      return {
-        success: false,
-        error: 'No data received from booking service'
-      };
-    }
-
-    // Handle the API response format where payment_url is at the root level
-    if (response.data.payment_url) {
-      console.log('✅ [bookingService] Found payment_url at root level');
-      return {
-        success: true,
-        data: {
-          payment_url: response.data.payment_url,
-          booking_id: response.data.data?.booking_id,
-          ...(response.data.data || {}),
-          payment_id: response.data.data?.payment_id || `TXN_${Date.now()}`,
-          final_amount: response.data.data?.final_amount || 0,
-          original_amount: response.data.data?.original_amount || 0,
-          discount_amount: response.data.data?.discount_amount || 0
-        }
-      };
-    }
-
-    // Fallback: check if payment_url is inside data object
-    if (response.data.data?.payment_url) {
-      console.log('✅ [bookingService] Found payment_url in nested data object');
-      return {
-        success: true,
-        data: {
-          payment_url: response.data.data.payment_url,
-          booking_id: response.data.data.booking_id,
-          ...response.data.data,
-          payment_id: response.data.data.payment_id || `TXN_${Date.now()}`,
-          final_amount: response.data.data.final_amount || 0,
-          original_amount: response.data.data.original_amount || 0,
-          discount_amount: response.data.data.discount_amount || 0
-        }
-      };
-    }
-
-    // No payment URL found - log detailed error
-    console.error('❌ [bookingService] No payment URL found in response:', {
-      responseSuccess: response.success,
-      hasData: !!response.data,
-      dataKeys: response.data ? Object.keys(response.data) : 'no data',
-      innerDataKeys: response.data?.data ? Object.keys(response.data.data) : 'no inner data',
-      fullResponse: response
-    });
-
-    return {
-      success: false,
-      error: 'No payment URL received from booking service'
-    };
+    return apiClient.post('/user/consultation-booking/create', payload);
   },
 
-  // Get user appointments
+  // ✅ 2. Unified List Fetching (Merge 2 APIs)
+  getAllUserBookings: async (userId: string | number): Promise<ApiResult<UnifiedAppointment[]>> => {
+    try {
+      const [consultRes, yogaRes] = await Promise.all([
+        apiClient.get(`/user/consultation-booking/user/${userId}?limit=50`),
+        apiClient.get(`/user/yoga-booking?limit=50`)
+      ]);
+
+      const unifiedList: UnifiedAppointment[] = [];
+
+      // A. Process Consultations
+      if (consultRes.success && consultRes.data) {
+        const list = Array.isArray(consultRes.data) ? consultRes.data : (consultRes.data as any).data || [];
+        list.forEach((item: any) => {
+          unifiedList.push({
+            id: `consult-${item.booking_id || item.id}`,
+            reference_id: item.booking_id || item.id,
+            type: 'consultation',
+            status: item.booking_status,
+            payment_status: item.payment_status,
+            amount: item.final_amount,
+            date: item.slot?.date,
+            title: `Dr. ${item.professional?.first_name} ${item.professional?.last_name}`,
+            subtitle: 'Medical Consultation',
+            imageUrl: item.professional?.photo_url,
+            professional: item.professional
+          });
+        });
+      }
+
+      // B. Process Yoga
+      if (yogaRes.success && yogaRes.data) {
+        const list = Array.isArray(yogaRes.data) ? yogaRes.data : (yogaRes.data as any).data || [];
+        list.forEach((item: any) => {
+          unifiedList.push({
+            id: `yoga-${item.id}`,
+            reference_id: item.id,
+            type: 'yoga_class',
+            status: item.status,
+            payment_status: item.payment_transaction?.status || 'PENDING',
+            amount: item.final_amount,
+            date: item.start_date,
+            title: item.yoga_plan?.title || 'Yoga Session',
+            subtitle: (item.mode || 'Class').replace(/_/g, ' '),
+            imageUrl: item.professional?.photo_url,
+            yoga_plan: item.yoga_plan,
+            professional: item.professional
+          });
+        });
+      }
+
+      // Sort Newest First
+      unifiedList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      return { success: true, data: unifiedList };
+
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Get user appointments (legacy - for backward compatibility)
   getUserAppointments: async (userId: string, pagination?: { limit?: number; offset?: number }) => {
     const config = pagination
       ? { params: { limit: pagination.limit, offset: pagination.offset } }
