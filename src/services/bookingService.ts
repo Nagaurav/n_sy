@@ -236,17 +236,34 @@ export const bookingService = {
 
       // A. Process Consultations
       if (consultRes.success && consultRes.data) {
-        const list = Array.isArray(consultRes.data) ? consultRes.data : (consultRes.data as any).data || [];
-        list.forEach((item: any) => {
+        console.log('🔍 [bookingService] Consultation API response:', consultRes.data);
+        
+        // Handle different response structures
+        let consultList = [];
+        if (Array.isArray(consultRes.data)) {
+          consultList = consultRes.data;
+        } else if (consultRes.data?.data && Array.isArray(consultRes.data.data)) {
+          consultList = consultRes.data.data;
+        } else if (consultRes.data?.appointments && Array.isArray(consultRes.data.appointments)) {
+          consultList = consultRes.data.appointments;
+        }
+        
+        console.log('📋 [bookingService] Processed consultation list:', consultList.length, 'items');
+        
+        consultList.forEach((item: any, index: number) => {
+          console.log('📝 [bookingService] Consultation item:', item);
+          
+          const bookingId = item.booking_id || item.id || item._id || `consult-${index}-${Date.now()}`;
           unifiedList.push({
-            id: `consult-${item.booking_id || item.id}`,
-            reference_id: item.booking_id || item.id,
+            id: `consult-${bookingId}`,
+            reference_id: item.booking_id || item.id || item._id,
             type: 'consultation',
-            status: item.booking_status,
+            status: item.booking_status || item.status,
             payment_status: item.payment_status,
-            amount: item.final_amount,
-            date: item.slot?.date,
-            title: `Dr. ${item.professional?.first_name} ${item.professional?.last_name}`,
+            amount: item.final_amount || item.amount,
+            date: item.slot?.date || item.date,
+            time: item.time || item.slot?.time || 'Scheduled',
+            title: item.professional_name || `Dr. ${item.professional?.first_name} ${item.professional?.last_name}` || 'Consultation',
             subtitle: 'Medical Consultation',
             imageUrl: item.professional?.photo_url,
             professional: item.professional
@@ -256,18 +273,35 @@ export const bookingService = {
 
       // B. Process Yoga
       if (yogaRes.success && yogaRes.data) {
-        const list = Array.isArray(yogaRes.data) ? yogaRes.data : (yogaRes.data as any).data || [];
-        list.forEach((item: any) => {
+        console.log('🔍 [bookingService] Yoga API response:', yogaRes.data);
+        
+        // Handle different response structures
+        let yogaList = [];
+        if (Array.isArray(yogaRes.data)) {
+          yogaList = yogaRes.data;
+        } else if (yogaRes.data?.data && Array.isArray(yogaRes.data.data)) {
+          yogaList = yogaRes.data.data;
+        } else if (yogaRes.data?.bookings && Array.isArray(yogaRes.data.bookings)) {
+          yogaList = yogaRes.data.bookings;
+        }
+        
+        console.log('📋 [bookingService] Processed yoga list:', yogaList.length, 'items');
+        
+        yogaList.forEach((item: any, index: number) => {
+          console.log('📝 [bookingService] Yoga item:', item);
+          
+          const yogaId = item.id || item.booking_id || item._id || `yoga-${index}-${Date.now()}`;
           unifiedList.push({
-            id: `yoga-${item.id}`,
-            reference_id: item.id,
+            id: `yoga-${yogaId}`,
+            reference_id: item.id || item.booking_id || item._id,
             type: 'yoga_class',
-            status: item.status,
-            payment_status: item.payment_transaction?.status || 'PENDING',
-            amount: item.final_amount,
-            date: item.start_date,
-            title: item.yoga_plan?.title || 'Yoga Session',
-            subtitle: (item.mode || 'Class').replace(/_/g, ' '),
+            status: item.status || item.booking_status,
+            payment_status: item.payment_transaction?.status || item.payment_status || 'PENDING',
+            amount: item.final_amount || item.amount,
+            date: item.start_date || item.date,
+            time: item.start_time || item.time || 'Scheduled',
+            title: item.yoga_plan?.title || item.title || 'Yoga Session',
+            subtitle: (item.mode || item.session_mode || 'Class').replace(/_/g, ' '),
             imageUrl: item.professional?.photo_url,
             yoga_plan: item.yoga_plan,
             professional: item.professional
@@ -277,6 +311,9 @@ export const bookingService = {
 
       // Sort Newest First
       unifiedList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      console.log('🎯 [bookingService] Final unified list:', unifiedList.length, 'items');
+      console.log('📋 [bookingService] Sample items:', unifiedList.slice(0, 2));
 
       return { success: true, data: unifiedList };
 

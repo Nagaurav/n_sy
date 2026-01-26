@@ -8,6 +8,8 @@ type PaymentParams = {
   bookingId: string;
   professionalId: string | number;
   slotId?: string | number; // 👈 Make Optional
+  yogaPlanId?: number; // 👈 Add yogaPlanId for yoga classes
+  deliveryMode?: string; // 👈 Add deliveryMode for yoga classes
   duration: number; // in minutes
   serviceType?: 'yoga_class' | 'consultation' | 'membership';
   serviceId?: string;
@@ -117,12 +119,12 @@ export const usePayment = () => {
           const response = await apiService.createBookingAndInitiatePayment({
             userId,
             professionalId: params.professionalId,
-            slotId: params.slotId,
-            serviceType,
-            serviceId,
-            couponCode: params.couponCode,
-            duration: params.duration,
-            metadata: params.metadata
+            amount: params.amount, // ✅ Add missing amount parameter
+            slotId: params.slotId ? Number(params.slotId) : undefined,
+            serviceType: params.serviceType === 'membership' ? 'consultation' : (params.serviceType || 'consultation'),
+            yogaPlanId: params.yogaPlanId, // ✅ Add yogaPlanId
+            deliveryMode: params.deliveryMode, // ✅ Add deliveryMode
+            couponCode: params.couponCode
           });
 
           console.log('Payment initiation response:', {

@@ -44,6 +44,7 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [appointmentTypeFilter, setAppointmentTypeFilter] = useState<'all' | 'consultation' | 'yoga_class'>('all');
   const [stats, setStats] = useState({
     total: 0,
     confirmed: 0,
@@ -131,42 +132,47 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
         setIsLoadingMore(true);
       }
 
-      const response = await bookingService.getUserAppointments(String(userId), {
-        limit,
-        offset,
-      });
+      const res = await bookingService.getAllUserBookings(userId);
+      console.log('📥 [AppointmentsScreen] Received booking service response:', res);
       
-      if (response.success && response.data) {
-        // API returns data as array directly, not nested in appointments field
-        const appointmentsList = Array.isArray(response.data) 
-          ? response.data 
-          : (response.data as any).data || (response.data as any).appointments || [];
-        
-        // Sort appointments by date (newest first)
-        const sortedAppointments = appointmentsList.sort((a: any, b: any) => {
-          return new Date(b.date).getTime() - new Date(a.date).getTime();
+      if (res.success && res.data) {
+        console.log('📋 [AppointmentsScreen] Processing appointments:', res.data.length, 'items');
+        res.data.forEach((item, index) => {
+          console.log(`📝 [AppointmentsScreen] Item ${index + 1}:`, {
+            id: item.id,
+            reference_id: item.reference_id,
+            type: item.type,
+            title: item.title
+          });
         });
-
-        // Calculate stats
+        
+        // Calculate stats for unified appointments
         const newStats = {
-          total: sortedAppointments.length,
-          confirmed: sortedAppointments.filter((apt: any) => apt.booking_status === 'CONFIRMED').length,
-          completed: sortedAppointments.filter((apt: any) => apt.booking_status === 'COMPLETED').length,
-          pending: sortedAppointments.filter((apt: any) => apt.booking_status === 'PENDING').length,
-          cancelled: sortedAppointments.filter((apt: any) => apt.booking_status === 'CANCELLED').length,
+          total: res.data.length,
+          confirmed: res.data.filter((apt: UnifiedAppointment) => apt.status === 'CONFIRMED').length,
+          completed: res.data.filter((apt: UnifiedAppointment) => apt.status === 'COMPLETED').length,
+          pending: res.data.filter((apt: UnifiedAppointment) => apt.status === 'PENDING').length,
+          cancelled: res.data.filter((apt: UnifiedAppointment) => apt.status === 'CANCELLED').length,
         };
         setStats(newStats);
-
+        
+        // Sort appointments by date (newest first)
+        const sortedAppointments = res.data.sort((a, b) => {
+          const dateA = new Date(a.date || 0);
+          const dateB = new Date(b.date || 0);
+          return dateB.getTime() - dateA.getTime();
+        });
+        
         if (pageToLoad === 1) {
           setAppointments(sortedAppointments as any);
         } else {
           setAppointments((prev) => [...prev, ...(sortedAppointments as any)]);
         }
 
-        setHasMore(appointmentsList.length === limit);
+        setHasMore(res.data.length === limit);
         setPage(pageToLoad);
       } else {
-        setError(response.error || 'Failed to fetch appointments');
+        setError(res.error || 'Failed to fetch appointments');
       }
     } catch (err) {
       console.error('Error fetching appointments:', err);
@@ -217,8 +223,14 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     }
   }, [isLoading, authLoading, fadeAnim, slideAnim, scaleAnim]);
   
-  // Filter appointments based on selected filter
+  // Filter appointments based on selected filter and appointment type
   const filteredAppointments = appointments.filter(appointment => {
+    // First filter by appointment type (consultation vs yoga_class)
+    if (appointmentTypeFilter !== 'all' && appointment.type !== appointmentTypeFilter) {
+      return false;
+    }
+    
+    // Then filter by status
     if (selectedFilter === 'all') return true;
     return appointment.status?.toLowerCase() === selectedFilter.toLowerCase();
   });
@@ -387,9 +399,17 @@ const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigat
     const color = isYoga ? '#4CAF50' : '#2196F3'; // Green vs Blue
 
     const handleAppointmentPress = () => {
-      navigation.navigate('AppointmentDetail', { 
-        appointmentId: item.reference_id,
-        type: item.type // Pass type so Detail screen knows what to do
+      navigation.getParent()?.navigate('MainDrawer', {
+        screen: 'HomeStack',
+        params: {
+          screen: 'AppointmentDetail',
+          params: {
+            appointmentId: item.reference_id,
+            professionalId: item.professional?.professional_id || item.professional?.id || 'unknown',
+            userId: user?.user_id || user?._id || 'unknown',
+            type: item.type // Pass type so Detail screen knows what to do
+          }
+        }
       });
     };
 
@@ -1095,14 +1115,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0, 130, 114, 0.1)',
   },
   
-  // Card Header
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: theme.spacing.l,
-    paddingBottom: theme.spacing.m,
-  },
   professionalSection: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1132,22 +1144,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   
-  // Status Badge
-  statusBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: theme.spacing.m,
-    paddingVertical: theme.spacing.s,
-    borderRadius: theme.borderRadius.xl,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
   
   // Date and Time Section
   dateTimeSection: {
@@ -1280,10 +1276,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.text.secondary + '20',
     marginVertical: theme.spacing.m,
     marginHorizontal: theme.spacing.l,
-  },
-  cardDetails: {
-    paddingHorizontal: theme.spacing.l,
-    paddingBottom: theme.spacing.l,
   },
 });
 

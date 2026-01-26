@@ -591,6 +591,8 @@ const BookingConfirmationScreen = () => {
         slotId: slotIdToPass, // ✅ Will be 'undefined' for classes, which is correct
         serviceType: isClassBooking ? 'yoga_class' : 'consultation',
         serviceId: bookingData.yogaPlanId?.toString(), // ✅ Passing Real Class ID
+        yogaPlanId: bookingData.yogaPlanId, // ✅ Add yogaPlanId
+        deliveryMode: bookingData.sessionMode, // ✅ Add deliveryMode
         duration: safeDuration,
         couponCode: isCouponApplied ? couponCode : undefined,
         metadata: {
