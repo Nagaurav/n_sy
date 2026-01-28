@@ -227,10 +227,27 @@ export const bookingService = {
   // ✅ 2. Unified List Fetching (Merge 2 APIs)
   getAllUserBookings: async (userId: string | number): Promise<ApiResult<UnifiedAppointment[]>> => {
     try {
-      const [consultRes, yogaRes] = await Promise.all([
-        apiClient.get(`/user/consultation-booking/user/${userId}?limit=50`),
-        apiClient.get(`/user/yoga-booking?limit=50`)
-      ]);
+      // Fetch consultations with error handling
+      let consultRes = null;
+      try {
+        consultRes = await apiClient.get(`/user/consultation-booking/user/${userId}?limit=50`);
+        console.log('✅ [bookingService] Consultation API success');
+      } catch (consultError: any) {
+        console.warn('⚠️ [bookingService] Consultation API failed:', consultError.message);
+        // Set a failed response so processing continues
+        consultRes = { success: false, error: consultError.message, data: null };
+      }
+
+      // Fetch yoga bookings with error handling
+      let yogaRes = null;
+      try {
+        yogaRes = await apiClient.get(`/user/yoga-booking?limit=50`);
+        console.log('✅ [bookingService] Yoga API success');
+      } catch (yogaError: any) {
+        console.warn('⚠️ [bookingService] Yoga API failed:', yogaError.message);
+        // Set a failed response so processing continues
+        yogaRes = { success: false, error: yogaError.message, data: null };
+      }
 
       const unifiedList: UnifiedAppointment[] = [];
 

@@ -301,6 +301,39 @@ const AppNavigator = () => {
             gestureEnabled: false,
           }}
         />
+        
+        {/* ✅ AppointmentDetail sits on TOP LAYER for direct access */}
+        <RootStack.Screen
+          name="AppointmentDetail"
+          component={AppointmentDetailScreen}
+          options={{
+            headerShown: false,
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
+        
+        {/* ✅ ChatScreen sits on TOP LAYER for direct access */}
+        <RootStack.Screen
+          name="ChatScreen"
+          component={ChatScreen}
+          options={{
+            headerShown: false,
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
+        
+        {/* ✅ DietPlan sits on TOP LAYER for direct access */}
+        <RootStack.Screen
+          name="DietPlan"
+          component={DietPlanScreen}
+          options={{
+            headerShown: false,
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
       </RootStack.Navigator>
     );
   } else {

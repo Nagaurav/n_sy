@@ -97,7 +97,13 @@ api.interceptors.response.use(
         return Promise.reject(new Error(errorMessage));
       }
     } else if (error.request) {
-      console.error('API Request Error:', error.request);
+      // Handle network errors (status 0)
+      if (error.request?.readyState === 4 && error.request?.status === 0) {
+        console.error('🌐 Network Error: Unable to reach server. Check your internet connection.');
+        return Promise.reject(new Error('Network error: Unable to connect to server. Please check your internet connection and try again.'));
+      } else {
+        console.error('API Request Error:', error.request);
+      }
     } else {
       console.error('API Error:', error.message);
     }
@@ -148,6 +154,13 @@ export const buildApiErrorResponse = <T = any>(error: any): ApiResult<T> => {
     };
   }
   if (error?.request) {
+    // Better handling for network errors
+    if (error?.request?.readyState === 4 && error?.request?.status === 0) {
+      return {
+        success: false,
+        error: 'Unable to connect to server. Please check your internet connection and try again.',
+      };
+    }
     return {
       success: false,
       error: 'Network error. Please check your internet connection and try again.',
@@ -163,7 +176,7 @@ export const buildApiErrorResponse = <T = any>(error: any): ApiResult<T> => {
 const RETRY_CONFIG = {
   maxRetries: 3,
   retryDelay: 1000, // 1 second base delay
-  retryableErrors: [502, 503, 504, 'ECONNABORTED', 'NETWORK_ERROR'],
+  retryableErrors: [502, 503, 504, 'ECONNABORTED', 'NETWORK_ERROR', 0], // Added status 0 for network errors
 };
 
 // Retry helper function with exponential backoff
@@ -177,11 +190,13 @@ const retryRequest = async <T>(
     const status = error?.response?.status;
     const isRetryable = RETRY_CONFIG.retryableErrors.includes(status) || 
                        RETRY_CONFIG.retryableErrors.includes(error?.code) ||
-                       error?.message?.includes('Network Error');
+                       error?.message?.includes('Network Error') ||
+                       error?.message?.includes('Unable to connect') ||
+                       (error?.request?.readyState === 4 && error?.request?.status === 0);
 
     if (isRetryable && retries < RETRY_CONFIG.maxRetries) {
       const delay = RETRY_CONFIG.retryDelay * Math.pow(2, retries); // Exponential backoff
-      console.log(`🔄 Retrying request in ${delay}ms (attempt ${retries + 1}/${RETRY_CONFIG.maxRetries})`);
+      console.log(`🔄 Retrying request in ${delay}ms (attempt ${retries + 1}/${RETRY_CONFIG.maxRetries}) - Status: ${status || 'Network Error'}`);
       
       await new Promise(resolve => setTimeout(resolve, delay));
       return retryRequest(requestFn, retries + 1);

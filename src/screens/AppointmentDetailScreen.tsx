@@ -7,1211 +7,573 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  Dimensions,
   StatusBar,
   Animated,
   SafeAreaView,
+  RefreshControl,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { useDispatch, useSelector } from 'react-redux';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { RootState } from '../store';
-import { apiService, apiClient } from '../services';
-import { setCurrentAppointment, setChatActive, fetchAppointmentById } from '../store/appointmentSlice';
 import { useAuth } from '../hooks/useAuth';
-import { VideoPlaceholder, PrescriptionViewer } from '../components';
 import { useTheme } from '../contexts/ThemeContext';
 import { theme } from '../theme';
+import { bookingService } from '../services/bookingService';
+import { dietService } from '../services/dietService';
+import { apiClient } from '../services/apiClient';
 
-const { width } = Dimensions.get('window');
-
-type RouteParams = {
-  appointmentId: string;
-  professionalId: string;
-  userId: string;
-  appointmentData?: any; // Optional appointment data passed from list
-};
+interface AppointmentDetail {
+  id: string | number;
+  type: 'consultation' | 'yoga_class';
+  status: string;
+  date: string;
+  time: string;
+  professionalName: string;
+  professionalSpeciality: string;
+  amount: number;
+  paymentStatus: string;
+  mode?: string;
+}
 
 const AppointmentDetailScreen: React.FC = () => {
   const route = useRoute();
   const navigation = useNavigation();
-  const dispatch = useDispatch();
-  const { theme } = useTheme();
-  const { user, token, isAuthenticated } = useAuth();
-  const { appointmentId, professionalId: routeProfessionalId, userId, appointmentData } = route.params as RouteParams;
-  
-  // Animation values
+  const { user } = useAuth();
+  const appTheme = useTheme();
+
+  // 🟢 1. Extract params including TYPE
+  const { appointmentId, type } = (route.params || {}) as { appointmentId: string | number, type?: 'consultation' | 'yoga_class' };
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
-  
-  console.log('📋 [AppointmentDetail] Screen mounted with appointmentId:', appointmentId, 'professionalId:', routeProfessionalId, 'userId:', userId);
-  
-  // Validate required parameters
-  useEffect(() => {
-    if (!appointmentId || !routeProfessionalId || !userId) {
-      console.error('❌ [AppointmentDetail] Missing required parameters:', { appointmentId, professionalId: routeProfessionalId, userId });
-      Alert.alert('Invalid Appointment', 'Required appointment information is missing.');
-      navigation.goBack();
-    }
-  }, [appointmentId, routeProfessionalId, userId, navigation]);
-  
-  const {
-    currentAppointment,
-    loading,
-    error,
-    chatActive,
-    videoCallActive,
-  } = useSelector((state: RootState) => state.appointment);
 
-  const [timeUntilChat, setTimeUntilChat] = useState<number | null>(null);
+  const [detail, setDetail] = useState<AppointmentDetail | null>(null);
+  const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [prescriptionData, setPrescriptionData] = useState<any>(null);
-  const [prescriptionLoading, setPrescriptionLoading] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
-  // Get professionalId from appointment data or route params
-  const professionalId = currentAppointment?.professional_id || routeProfessionalId || 'unknown';
-
-  // Debug: Log appointment state changes
-  useEffect(() => {
-    console.log('📋 [AppointmentDetail] Appointment state updated:', {
-      appointmentId,
-      hasAppointment: !!currentAppointment,
-      loading,
-      error,
-      chatActive,
-      videoCallActive,
-      appointmentStatus: currentAppointment?.booking_status,
-    });
-  }, [currentAppointment, loading, error, chatActive, videoCallActive, appointmentId]);
-
-  // Helper to combine Date (from slot.date) and Time (from slot.start_time)
-  const getRealAppointmentDate = (dateString: string, timeString: string) => {
-    try {
-      const dateObj = new Date(dateString); // "2025-05-07..."
-      const timeObj = new Date(timeString); // "1970-01-01T01:30..."
-
-      // Combine them
-      const finalDate = new Date(dateObj);
-      finalDate.setHours(timeObj.getUTCHours());
-      finalDate.setMinutes(timeObj.getUTCMinutes());
-      finalDate.setSeconds(0);
-      
-      return finalDate;
-    } catch (e) {
-      console.error("Date parsing error", e);
-      return new Date();
-    }
-  };
-
-  // Calculate time until chat becomes available (15 minutes before appointment)
-  const calculateTimeUntilChat = useCallback(() => {
-    // 1. Safety Check: If we don't have a valid appointment, stop immediately.
-    if (!currentAppointment) {
-      console.log(' [AppointmentDetail] No appointment data available');
-      return null;
-    }
-
-    try {
-      // Use slot data if available, otherwise fall back to root level data
-      const appointmentDate = currentAppointment.date || currentAppointment.slot?.date;
-      const appointmentTime = currentAppointment.time || currentAppointment.slot?.start_time;
-
-      if (!appointmentDate || !appointmentTime) {
-        console.log(' [AppointmentDetail] No appointment date or time available');
-        return null;
-      }
-
-      // ✅ NEW CODE: Use the helper function to combine date and time properly
-      const chatStartTime = getRealAppointmentDate(appointmentDate, appointmentTime);
-      
-      // Now calculate availability using this correct date
-      const now = new Date();
-      const diff = (chatStartTime.getTime() - now.getTime()) / 60000;
-      const minutesUntilChat = diff <= 0 ? 0 : Math.floor(diff);
-      
-      console.log(' [AppointmentDetail] Chat availability:', {
-        appointmentDate,
-        appointmentTime,
-        chatStartTime: chatStartTime.toISOString(),
-        now: now.toISOString(),
-        minutesUntilChat,
-        isAvailable: minutesUntilChat === 0,
-      });
-      
-      return minutesUntilChat;
-    } catch (error) {
-      console.error(' [AppointmentDetail] Error calculating chat time:', error);
-      return null;
-    }
-  }, [currentAppointment]);
-
-  // Check appointment status and permissions
-  const checkAppointmentAccess = useCallback(async () => {
-    console.log(' [AppointmentDetail] Checking appointment access:', { appointmentId });
-    try {
-      // Use AuthContext instead of secure storage
-      const authToken = token;
-      const hasUser = !!user;
-      
-      console.log('🔐 [AppointmentDetail] Access check results:', {
-        hasAuthToken: !!authToken,
-        hasUser,
-        isAuthenticated,
-        userId: user?.id,
-      });
-      
-      if (!authToken || !isAuthenticated) {
-        console.warn('⚠️ [AppointmentDetail] No auth token found or not authenticated');
-        Alert.alert('Authentication Required', 'Please log in to access this appointment.');
-        navigation.goBack();
-        return false;
-      }
-      
-      // For development/testing, we can skip the appointment token check
-      // In production, you might want to verify the appointment belongs to the user
-      console.log('✅ [AppointmentDetail] Access granted');
-      return true;
-    } catch (error) {
-      console.error('❌ [AppointmentDetail] Error checking appointment access:', error);
-      return false;
-    }
-  }, [appointmentId, user, token, isAuthenticated, navigation]);
-
-  // Refresh appointment data
-  const refreshAppointment = useCallback(async () => {
-    console.log('🔄 [AppointmentDetail] Refreshing appointment data:', appointmentId);
-    setIsRefreshing(true);
-    try {
-      console.log('📡 [AppointmentDetail] Fetching appointment by ID...');
-      await dispatch(fetchAppointmentById(appointmentId) as any);
-      console.log('📡 [AppointmentDetail] Checking chat status...');
-      
-      console.log('✅ [AppointmentDetail] Appointment data refreshed successfully');
-    } catch (error) {
-      console.error('❌ [AppointmentDetail] Error refreshing appointment:', error);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [dispatch, appointmentId]);
-
-  // 1. FIX: Updated Session Check Logic
-  const isSessionFeatureAvailable = useCallback((type: 'chat' | 'video' = 'chat') => {
-    if (!currentAppointment) return false;
+  // 🟢 2. Unified Logic: Auto-detect type from unified list first
+  const fetchDetails = useCallback(async () => {
+    console.log(`🚀 [DetailScreen] fetchDetails called with ID: ${appointmentId}, Type: ${type}`);
     
-    // ✅ ALWAYS ALLOW if confirmed/completed (Removes 15-min restriction & fixes disabled button)
-    if (currentAppointment.booking_status === 'CONFIRMED' || currentAppointment.booking_status === 'COMPLETED') {
-       return true; 
+    if (!appointmentId || !user) {
+      console.log(`❌ [DetailScreen] Missing appointmentId or user`);
+      return;
     }
 
-    // Fallback logic for safety
     try {
-      // ✅ FIX: Use slot.date if root date is missing (Fixes 1970 bug)
-      // The API returns date inside the 'slot' object
-      const dateStr = currentAppointment.date || currentAppointment.slot?.date;
-      const timeStr = currentAppointment.time || currentAppointment.slot?.start_time;
+      setLoading(true);
+      let data: any = null;
+      let apptType = type; // Don't default to consultation, let us detect it
 
-      if (!dateStr || !timeStr) return false;
+      console.log(`🔎 [DetailScreen] Fetching ID: ${appointmentId} Initial Type: ${apptType || 'unknown'}`);
 
-      let appointmentDate: Date;
-
-      // Handle ISO strings correctly
-      if (typeof timeStr === 'string' && timeStr.includes('T')) {
-        appointmentDate = new Date(timeStr);
-      } else {
-        // Extract start time from time range like "09:00 - 09:15" or use simple time like "09:00"
-        const startTime = String(timeStr).includes('-') 
-          ? String(timeStr).split(' - ')[0].trim()
-          : String(timeStr);
+      // 🎯 STEP 1: If no type provided, auto-detect from unified list
+      if (!apptType) {
+        console.log(`🔍 [DetailScreen] Auto-detecting type for ID: ${appointmentId}`);
+        const listRes = await bookingService.getAllUserBookings((user as any).id || (user as any).user_id);
         
-        const [hours, minutes] = startTime.split(':').map(Number);
-        appointmentDate = new Date(dateStr);
-        appointmentDate.setHours(hours, minutes, 0, 0);
-      }
-      
-      const now = new Date();
-      
-      // Allow if in past or within 15 mins
-      if (appointmentDate <= now) return true;
-      const fifteenMinutesBefore = new Date(appointmentDate.getTime() - (15 * 60 * 1000));
-      return now >= fifteenMinutesBefore;
-
-    } catch (error) {
-      console.error('Error checking session availability:', error);
-      return false;
-    }
-  }, [currentAppointment]);
-
-  // Get user-friendly message about chat availability
-  const getChatAvailabilityMessage = useCallback(() => {
-    if (!currentAppointment) return '';
-    
-    const status = currentAppointment.booking_status;
-    if (status !== 'CONFIRMED' && status !== 'COMPLETED') {
-      return 'Chat only available for confirmed or completed appointments';
-    }
-    
-    if (!isSessionFeatureAvailable('chat')) {
-      if (!currentAppointment.time) return 'Chat time not available';
-      
-      // Extract start time from time range like "09:00 - 09:15" or use simple time like "09:00"
-      const startTime = currentAppointment.time.includes('-') 
-        ? currentAppointment.time.split(' - ')[0].trim()
-        : currentAppointment.time;
-      
-      const [hours, minutes] = startTime.split(':').map(Number);
-      const appointmentDate = new Date(currentAppointment.date || '');
-      appointmentDate.setHours(hours, minutes, 0, 0);
-      const now = new Date();
-      
-      if (now < appointmentDate) {
-        const diffMs = appointmentDate.getTime() - now.getTime();
-        const diffMins = Math.ceil(diffMs / (1000 * 60));
-        return `Chat available in ~${diffMins} minutes`;
-      }
-      
-      return 'Chat session has ended';
-    }
-    
-    return 'Chat is available';
-  }, [currentAppointment, isSessionFeatureAvailable]);
-
-  // Check if chat should be available based on appointment status and timing
-  const isChatAvailable = useCallback(() => {
-    if (!currentAppointment) return false;
-    const status = currentAppointment.booking_status;
-    return (status === 'CONFIRMED' || status === 'COMPLETED') && 
-           isSessionFeatureAvailable('chat');
-  }, [currentAppointment, isSessionFeatureAvailable]);
-
-  // Check if video should be available based on appointment status and mode
-  const isVideoAvailable = useCallback(() => {
-    if (!currentAppointment) return false;
-    const status = currentAppointment.booking_status;
-    return (status === 'CONFIRMED' || status === 'COMPLETED') && 
-           isSessionFeatureAvailable('video') &&
-           currentAppointment.mode === 'online'; // Only for online appointments
-  }, [currentAppointment, isSessionFeatureAvailable]);
-
-  // 2. FIX: specific Chat Press Handler
-  const handleChatPress = async () => {
-    const effectiveProfessionalId = currentAppointment?.professional_id || professionalId;
-    
-    console.log('💬 [AppointmentDetail] Chat button pressed');
-    
-    // ✅ REMOVED the "!chatActive" check which was blocking you
-    // We strictly trust isChatAvailable() now.
-    if (!isChatAvailable()) {
-      Alert.alert('Chat Not Available', 'Chat is only available for confirmed appointments.');
-      return;
-    }
-    
-    const hasAccess = await checkAppointmentAccess();
-    if (!hasAccess) return;
-    
-    const chatId = currentAppointment?.chat_id || appointmentId;
-    
-    // Navigate to Chat
-    (navigation as any).navigate('ChatScreen', {
-      chatId,
-      appointmentId,
-      title: currentAppointment?.professional_name || 'Chat',
-      receiverId: effectiveProfessionalId,
-    });
-  };
-
-  // Get user-friendly message about video call availability
-  const getVideoCallAvailabilityMessage = useCallback(() => {
-    if (!currentAppointment) return 'Video call not available';
-    
-    const status = currentAppointment.booking_status;
-    if (status !== 'CONFIRMED' && status !== 'COMPLETED') {
-      return 'Video calls only for confirmed or completed appointments';
-    }
-    
-    if (currentAppointment.mode !== 'online') {
-      return 'Video calls only available for online appointments';
-    }
-    
-    if (!isSessionFeatureAvailable('video')) {
-      if (!currentAppointment.time) return 'Video call time not available';
-      
-      // Extract start time from time range like "09:00 - 09:15" or use simple time like "09:00"
-      const startTime = currentAppointment.time.includes('-') 
-        ? currentAppointment.time.split(' - ')[0].trim()
-        : currentAppointment.time;
-      
-      const [hours, minutes] = startTime.split(':').map(Number);
-      const appointmentDate = new Date(currentAppointment.date || '');
-      appointmentDate.setHours(hours, minutes, 0, 0);
-      const now = new Date();
-      
-      if (now < appointmentDate) {
-        const diffMs = appointmentDate.getTime() - now.getTime();
-        const diffMins = Math.ceil(diffMs / (1000 * 60));
-        return `Video call available in ~${diffMins} minutes`;
-      }
-      
-      return 'Video call session has ended';
-    }
-    
-    return 'Video call is available';
-  }, [currentAppointment, isSessionFeatureAvailable]);
-
-  // Handle video call
-  const handleVideoCallPress = async () => {
-    console.log('🎥 [AppointmentDetail] Video call button pressed:', {
-      appointmentId,
-      isVideoAvailable: isVideoAvailable(),
-      mode: currentAppointment?.mode,
-      status: currentAppointment?.booking_status,
-    });
-    
-    // Check appointment status and mode first
-    if (!currentAppointment) return;
-    
-    if (currentAppointment.mode !== 'online') {
-      console.log('❌ [AppointmentDetail] Video call only available for online appointments');
-      Alert.alert('Video Call Not Available', 'Video calls are only available for online appointments.');
-      return;
-    }
-    
-    if (!isVideoAvailable()) {
-      console.log('⏰ [AppointmentDetail] Video call not available:', {
-        status: currentAppointment.booking_status,
-        isSessionAvailable: isSessionFeatureAvailable('video')
-      });
-      
-      if (currentAppointment.booking_status !== 'CONFIRMED' && 
-          currentAppointment.booking_status !== 'COMPLETED') {
-        Alert.alert('Video Call Not Available', 'Video calls are only available for confirmed or completed appointments.');
-      } else {
-        Alert.alert('Video Call Not Available', 'Video calls are only available during your scheduled appointment time.');
-      }
-      return;
-    }
-    
-    const hasAccess = await checkAppointmentAccess();
-    if (!hasAccess) {
-      console.warn('⚠️ [AppointmentDetail] Access denied for video call');
-      return;
-    }
-    
-    console.log('📞 [AppointmentDetail] Video call feature placeholder');
-    Alert.alert('Video Call', 'Video call feature will be available soon.');
-  };
-
-  // Fetch prescription data for the appointment
-  const fetchPrescriptionData = useCallback(async () => {
-    if (!currentAppointment) return;
-    
-    // Validate that we have required booking data before proceeding
-    if (!currentAppointment.booking_id && !currentAppointment.appointment_id) {
-      console.error('❌ [AppointmentDetail] No valid booking ID found in appointment data');
-      return;
-    }
-    
-    setPrescriptionLoading(true);
-    try {
-      const bookingId = Number(currentAppointment.booking_id || currentAppointment.appointment_id);
-      console.log('📡 [AppointmentDetail] Fetching prescription for booking:', bookingId);
-      const response = await apiService.getBookingPrescription(bookingId);
-      console.log('📡 [AppointmentDetail] Prescription API response:', {
-        hasData: !!response?.data,
-        prescriptionId: response?.data?.data?.id,
-        prescriptionType: response?.data?.data?.prescriptionType,
-      });
-      
-      if (response?.data?.data?.id) {
-        setPrescriptionData(response.data.data);
-      } else {
-        setPrescriptionData(null);
-      }
-    } catch (error: any) {
-      const status = error?.response?.status;
-      console.error('❌ [AppointmentDetail] Error fetching prescription:', {
-        status,
-        error: error?.message,
-      });
-      
-      // Don't show error for 404 - just set prescriptionData to null
-      if (status !== 404) {
-        console.warn('⚠️ [AppointmentDetail] Failed to fetch prescription data');
-      }
-      setPrescriptionData(null);
-    } finally {
-      setPrescriptionLoading(false);
-    }
-  }, [currentAppointment]);
-
-  // Fetch prescription when appointment is loaded and status is COMPLETED
-  useEffect(() => {
-    if (currentAppointment && currentAppointment.booking_status === 'COMPLETED') {
-      fetchPrescriptionData();
-    }
-  }, [currentAppointment, fetchPrescriptionData]);
-
-  // Initial data fetch
-  useEffect(() => {
-    console.log('🔄 [AppointmentDetail] Initial data fetch triggered');
-    refreshAppointment();
-  }, [refreshAppointment]);
-
-  // ✅ ADD PAYMENT SYNC EFFECT - Sync payment status when appointment loads
-  useEffect(() => {
-    const syncPaymentStatus = async () => {
-      if (currentAppointment?.transaction_id && currentAppointment?.payment_status === 'PENDING') {
-        try {
-          console.log(`🔄 [AppointmentDetail] Force syncing payment for TXN: ${currentAppointment.transaction_id}`);
+        console.log(`📋 [DetailScreen] Unified list response:`, listRes.success ? 'SUCCESS' : 'FAILED');
+        
+        if (listRes.success && listRes.data) {
+          console.log(`🔍 [DetailScreen] Searching through ${listRes.data.length} items for ID: ${appointmentId}`);
           
-          // Use consistent endpoint with other screens
-          const response = await apiService.syncPaymentStatus(currentAppointment.transaction_id);
-          console.log('✅ [AppointmentDetail] Payment sync response:', response.data);
+          // Debug: Log all reference_ids
+          listRes.data.forEach((item: any, index: number) => {
+            console.log(`  Item ${index}: reference_id=${item.reference_id}, type=${item.type}`);
+          });
           
-          // Check if sync was successful
-          const isSuccess = 
-            response.data?.msg?.includes('SUCCESS') || 
-            response.data?.msg?.includes('updated to SUCCESS') ||
-            response.data?.current_status === 'SUCCESS' ||
-            response.data?.status === 'SUCCESS';
+          const found = listRes.data.find((item: any) =>
+            String(item.reference_id) === String(appointmentId)
+          );
           
-          if (isSuccess) {
-            console.log('✅ [AppointmentDetail] Payment status synced successfully');
-            
-            // Refresh appointment data after sync to get updated status
-            setTimeout(() => {
-              console.log('🔄 [AppointmentDetail] Refreshing appointment data after payment sync...');
-              refreshAppointment();
-            }, 1000);
+          console.log(`🎯 [DetailScreen] Search result for ID ${appointmentId}:`, found ? 'FOUND' : 'NOT FOUND');
+          
+          if (found) {
+            apptType = found.type;
+            console.log(`✅ [DetailScreen] Auto-detected type: ${apptType} for ID: ${appointmentId}`);
           } else {
-            console.log('⚠️ [AppointmentDetail] Payment still pending, will retry on next load');
+            console.log(`❌ [DetailScreen] Appointment ID ${appointmentId} not found in unified list`);
+            Alert.alert("Error", "Appointment not found.");
+            navigation.goBack();
+            return;
           }
-        } catch (error) {
-          console.error('⚠️ [AppointmentDetail] Sync attempt failed (Background webhook will handle it):', error);
+        } else {
+          console.log(`❌ [DetailScreen] Failed to get unified list`);
+          Alert.alert("Error", "Failed to load appointments.");
+          navigation.goBack();
+          return;
         }
       }
-    };
 
-    if (currentAppointment) {
-      syncPaymentStatus();
-    }
-  }, [currentAppointment, refreshAppointment]);
-
-  // Start entrance animation when data loads
-  useEffect(() => {
-    if (!loading && currentAppointment) {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [loading, currentAppointment, fadeAnim, slideAnim]);
-
-  // Update time until chat
-  useEffect(() => {
-    console.log('⏰ [AppointmentDetail] Setting up chat countdown timer');
-    const timer = setInterval(() => {
-      const minutes = calculateTimeUntilChat();
-      const previousMinutes = timeUntilChat;
-      setTimeUntilChat(minutes);
+      // 🎯 UNIFIED APPROACH: Always use unified list (most reliable)
+      console.log(`🔄 [DetailScreen] Using unified list approach for type: ${apptType}`);
       
-      // Only log when time actually changes (not every 30 seconds)
-      if (minutes !== null && minutes !== previousMinutes) {
-        console.log('⏰ [AppointmentDetail] Chat available in', minutes, 'minutes');
+      const listRes = await bookingService.getAllUserBookings((user as any).id || (user as any).user_id);
+
+      if (listRes.success && listRes.data) {
+        const found = listRes.data.find((item: any) =>
+          String(item.reference_id) === String(appointmentId) && item.type === apptType
+        );
+
+        if (found) {
+          if (apptType === 'yoga_class') {
+            data = {
+              id: found.reference_id,
+              type: 'yoga_class',
+              status: found.status,
+              date: found.date,
+              time: found.time || 'TBA',
+              professionalName: found.title, // e.g. "Morning Yoga"
+              professionalSpeciality: 'Yoga Instructor',
+              amount: found.amount,
+              paymentStatus: found.payment_status,
+              mode: found.subtitle // e.g. "Group Online"
+            };
+            console.log(`✅ [DetailScreen] Found yoga booking: ${found.title}`);
+          } else if (apptType === 'consultation') {
+            data = {
+              id: found.reference_id,
+              type: 'consultation',
+              status: found.status,
+              date: found.date,
+              time: found.time,
+              professionalName: found.title || 'Consultation',
+              professionalSpeciality: found.subtitle || 'General Practitioner',
+              amount: found.amount,
+              paymentStatus: found.payment_status,
+              mode: found.subtitle
+            };
+            console.log(`✅ [DetailScreen] Found consultation: ${data.professionalName}`);
+          }
+        } else {
+          console.log(`❌ [DetailScreen] No ${apptType} found with ID: ${appointmentId}`);
+        }
       }
-    }, 30000); // Update every 30 seconds
-    
-    setTimeUntilChat(calculateTimeUntilChat());
-    
-    return () => {
-      console.log('🧹 [AppointmentDetail] Cleaning up chat countdown timer');
-      clearInterval(timer);
-    };
-  }, [calculateTimeUntilChat, timeUntilChat]);
 
-  if (loading && !currentAppointment) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <Text style={styles.loadingText}>Loading appointment details...</Text>
-      </View>
-    );
-  }
+      if (data) {
+        setDetail(data);
+        Animated.parallel([
+          Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true })
+        ]).start();
+      } else {
+        console.log("❌ [DetailScreen] Data not found for ID:", appointmentId);
+        Alert.alert("Error", "Appointment details could not be found.");
+        navigation.goBack();
+      }
 
-  if (error && !currentAppointment) {
-    return (
-      <View style={styles.centerContainer}>
-        <Ionicons name="alert-circle-outline" size={60} color={theme.colors.feedback.error} />
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={refreshAppointment}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+    } catch (e) {
+      console.error("Fetch Error:", e);
+      Alert.alert("Error", "Failed to load details.");
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [appointmentId, type, user, navigation, fadeAnim, slideAnim]);
 
-  if (!currentAppointment) {
-    return (
-      <View style={styles.centerContainer}>
-        <Ionicons name="document-outline" size={60} color={theme.colors.text.primary} />
-        <Text style={styles.errorText}>Appointment not found</Text>
-      </View>
-    );
-  }
+  useEffect(() => {
+    fetchDetails();
+  }, [fetchDetails]);
 
-    const formatDate = (dateString: string | undefined) => {
-    if (!dateString) return 'Date not available';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+  // --- Actions ---
+
+  const handleChatPress = () => {
+    if (!detail) return;
+    console.log(`💬 [DetailScreen] Navigating to ChatScreen with:`, {
+      appointmentId: detail.id,
+      title: detail.professionalName
+    });
+    (navigation.navigate as any)('ChatScreen', {
+      appointmentId: detail.id,
+      title: detail.professionalName,
     });
   };
+
+  const handleCancelPress = () => {
+    Alert.alert(
+      "Cancel Booking",
+      "Are you sure you want to cancel?",
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes, Cancel",
+          style: "destructive",
+          onPress: async () => {
+            setCancelling(true);
+            try {
+              // 🟢 Smart Cancel: Use the correct API based on type
+              let endpoint = detail?.type === 'yoga_class'
+                ? `/user/yoga-booking/cancel/${appointmentId}`
+                : `/user/consultation-booking/cancel/${appointmentId}`;
+
+              const res = await apiClient.post(endpoint, {});
+
+              if (res.success) {
+                Alert.alert("Success", "Booking cancelled successfully.");
+                navigation.goBack();
+              } else {
+                Alert.alert("Error", "Failed to cancel.");
+              }
+            } catch (err) {
+              Alert.alert("Error", "Network error occurred.");
+            } finally {
+              setCancelling(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
+
+  if (!detail) return null;
+
+  const isYoga = detail.type === 'yoga_class';
+  const color = isYoga ? '#4CAF50' : theme.colors.primary;
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={theme.colors.primary} />
-      
-      {/* Modern Header with Gradient */}
-      <Animated.View
-        style={[
-          styles.headerWrapper,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
+      <StatusBar barStyle="light-content" backgroundColor={appTheme.theme.colors.primary} />
+      <LinearGradient 
+        colors={[appTheme.theme.colors.primary, appTheme.theme.colors.secondary]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
       >
-        <LinearGradient
-          colors={[theme.colors.primary, theme.colors.secondary]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.header}
-        >        
+        
         <View style={styles.headerContent}>
           <TouchableOpacity 
-            onPress={() => {
-              console.log('⬅️ [AppointmentDetail] Back button pressed');
-              navigation.goBack();
-            }} 
+            onPress={() => navigation.goBack()}
             style={styles.backButton}
+            activeOpacity={0.7}
           >
             <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
           </TouchableOpacity>
           
           <View style={styles.titleContainer}>
-            <Text style={styles.headerTitle}>Appointment Details</Text>
+            <Text style={styles.headerTitle}>
+              {isYoga ? 'Class Details' : 'Consultation'}
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              {isYoga ? 'View your yoga class information' : 'View your consultation details'}
+            </Text>
           </View>
           
-          <TouchableOpacity 
-            onPress={refreshAppointment}
-            style={styles.refreshButton}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="refresh" size={20} color={theme.colors.background.surface} />
-          </TouchableOpacity>
+          <View style={styles.placeholderButton} />
         </View>
         
         {/* Decorative elements */}
         <View style={styles.topCircle} />
         <View style={styles.bottomWave} />
       </LinearGradient>
-      </Animated.View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Professional Profile Card */}
-        <View style={styles.professionalCard}>
-          <View style={styles.professionalHeader}>
-            <View style={styles.avatarContainer}>
-              <View style={styles.avatar}>
-                <Ionicons name="person" size={40} color={theme.colors.primary} />
+      <ScrollView 
+        contentContainerStyle={{ padding: 16 }} 
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => { setIsRefreshing(true); fetchDetails(); }} />}
+      >
+        {/* Main Info Card */}
+        <Animated.View style={[
+          styles.card,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }], borderTopColor: color, borderTopWidth: 4 }
+        ]}>
+          <View style={styles.row}>
+            <View style={[styles.avatar, { backgroundColor: color }]}>
+              <Ionicons name={isYoga ? "fitness" : "medkit"} size={24} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.docName}>{detail.professionalName}</Text>
+              <Text style={styles.docSpec}>{detail.professionalSpeciality}</Text>
+
+              <View style={[
+                styles.badge,
+                { backgroundColor: detail.status === 'CONFIRMED' ? '#E8F5E9' : '#FFF3E0' }
+              ]}>
+                <Text style={{ color: detail.status === 'CONFIRMED' ? '#2E7D32' : '#EF6C00', fontSize: 12, fontWeight: '700' }}>
+                  {detail.status}
+                </Text>
               </View>
-              <View style={[styles.statusIndicator, { backgroundColor: getStatusColor(currentAppointment.booking_status, theme) }]} />
             </View>
-            <View style={styles.professionalInfo}>
-              <Text style={styles.professionalName}>{currentAppointment.professional_name}</Text>
-              <Text style={styles.professionalTitle}>Healthcare Professional</Text>
-              <View style={styles.statusBadge}>
-                <Text style={[styles.statusText, { color: getStatusColor(currentAppointment.booking_status, theme) }]}>{currentAppointment.booking_status}</Text>
+          </View>
+
+          <View style={styles.divider} />
+
+          {/* Date & Time Section */}
+          <View style={styles.infoSection}>
+            <Text style={styles.sectionLabel}>Schedule</Text>
+            <View style={styles.infoRow}>
+              <Ionicons name="calendar-outline" size={18} color="#666" />
+              <Text style={styles.infoText}>
+                {detail.date ? new Date(detail.date).toDateString() : 'Date N/A'}
+              </Text>
+            </View>
+            <View style={[styles.infoRow, { marginTop: 8 }]}>
+              <Ionicons name="time-outline" size={18} color="#666" />
+              <Text style={styles.infoText}>{detail.time}</Text>
+            </View>
+            {isYoga && detail.mode && (
+              <View style={[styles.infoRow, { marginTop: 8 }]}>
+                <Ionicons name="videocam-outline" size={18} color="#666" />
+                <Text style={styles.infoText}>{(detail.mode).replace(/_/g, ' ')}</Text>
               </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Appointment Details Card */}
-        <View style={styles.detailsCard}>
-          <Text style={styles.cardTitle}>Appointment Information</Text>
-          
-          <View style={styles.detailRow}>
-            <View style={styles.detailIcon}>
-              <Ionicons name="calendar" size={20} color={theme.colors.primary} />
-            </View>
-            <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Date</Text>
-              <Text style={styles.detailValue}>{formatDate(currentAppointment.date) || 'Date not available'}</Text>
-            </View>
+            )}
           </View>
 
-          <View style={styles.detailRow}>
-            <View style={styles.detailIcon}>
-              <Ionicons name="time" size={20} color={theme.colors.primary} />
-            </View>
-            <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Time</Text>
-              {(() => {
-                const time = currentAppointment.time || currentAppointment.slot?.start_time;
-                const endTime = currentAppointment.slot?.end_time;
-                
-                console.log('🕐 [AppointmentDetail] Time data:', {
-                  time: currentAppointment.time,
-                  slotTime: currentAppointment.slot?.start_time,
-                  slotEndTime: currentAppointment.slot?.end_time,
-                  fullSlot: currentAppointment.slot
-                });
-                
-                if (time && time.includes('-')) {
-                  // Time is already formatted as "09:00 - 09:15" from API
-                  return <Text style={styles.detailValue}>{time}</Text>;
-                } else if (time && endTime) {
-                  // Combine start and end time if both are available separately
-                  return <Text style={styles.detailValue}>{`${time} - ${endTime}`}</Text>;
-                } else if (time) {
-                  // Show just start time if end time is not available
-                  return <Text style={styles.detailValue}>{time}</Text>;
-                } else {
-                  // Fallback if no time data is available
-                  return <Text style={styles.detailValue}>Time not available</Text>;
-                }
-              })()}
-            </View>
-          </View>
+          <View style={styles.divider} />
 
-          <View style={styles.detailRow}>
-            <View style={styles.detailIcon}>
-              <Ionicons name={currentAppointment.mode === 'online' ? 'videocam' : 'location'} size={20} color={theme.colors.primary} />
-            </View>
-            <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Mode</Text>
-              <Text style={styles.detailValue}>{currentAppointment.mode === 'online' ? 'Online Consultation' : 'In-Person Visit'}</Text>
-            </View>
-          </View>
-
-          <View style={styles.detailRow}>
-            <View style={styles.detailIcon}>
-              <Ionicons name="payments" size={20} color={theme.colors.primary} />
-            </View>
-            <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Consultation Fee</Text>
-              <Text style={styles.detailValue}>₹{currentAppointment.amount}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Quick Actions */}
-        <View style={styles.actionsCard}>
-          <Text style={styles.cardTitle}>Quick Actions</Text>
-          
-          <View style={styles.actionButtons}>
-            {/* Chat Button */}
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
-                isChatAvailable() ? styles.chatButton : styles.disabledActionButton,
-              ]}
-              onPress={handleChatPress}
-              disabled={!isChatAvailable()}
-            >
-              <View style={styles.actionButtonContent}>
-                <Ionicons name="chatbubble" size={24} color={isChatAvailable() ? '#fff' : '#94A3B8'} />
-                <Text style={[styles.actionButtonText, { 
-                  color: isChatAvailable() ? '#fff' : '#94A3B8' 
+          {/* Payment Information */}
+          <View style={styles.infoSection}>
+            <Text style={styles.sectionLabel}>Payment Details</Text>
+            <View style={styles.paymentRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.paymentLabel}>Amount</Text>
+                <Text style={styles.paymentAmount}>₹{detail.amount || 0}</Text>
+              </View>
+              <View style={[styles.paymentStatusBadge, {
+                backgroundColor: detail.paymentStatus === 'COMPLETED' ? '#E8F5E9' : '#FFF3E0'
+              }]}>
+                <Text style={[styles.paymentStatusText, {
+                  color: detail.paymentStatus === 'COMPLETED' ? '#2E7D32' : '#EF6C00'
                 }]}>
-                  Chat
+                  {detail.paymentStatus || 'PENDING'}
                 </Text>
               </View>
-              {!isChatAvailable() && currentAppointment && (
-                <Text style={styles.helperText}>
-                  {getChatAvailabilityMessage()}
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Video Call Button */}
-            {currentAppointment?.mode === 'online' && (
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  isVideoAvailable() ? styles.videoButton : styles.disabledActionButton,
-                ]}
-                onPress={handleVideoCallPress}
-                disabled={!isVideoAvailable()}
-              >
-                <View style={styles.actionButtonContent}>
-                  <Ionicons name="videocam" size={24} color={isVideoAvailable() ? '#fff' : '#94A3B8'} />
-                  <Text style={[styles.actionButtonText, { 
-                    color: isVideoAvailable() ? '#fff' : '#94A3B8' 
-                  }]}>
-                    Video Call
-                  </Text>
-                </View>
-                {!isVideoAvailable() && currentAppointment && (
-                  <Text style={styles.helperText}>
-                    {getVideoCallAvailabilityMessage()}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {/* Video/Audio Placeholder */}
-        {videoCallActive && (
-          <View style={styles.videoCard}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="videocam" size={20} color={theme.colors.primary} />
-              <Text style={styles.cardTitle}>Video Consultation</Text>
             </View>
-            <VideoPlaceholder />
           </View>
+
+          <View style={styles.divider} />
+
+          {/* Booking Information */}
+          <View style={styles.infoSection}>
+            <Text style={styles.sectionLabel}>Booking Information</Text>
+            <View style={styles.infoRow}>
+              <Ionicons name="pricetag-outline" size={18} color="#666" />
+              <Text style={styles.infoText}>ID: {detail.id}</Text>
+            </View>
+            <View style={[styles.infoRow, { marginTop: 8 }]}>
+              <Ionicons name="checkmark-circle-outline" size={18} color="#666" />
+              <Text style={styles.infoText}>Type: {isYoga ? 'Yoga Class' : 'Consultation'}</Text>
+            </View>
+          </View>
+        </Animated.View>
+
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+
+        {/* Chat */}
+        <TouchableOpacity style={[styles.listButton, { borderColor: color + '40' }]} onPress={handleChatPress}>
+          <View style={[styles.iconBox, { backgroundColor: color + '15' }]}>
+            <Ionicons name="chatbubbles" size={22} color={color} />
+          </View>
+          <Text style={styles.listText}>Message {isYoga ? 'Instructor' : 'Doctor'}</Text>
+          <Ionicons name="chevron-forward" size={20} color="#ccc" />
+        </TouchableOpacity>
+
+        {/* Add to Calendar */}
+        <TouchableOpacity style={[styles.listButton, { marginTop: 10, borderColor: '#E3F2FD' }]} onPress={() => {
+          Alert.alert("Coming Soon", "Calendar integration will be available soon!");
+        }}>
+          <View style={[styles.iconBox, { backgroundColor: '#E3F2FD' }]}>
+            <Ionicons name="calendar-outline" size={22} color="#2196F3" />
+          </View>
+          <Text style={styles.listText}>Add to Calendar</Text>
+          <Ionicons name="chevron-forward" size={20} color="#ccc" />
+        </TouchableOpacity>
+
+        {/* Cancel */}
+        {(detail.status === 'CONFIRMED' || detail.status === 'PENDING') && (
+          <TouchableOpacity
+            style={[styles.listButton, { marginTop: 10, borderColor: '#FFEBEE' }]}
+            onPress={handleCancelPress}
+            disabled={cancelling}
+          >
+            <View style={[styles.iconBox, { backgroundColor: '#FFEBEE' }]}>
+              {cancelling ? <ActivityIndicator size="small" color="#D32F2F" /> : <Ionicons name="close-circle" size={22} color="#D32F2F" />}
+            </View>
+            <Text style={[styles.listText, { color: '#D32F2F' }]}>Cancel Booking</Text>
+          </TouchableOpacity>
         )}
 
-        {/* Prescription Viewer - Only show for COMPLETED appointments */}
-        {currentAppointment.booking_status === 'COMPLETED' && (
-          <View style={styles.prescriptionCard}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="medkit" size={20} color={theme.colors.primary} />
-              <Text style={styles.cardTitle}>Prescriptions</Text>
-              {prescriptionData && (
-                <TouchableOpacity
-                  style={styles.downloadButton}
-                  onPress={() => {
-                    // Navigate to PrescriptionDetail if prescription exists
-                    (navigation as any).navigate('PrescriptionDetail', {
-                      prescriptionId: prescriptionData.id,
-                      appointmentId: currentAppointment.appointment_id,
-                    });
-                  }}
-                >
-                  <Ionicons name="download" size={20} color={theme.colors.primary} />
-                  <Text style={styles.downloadButtonText}>View Details</Text>
-                </TouchableOpacity>
-              )}
+        {/* Book Again */}
+        {detail.status === 'COMPLETED' && (
+          <TouchableOpacity style={[styles.listButton, { marginTop: 10, borderColor: '#E8F5E9' }]} onPress={() => {
+            Alert.alert("Coming Soon", "Rebooking will be available soon!");
+          }}>
+            <View style={[styles.iconBox, { backgroundColor: '#E8F5E9' }]}>
+              <Ionicons name="add-circle-outline" size={22} color="#4CAF50" />
             </View>
-            {prescriptionLoading ? (
-              <View style={styles.prescriptionLoadingContainer}>
-                <ActivityIndicator size="small" color="#3B82F6" />
-                <Text style={styles.prescriptionLoadingText}>Loading prescription...</Text>
-              </View>
-            ) : (
-              <PrescriptionViewer appointmentId={currentAppointment.appointment_id} />
-            )}
-          </View>
+            <Text style={[styles.listText, { color: '#4CAF50' }]}>Book Again</Text>
+            <Ionicons name="chevron-forward" size={20} color="#ccc" />
+          </TouchableOpacity>
         )}
-
-        {/* Security Information */}
-        <View style={styles.securityCard}>
-          <Ionicons name="shield-checkmark" size={20} color="#4CAF50" />
-          <Text style={styles.securityText}>Your consultation is secure and private</Text>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-// Helper function to get status color
-const getStatusColor = (status: string, theme: any): string => {
-  switch (status) {
-    case 'CONFIRMED':
-      return theme.colors.success;
-    case 'PENDING':
-      return theme.colors.warning;
-    case 'COMPLETED':
-      return theme.colors.primary;
-    case 'CANCELLED':
-      return theme.colors.feedback.error;
-    default:
-      return theme.colors.text.primary;
-  }
-};
-
+// 🟢 UPDATED STYLES TO MATCH OTHER SCREENS
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
+  container: { flex: 1, backgroundColor: theme.colors.background.primary },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   
-  // Header Styles
-  headerWrapper: {
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  header: {
+  header: { 
     paddingTop: 40,
-    paddingBottom: theme.spacing.l,
-    paddingHorizontal: 24,
-    position: 'relative',
-    overflow: 'hidden',
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    zIndex: 2,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    padding: 8,
+    borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  refreshButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   titleContainer: {
     flex: 1,
     alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-    marginBottom: 2,
+  headerTitle: { 
+    color: theme.colors.background.surface, 
+    fontSize: 20, 
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
-  // Decorative elements
+  headerSubtitle: {
+    color: theme.colors.background.surface,
+    fontSize: 14,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  placeholderButton: {
+    width: 40,
+  },
   topCircle: {
     position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     top: -50,
-    right: -30,
+    right: -50,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   bottomWave: {
     position: 'absolute',
-    bottom: -25,
-    left: 0,
-    right: 0,
-    height: 50,
+    bottom: -20,
+    left: -50,
+    right: -50,
+    height: 40,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderTopLeftRadius: 80,
-    borderTopRightRadius: 80,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
 
-  // Professional Card
-  professionalCard: {
-    margin: 20,
-    marginTop: 30,
-    padding: 24,
+  card: {
     backgroundColor: theme.colors.background.surface,
-    borderRadius: 20,
+    borderRadius: theme.borderRadius.l,
+    padding: 20,
+    marginBottom: 25,
+    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowRadius: 4,
   },
-  professionalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarContainer: {
-    marginRight: 16,
-    position: 'relative',
-  },
+  row: { flexDirection: 'row', alignItems: 'center' },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#F1F5F9',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: theme.colors.primary,
+    marginRight: 15
   },
-  statusIndicator: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 3,
-    borderColor: theme.colors.background.surface,
-  },
-  professionalInfo: {
-    flex: 1,
-  },
-  professionalName: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: theme.colors.text.primary,
-    marginBottom: 4,
-    letterSpacing: 0.2,
-  },
-  professionalTitle: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 12,
-    fontWeight: '500',
-  },
-  statusBadge: {
+  docName: { fontSize: 16, fontWeight: '700', color: theme.colors.text.primary },
+  docSpec: { fontSize: 14, color: theme.colors.text.secondary, marginTop: 2 },
+  badge: {
     alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 6
+  },
+
+  divider: { height: 1, backgroundColor: '#e9ecef', marginVertical: 15 },
+  infoRow: { flexDirection: 'row', alignItems: 'center' },
+  infoText: { marginLeft: 10, color: theme.colors.text.primary, fontWeight: '500', fontSize: 15 },
+  
+  // Enhanced UI Styles
+  infoSection: { marginBottom: 8 },
+  sectionLabel: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    color: theme.colors.text.primary, 
+    marginBottom: 12 
+  },
+  paymentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  paymentLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  paymentAmount: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+  },
+  paymentStatusBadge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    borderRadius: 12,
   },
-  statusText: {
+  paymentStatusText: {
     fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
   },
 
-  // Details Card
-  detailsCard: {
-    margin: 20,
-    marginTop: 0,
-    padding: 24,
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text.primary, marginBottom: 12 },
+  listButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: theme.colors.background.surface,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.colors.text.primary,
-    marginBottom: 20,
-    letterSpacing: 0.2,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  detailIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 28, // Increased from 20 for much better spacing
-  },
-  detailContent: {
-    flex: 1,
-  },
-  detailLabel: {
-    fontSize: 12,
-    color: '#64748B',
-    marginBottom: 2,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  detailValue: {
-    fontSize: 16,
-    color: theme.colors.text.primary,
-    fontWeight: '600',
-  },
-
-  // Actions Card
-  actionsCard: {
-    margin: 20,
-    marginTop: 0,
-    padding: 24,
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  actionButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chatButton: {
-    backgroundColor: '#10B981',
-  },
-  videoButton: {
-    backgroundColor: '#3B82F6',
-  },
-  disabledActionButton: {
-    backgroundColor: '#F1F5F9',
+    padding: 12,
+    borderRadius: theme.borderRadius.m,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  actionButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginLeft: 8,
-    letterSpacing: 0.2,
-  },
-  helperText: {
-    fontSize: 10,
-    color: '#64748B',
-    marginTop: 6,
-    textAlign: 'center',
-    lineHeight: 12,
-  },
-
-  // Video Card
-  videoCard: {
-    margin: 20,
-    marginTop: 0,
-    padding: 24,
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: 20,
+    borderColor: '#e9ecef',
+    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowRadius: 2,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-
-  // Prescription Card
-  prescriptionCard: {
-    margin: 20,
-    marginTop: 0,
-    padding: 24,
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  downloadButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 12,
-  },
-  downloadButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.primary,
-    marginLeft: 6,
-  },
-  prescriptionLoadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-  },
-  prescriptionLoadingText: {
-    fontSize: 14,
-    color: '#64748B',
-    marginLeft: 12,
-    fontWeight: '500',
-  },
-
-  // Security Card
-  securityCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     justifyContent: 'center',
-    padding: 16,
-    margin: 20,
-    marginTop: 0,
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    alignItems: 'center',
+    marginRight: 12
   },
-  securityText: {
-    fontSize: 14,
-    color: '#10B981',
-    fontWeight: '600',
-    marginLeft: 12,
-    letterSpacing: 0.2,
-  },
-
-  // Loading and Error States
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: theme.colors.text.secondary,
-    fontWeight: '500',
-  },
-  errorText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: theme.colors.feedback.error,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  retryButton: {
-    marginTop: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: theme.colors.primary,
-    borderRadius: 12,
-  },
-  retryButtonText: {
-    color: theme.colors.background.surface,
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  listText: { flex: 1, fontSize: 15, fontWeight: '600', color: theme.colors.text.primary },
 });
 
 export default AppointmentDetailScreen;
