@@ -98,6 +98,12 @@ const ModernHomeScreen = () => {
     totalSessions: 0,
     completedSessions: 0,
     upcomingSessions: 0,
+    totalConsultations: 0,
+    completedConsultations: 0,
+    upcomingConsultations: 0,
+    totalYogaClasses: 0,
+    completedYogaClasses: 0,
+    upcomingYogaClasses: 0,
   });
 
   // Wellness tips that rotate
@@ -153,17 +159,72 @@ const ModernHomeScreen = () => {
       }
 
       // Fetch user appointments for stats
-      const appointmentsResponse = await apiService.getUserAppointments(userId);
+      let appointmentsResponse;
+      try {
+        appointmentsResponse = await apiService.getUserAppointments(userId);
+      } catch (consultationError) {
+        console.warn('⚠️ Failed to fetch consultation appointments:', consultationError);
+        appointmentsResponse = { success: false, data: null };
+      }
+      
+      // Fetch yoga bookings with error handling
+      let yogaBookingsResponse;
+      try {
+        yogaBookingsResponse = await apiService.getYogaBookings(userId);
+      } catch (yogaError) {
+        console.warn('⚠️ Failed to fetch yoga bookings:', yogaError);
+        yogaBookingsResponse = { success: false, data: null };
+      }
+      
+      let consultationStats = {
+        total: 0,
+        completed: 0,
+        upcoming: 0,
+      };
+      
+      let yogaStats = {
+        total: 0,
+        completed: 0,
+        upcoming: 0,
+      };
+      
+      // Process consultation appointments
       if (appointmentsResponse.success && appointmentsResponse.data?.data) {
         const appointments = appointmentsResponse.data.data;
-        const stats = {
-          totalSessions: appointments.length,
-          completedSessions: appointments.filter((apt: any) => apt.booking_status === 'COMPLETED').length,
-          upcomingSessions: appointments.filter((apt: any) => apt.booking_status === 'CONFIRMED').length,
+        consultationStats = {
+          total: appointments.length,
+          completed: appointments.filter((apt: any) => apt.booking_status === 'COMPLETED').length,
+          upcoming: appointments.filter((apt: any) => apt.booking_status === 'CONFIRMED').length,
         };
-        setUserStats(stats);
-        console.log('📈 User stats calculated:', stats);
+        console.log('📊 Consultation stats calculated:', consultationStats);
       }
+      
+      // Process yoga class bookings
+      if (yogaBookingsResponse.success && yogaBookingsResponse.data?.data) {
+        const yogaBookings = yogaBookingsResponse.data.data;
+        yogaStats = {
+          total: yogaBookings.length,
+          completed: yogaBookings.filter((booking: any) => booking.status === 'COMPLETED' || booking.booking_status === 'COMPLETED').length,
+          upcoming: yogaBookings.filter((booking: any) => booking.status === 'CONFIRMED' || booking.booking_status === 'CONFIRMED').length,
+        };
+        console.log('🧘 Yoga stats calculated:', yogaStats);
+      }
+      
+      // Combine all stats
+      const combinedStats = {
+        totalSessions: consultationStats.total + yogaStats.total,
+        completedSessions: consultationStats.completed + yogaStats.completed,
+        upcomingSessions: consultationStats.upcoming + yogaStats.upcoming,
+        totalConsultations: consultationStats.total,
+        completedConsultations: consultationStats.completed,
+        upcomingConsultations: consultationStats.upcoming,
+        totalYogaClasses: yogaStats.total,
+        completedYogaClasses: yogaStats.completed,
+        upcomingYogaClasses: yogaStats.upcoming,
+      };
+      
+      setUserStats(combinedStats);
+      console.log('📈 Combined user stats calculated:', combinedStats);
     } catch (err) {
       console.error('❌ Error fetching user data:', err);
       setError('Failed to load your wellness data. Please try again.');
@@ -243,22 +304,22 @@ const ModernHomeScreen = () => {
           {/* Professional Stats Cards */}
           <View style={styles.statsContainer}>
             <ProfessionalStatsCard
-              value={userStats.totalSessions}
-              label="Total Sessions"
-              icon="calendar-outline"
+              value={userStats.totalConsultations}
+              label="Consultations"
+              icon="medical"
               color={theme.colors.primary}
             />
             <ProfessionalStatsCard
-              value={userStats.completedSessions}
-              label="Completed Sessions"
-              icon="checkmark-circle-outline"
-              color={theme.colors.feedback.success}
+              value={userStats.totalYogaClasses}
+              label="Yoga Classes"
+              icon="people"
+              color={theme.colors.accent}
             />
             <ProfessionalStatsCard
-              value={userStats.upcomingSessions}
-              label="Upcoming Sessions"
-              icon="time-outline"
-              color={theme.colors.accent}
+              value={userStats.completedSessions}
+              label="Completed"
+              icon="checkmark-circle-outline"
+              color={theme.colors.feedback.success}
             />
           </View>
 

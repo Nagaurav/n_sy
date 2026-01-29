@@ -124,10 +124,30 @@ const ChatScreen: React.FC = () => {
 
     console.log('🧭 [ChatScreen] Navigating to PrescriptionDetail with appointmentId:', appointmentId);
     
-    navigation.navigate('PrescriptionDetail', { 
-      prescriptionId: appointmentId, 
-      appointmentId: appointmentId 
-    } as any);
+    try {
+      // Debug: Check navigation structure
+      const navState = navigation.getState();
+      console.log('🧭 [ChatScreen] Navigation state:', navState);
+      console.log('🧭 [ChatScreen] Available routes:', navState.routes?.map((r: any) => r.name));
+      
+      // Use the recommended approach for nested navigation
+      // Navigate through the hierarchy: RootStack -> MainDrawer -> HomeStack -> PrescriptionDetail
+      const rootNav = navigation as any;
+      
+      // Navigate to MainDrawer first, then to HomeStack, then to PrescriptionDetail
+      rootNav.navigate('MainDrawer', {
+        screen: 'HomeStack',
+        params: {
+          screen: 'PrescriptionDetail',
+          params: {
+            prescriptionId: appointmentId
+          }
+        }
+      });
+    } catch (error) {
+      console.error('🧭 [ChatScreen] Navigation error:', error);
+      Alert.alert("Navigation Error", "Could not navigate to prescription details.");
+    }
   }, [appointmentId, navigation]);
 
   // --- Diet Plan Navigation ---

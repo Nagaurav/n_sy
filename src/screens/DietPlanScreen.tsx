@@ -69,6 +69,7 @@ const DietPlanScreen = () => {
   const { bookingId } = route.params;
   const { isAuthReady } = useAuth();
   const { theme: appTheme } = useTheme();
+  const theme = appTheme || require('../theme').theme;
   const { width } = Dimensions.get('window');
 
   // Animation values
@@ -81,6 +82,7 @@ const DietPlanScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAllMeals, setShowAllMeals] = useState(false);
 
   // Fetch diet plan data
   const fetchDietPlan = useCallback(async () => {
@@ -366,97 +368,106 @@ const DietPlanScreen = () => {
     }
   }, [isAuthReady, fetchDietPlan]);
 
-  // Render Meal Item
+  // Render Meal Item with Modern Design
   const renderMealItem = (meal: DietMeal, index: number) => {
     return (
       <Animated.View
         key={meal.id}
         style={[
-          styles.mealItem,
+          styles.mealItemNew,
           {
             opacity: fadeAnim,
             transform: [{ translateY: Animated.multiply(fadeAnim, -20 * (1 - index * 0.1)) }],
           },
         ]}
       >
-        <View style={styles.mealHeader}>
-          <View style={styles.mealInfo}>
-            {/* Day Badge */}
-            {meal.day && (
-              <View style={styles.dayBadge}>
-                <Text style={styles.dayText}>{meal.day}</Text>
+        {/* Meal Header with Gradient Background */}
+        <LinearGradient
+          colors={['#008272', '#00A896']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.mealHeaderGradient}
+        >
+          {/* Day Badge */}
+          {meal.day && (
+            <View style={styles.dayBadgeNew}>
+              <Text style={styles.dayTextNew}>{meal.day}</Text>
+            </View>
+          )}
+          
+          {/* Meal Title and Time */}
+          <View style={styles.mealHeaderContent}>
+            <View style={styles.mealTitleContainer}>
+              <View style={styles.mealIconContainer}>
+                <Ionicons 
+                  name="restaurant-outline" 
+                  size={18} 
+                  color="#FFFFFF" 
+                />
               </View>
-            )}
-            
-            {/* Meal Type with Icon */}
-            <View style={styles.mealTitleRow}>
-              <Ionicons 
-                name="restaurant-outline" 
-                size={20} 
-                color="#008272" 
-                style={styles.mealIcon}
-              />
-              <Text style={styles.mealName}>
-                {meal.meal_type || meal.name}
-              </Text>
+              <View style={styles.mealTitleInfo}>
+                <Text style={styles.mealNameNew}>
+                  {meal.meal_type || meal.name}
+                </Text>
+                <View style={styles.timeContainer}>
+                  <Ionicons name="time-outline" size={12} color="#FFFFFF" />
+                  <Text style={styles.mealTimeNew}>{meal.time}</Text>
+                </View>
+              </View>
             </View>
             
-            <Text style={styles.mealTime}>
-              <Ionicons name="time-outline" size={14} /> {meal.time}
-            </Text>
+            {/* Calorie Badge */}
+            {meal.calories && meal.calories > 0 && (
+              <View style={styles.calorieBadgeNew}>
+                <Ionicons name="flame-outline" size={14} color="#FFFFFF" />
+                <Text style={styles.calorieTextNew}>
+                  {meal.calories}
+                </Text>
+              </View>
+            )}
           </View>
-          
-          {/* Calorie Badge */}
-          {meal.calories && meal.calories > 0 && (
-            <View style={styles.calorieBadge}>
-              <Ionicons name="flame-outline" size={16} color="#FF7043" />
-              <Text style={styles.calorieText}>
-                {meal.calories} cal
+        </LinearGradient>
+
+        {/* Meal Content */}
+        <View style={styles.mealContent}>
+          {/* Food Items Section */}
+          <View style={styles.foodSection}>
+            <View style={styles.sectionHeaderRow}>
+              <Ionicons name="nutrition-outline" size={16} color="#008272" />
+              <Text style={styles.foodSectionTitle}>Food Items</Text>
+            </View>
+            <View style={styles.foodItemsContainer}>
+              <Text style={styles.mealDescriptionNew}>
+                {meal.food_items || meal.description}
               </Text>
+            </View>
+          </View>
+
+          {/* Notes Section */}
+          {meal.notes && (
+            <View style={styles.notesSection}>
+              <View style={styles.notesHeader}>
+                <Ionicons name="information-circle-outline" size={14} color="#F59E0B" />
+                <Text style={styles.notesTitle}>Notes</Text>
+              </View>
+              <View style={styles.notesContent}>
+                <Text style={styles.noteTextNew}>
+                  {meal.notes}
+                </Text>
+              </View>
             </View>
           )}
         </View>
-
-        {/* Food Items */}
-        <View style={styles.foodContainer}>
-          <Text style={styles.foodLabel}>
-            Food Items:
-          </Text>
-          <Text style={styles.mealDescription}>
-            {meal.food_items || meal.description}
-          </Text>
-        </View>
-
-        {/* Notes Section */}
-        {meal.notes ? (
-          <View style={styles.notesContainer}>
-            <Ionicons name="information-circle-outline" size={16} color="#92400E" />
-            <Text style={styles.noteText}>
-              {meal.notes}
-            </Text>
-          </View>
-        ) : null}
       </Animated.View>
     );
   };
 
-  if (isLoading) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#008272" />
-          <Text style={[styles.loadingText, { color: '#64748B' }]}>Loading your diet plan...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   if (error && !dietPlan) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <View style={styles.errorCard}>
-            <Ionicons name="nutrition-outline" size={48} color="#008272" />
+            <Ionicons name="nutrition-outline" size={48} color={appTheme.colors.primary} />
             <Text style={styles.errorTitle}>No Diet Plan Found</Text>
             <Text style={styles.errorMessage}>{error}</Text>
             <TouchableOpacity
@@ -478,199 +489,304 @@ const DietPlanScreen = () => {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#008272" />
-      
-      {/* Modern Header with Gradient */}
-      <Animated.View
-        style={[
-          styles.headerWrapper,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={appTheme.colors.primary} />
+      <LinearGradient 
+        colors={[appTheme.colors.primary, appTheme.colors.secondary]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
       >
-        <LinearGradient
-          colors={['#008272', '#00A896']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.header}
-        >
-          <View style={styles.headerContent}>
-            <TouchableOpacity 
-              onPress={() => navigation.goBack()} 
-              style={styles.backButton}
-            >
-              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-            
-            <View style={styles.titleContainer}>
-              <Text style={styles.headerTitle}>Diet Plan</Text>
-              <Text style={styles.headerSubtitle}>Your Personalized Nutrition</Text>
-            </View>
-            
-            <TouchableOpacity 
-              onPress={handleDownloadPDF} 
-              style={styles.shareButton}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="share-outline" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
+        <View style={styles.headerContent}>
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
+          </TouchableOpacity>
+          
+          <View style={styles.titleContainer}>
+            <Text style={styles.headerTitle}>Diet Plan</Text>
+            <Text style={styles.headerSubtitle}>Your personalized nutrition plan</Text>
           </View>
           
-          {/* Decorative elements */}
-          <View style={[styles.topCircle, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} pointerEvents="none" />
-          <View style={[styles.bottomWave, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} pointerEvents="none" />
-        </LinearGradient>
-      </Animated.View>
+          <TouchableOpacity 
+            onPress={handleDownloadPDF}
+            style={styles.shareButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="share-outline" size={24} color={theme.colors.background.surface} />
+          </TouchableOpacity>
+        </View>
+        
+        {/* Decorative elements */}
+        <View style={styles.topCircle} />
+        <View style={styles.bottomWave} />
+      </LinearGradient>
 
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl 
-            refreshing={isRefreshing} 
-            onRefresh={() => { setIsRefreshing(true); fetchDietPlan(); }}
-            colors={['#008272']}
-            tintColor="#008272"
-          />
-        }
-      >
-        {/* Diet Plan Overview Card */}
-        <Animated.View 
-          style={[
-            styles.overviewCard,
-            {
-              opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }],
-            }
-          ]}
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <ScrollView 
+          style={{ flex: 1 }}
+          contentContainerStyle={{ 
+            padding: 16,
+            paddingBottom: 32
+          }}
+          showsVerticalScrollIndicator={false}
+          indicatorStyle="default"
+          refreshControl={
+            <RefreshControl 
+              refreshing={isRefreshing} 
+              onRefresh={() => { setIsRefreshing(true); fetchDietPlan(); }}
+              colors={[appTheme.colors.primary]}
+              tintColor={appTheme.colors.primary}
+            />
+          }
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled={false}
         >
-          <View style={styles.planHeader}>
-            <View style={styles.planInfo}>
-              <Text style={styles.planTitle}>
-                {dietPlan?.plan_name || 'Diet Plan'}
-              </Text>
-              <Text style={styles.planSubtitle}>
-                Dr. {dietPlan?.professional?.first_name} {dietPlan?.professional?.last_name}
-              </Text>
-              {dietPlan?.professional?.speciality_new?.name && (
-                <Text style={styles.planSpeciality}>
-                  {dietPlan?.professional?.speciality_new?.name}
+          {/* Main Info Card - Standardized */}
+          <Animated.View style={[
+            styles.card,
+            { 
+              opacity: fadeAnim, 
+              transform: [{ translateY: slideAnim }], 
+              borderLeftColor: '#4CAF50', 
+              borderLeftWidth: 5 
+            }
+          ]}>
+            <View style={styles.cardHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.title}>
+                  {dietPlan?.plan_name || 'Diet Plan'}
                 </Text>
+                <Text style={styles.sub}>
+                  {dietPlan?.professional?.first_name && dietPlan?.professional?.last_name
+                    ? `Dr. ${dietPlan?.professional.first_name} ${dietPlan?.professional.last_name}`
+                    : 'Nutritionist'
+                  }
+                </Text>
+              </View>
+              <View style={[styles.typeBadge, { backgroundColor: '#4CAF50' + '20' }]}>
+                <Ionicons name="nutrition" size={14} color="#4CAF50" />
+                <Text style={[styles.typeText, { color: '#4CAF50' }]}>DIET</Text>
+              </View>
+            </View>
+            
+            <View style={styles.cardFooter}>
+              <Text style={[styles.statusText, { 
+                color: dietPlan?.is_active ? '#2E7D32' : '#EF6C00'
+              }]}>
+                {dietPlan?.is_active ? 'ACTIVE' : 'INACTIVE'}
+              </Text>
+              <TouchableOpacity onPress={handleDownloadPDF}>
+                <Text style={{ color: '#4CAF50', fontWeight: 'bold' }}>Download PDF</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+
+          {/* Plan Details Card - Standardized */}
+          <Animated.View style={[
+            styles.card,
+            { borderLeftColor: '#2196F3', borderLeftWidth: 5, opacity: fadeAnim, transform: [{ translateY: Animated.multiply(fadeAnim, 20) }] }
+          ]}>
+            <View style={styles.cardHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.title}>Plan Details</Text>
+                <Text style={styles.sub}>Duration & Nutrition Goals</Text>
+              </View>
+              <View style={[styles.typeBadge, { backgroundColor: '#2196F3' + '20' }]}>
+                <Ionicons name="information-circle-outline" size={14} color="#2196F3" />
+                <Text style={[styles.typeText, { color: '#2196F3' }]}>INFO</Text>
+              </View>
+            </View>
+            
+            <View style={styles.cardContent}>
+              <View style={styles.detailRow}>
+                <Ionicons name="calendar" size={16} color="#6B7280" />
+                <Text style={styles.detailText}>
+                  <Text style={styles.detailLabel}>Duration: </Text>
+                  {dietPlan?.start_date && dietPlan?.end_date 
+                    ? `${new Date(dietPlan?.start_date || '').toLocaleDateString()} - ${new Date(dietPlan?.end_date || '').toLocaleDateString()}`
+                    : 'Not specified'
+                  }
+                </Text>
+              </View>
+
+              {dietPlan?.daily_calorie_target && (
+                <View style={styles.detailRow}>
+                  <Ionicons name="flame" size={16} color="#F59E0B" />
+                  <Text style={styles.detailText}>
+                    <Text style={styles.detailLabel}>Daily Target: </Text>
+                    {dietPlan?.daily_calorie_target} Calories
+                  </Text>
+                </View>
               )}
             </View>
-            <View style={[styles.statusIndicator, { backgroundColor: dietPlan?.is_active ? '#10B981' : '#64748B' }]} />
-          </View>
-        </Animated.View>
-
-        {/* Plan Details Card */}
-        <Animated.View 
-          style={[
-            styles.detailsCard,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: Animated.multiply(fadeAnim, 20) }],
-            }
-          ]}
-        >
-          <View style={styles.cardHeader}>
-            <Ionicons name="information-circle-outline" size={20} color="#008272" />
-            <Text style={styles.cardTitle}>Plan Details</Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <View style={styles.detailIcon}>
-              <Ionicons name="calendar" size={18} color="#008272" />
-            </View>
-            <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Duration</Text>
-              <Text style={styles.detailValue}>
-                {dietPlan?.start_date && dietPlan?.end_date 
-                  ? `${new Date(dietPlan?.start_date || '').toLocaleDateString()} - ${new Date(dietPlan?.end_date || '').toLocaleDateString()}`
-                  : ''
-                }
+            
+            <View style={styles.cardFooter}>
+              <Text style={[styles.statusText, { color: '#2196F3' }]}>
+                {dietPlan?.daily_calorie_target ? `${dietPlan?.daily_calorie_target} cal/day` : 'No target set'}
               </Text>
             </View>
-          </View>
+          </Animated.View>
 
-          {dietPlan?.daily_calorie_target ? (
-            <View style={styles.detailRow}>
-              <View style={styles.detailIcon}>
-                <Ionicons name="flame" size={18} color="#008272" />
+          {/* Instructions Card - Standardized */}
+          {dietPlan?.instructions && (
+            <Animated.View style={[
+              styles.card,
+              { borderLeftColor: '#FF7043', borderLeftWidth: 5, opacity: fadeAnim, transform: [{ translateY: Animated.multiply(fadeAnim, 30) }] }
+            ]}>
+              <View style={styles.cardHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.title}>Instructions</Text>
+                  <Text style={styles.sub}>Diet Guidelines & Tips</Text>
+                </View>
+                <View style={[styles.typeBadge, { backgroundColor: '#FF7043' + '20' }]}>
+                  <Ionicons name="clipboard-outline" size={14} color="#FF7043" />
+                  <Text style={[styles.typeText, { color: '#FF7043' }]}>GUIDE</Text>
+                </View>
               </View>
-              <View style={styles.detailContent}>
-                <Text style={styles.detailLabel}>Daily Target</Text>
-                <Text style={styles.detailValue}>
-                  {dietPlan?.daily_calorie_target || 0} Calories
+              <Text style={styles.instructionsText}>
+                {dietPlan?.instructions}
+              </Text>
+              <View style={styles.cardFooter}>
+                <Text style={[styles.statusText, { color: '#FF7043' }]}>
+                  Important guidelines
                 </Text>
               </View>
-            </View>
-          ) : null}
-        </Animated.View>
-
-        {/* Instructions Card */}
-        {dietPlan?.instructions && (
-          <Animated.View 
-            style={[
-              styles.instructionsCard,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: Animated.multiply(fadeAnim, 30) }],
-              }
-            ]}
-          >
-            <View style={styles.cardHeader}>
-              <Ionicons name="clipboard-outline" size={20} color="#008272" />
-              <Text style={styles.cardTitle}>Instructions</Text>
-            </View>
-            <Text style={styles.instructionsText}>
-              {dietPlan?.instructions || ''}
-            </Text>
-          </Animated.View>
-        )}
-
-        {/* Meals Section */}
-        <Animated.View 
-          style={{
-            opacity: fadeAnim,
-            transform: [{ translateY: Animated.multiply(fadeAnim, 40) }],
-          }}
-        >
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionHeaderContent}>
-              <Ionicons name="restaurant-outline" size={24} color="#008272" />
-              <Text style={styles.sectionTitle}>
-                Daily Meal Schedule
-              </Text>
-            </View>
-            <View style={styles.mealCountBadge}>
-              <Text style={styles.mealCountText}>
-                {dietPlan?.meals?.length || 0} meals
-              </Text>
-            </View>
-          </View>
-          {dietPlan?.meals && dietPlan.meals.length > 0 ? (
-            dietPlan.meals?.map((meal: DietMeal, index: number) => renderMealItem(meal, index))
-          ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="restaurant-outline" size={60} color="#64748B" />
-              <Text style={styles.emptyStateText}>
-                No meals found in this diet plan
-              </Text>
-            </View>
+            </Animated.View>
           )}
-        </Animated.View>
-        
-        <View style={{ height: 24 }} />
-      </ScrollView>
+
+          {/* Meals Section Card - Standardized */}
+          <Animated.View style={[
+            styles.card,
+            { borderLeftColor: '#4CAF50', borderLeftWidth: 5, opacity: fadeAnim, transform: [{ translateY: Animated.multiply(fadeAnim, 40) }] }
+          ]}>
+            <View style={styles.cardHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.title}>Daily Meals</Text>
+                <Text style={styles.sub}>Your Meal Schedule</Text>
+              </View>
+              <View style={[styles.typeBadge, { backgroundColor: '#4CAF50' + '20' }]}>
+                <Ionicons name="restaurant-outline" size={14} color="#4CAF50" />
+                <Text style={[styles.typeText, { color: '#4CAF50' }]}>{dietPlan?.meals?.length || 0}</Text>
+              </View>
+            </View>
+            
+            {/* Meal Summary Stats */}
+            <View style={styles.mealStatsContainer}>
+              <View style={styles.statItem}>
+                <Ionicons name="flame" size={16} color="#FF7043" />
+                <Text style={styles.statLabel}>Daily Calories</Text>
+                <Text style={styles.statValue}>{dietPlan?.daily_calorie_target || 'N/A'}</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Ionicons name="time" size={16} color="#2196F3" />
+                <Text style={styles.statLabel}>Meal Times</Text>
+                <Text style={styles.statValue}>{dietPlan?.meals?.length || 0} per day</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Ionicons name="calendar" size={16} color="#4CAF50" />
+                <Text style={styles.statLabel}>Duration</Text>
+                <Text style={styles.statValue}>{dietPlan?.meals?.length ? `${Math.ceil((new Date(dietPlan?.end_date || '').getTime() - new Date(dietPlan?.start_date || '').getTime()) / (1000 * 60 * 60 * 24))} days` : 'N/A'}</Text>
+              </View>
+            </View>
+            
+            <View style={styles.cardFooter}>
+              <Text style={[styles.statusText, { color: '#4CAF50' }]}>
+                {(dietPlan?.meals?.length ?? 0) > 0 ? `${dietPlan?.meals?.length} meals scheduled` : 'No meals found'}
+              </Text>
+              {(dietPlan?.meals?.length ?? 0) > 0 && (
+                <TouchableOpacity onPress={() => setShowAllMeals(!showAllMeals)}>
+                  <Text style={{ color: '#4CAF50', fontWeight: 'bold' }}>
+                    {showAllMeals ? 'Show Less' : 'View All'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </Animated.View>
+
+          {/* Meal Items - Show when View All is clicked */}
+          {showAllMeals && (dietPlan?.meals?.length ?? 0) > 0 && (
+            <Animated.View style={[
+              styles.card,
+              { 
+                borderLeftColor: '#4CAF50', 
+                borderLeftWidth: 5, 
+                opacity: fadeAnim, 
+                transform: [{ translateY: Animated.multiply(fadeAnim, 50) }] 
+              }
+            ]}>
+              <View style={styles.cardHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.title}>Meal Details</Text>
+                  <Text style={styles.sub}>Complete meal schedule</Text>
+                </View>
+                <View style={[styles.typeBadge, { backgroundColor: '#4CAF50' + '20' }]}>
+                  <Ionicons name="restaurant-outline" size={14} color="#4CAF50" />
+                  <Text style={[styles.typeText, { color: '#4CAF50' }]}>ALL</Text>
+                </View>
+              </View>
+              
+              <View style={styles.cardContent}>
+                {dietPlan?.meals?.map((meal: DietMeal, index: number) => (
+                  <View key={meal.id} style={styles.mealDetailCard}>
+                    <View style={styles.mealDetailHeader}>
+                      <View style={styles.mealDetailIcon}>
+                        <Ionicons name="restaurant-outline" size={16} color="#4CAF50" />
+                      </View>
+                      <View style={styles.mealDetailInfo}>
+                        <Text style={styles.mealDetailName}>
+                          {meal.meal_type || meal.name || 'Meal'}
+                        </Text>
+                        <Text style={styles.mealDetailTime}>
+                          {meal.day && `${meal.day} • `}{meal.time}
+                        </Text>
+                      </View>
+                      {meal.calories && (
+                        <View style={styles.mealDetailCalorieBadge}>
+                          <Text style={styles.mealDetailCalorieText}>{meal.calories} cal</Text>
+                        </View>
+                      )}
+                    </View>
+                    
+                    <View style={styles.mealDetailContent}>
+                      <Text style={styles.mealDetailLabel}>Food Items:</Text>
+                      <Text style={styles.mealDetailDescription}>
+                        {meal.food_items || meal.description || 'N/A'}
+                      </Text>
+                      
+                      {meal.notes && (
+                        <View style={styles.mealDetailNotes}>
+                          <Text style={styles.mealDetailNotesLabel}>Notes:</Text>
+                          <Text style={styles.mealDetailNotesText}>{meal.notes}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                ))}
+              </View>
+              
+              <View style={styles.cardFooter}>
+                <Text style={[styles.statusText, { color: '#4CAF50' }]}>
+                  {dietPlan?.meals?.length} meals total
+                </Text>
+                <TouchableOpacity onPress={() => setShowAllMeals(false)}>
+                  <Text style={{ color: '#4CAF50', fontWeight: 'bold' }}>Show Less</Text>
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
+          )}
+        </ScrollView>
+      </Animated.View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: theme.colors.background.primary },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   
   // Loading and Error States
   loadingContainer: {
@@ -731,25 +847,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  errorText: {
-    marginTop: 16,
-    fontSize: 16,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
   
-  // Modern Header Styles
-  headerWrapper: {
-    paddingTop: Platform.OS === 'ios' ? 44 : 0,
-  },
-  header: {
-    paddingTop: 20,
-    paddingBottom: 24,
+  // Header Styles
+  header: { 
+    paddingTop: 40,
+    paddingBottom: 20,
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    position: 'relative',
-    overflow: 'hidden',
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
   },
   headerContent: {
     flexDirection: 'row',
@@ -759,170 +869,238 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   titleContainer: {
     flex: 1,
     alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 20,
+  headerTitle: { 
+    color: theme.colors.background.surface, 
+    fontSize: 20, 
     fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 4,
+    letterSpacing: 0.3,
   },
   headerSubtitle: {
+    color: theme.colors.background.surface,
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontWeight: '500',
+    opacity: 0.8,
+    marginTop: 2,
   },
   shareButton: {
     padding: 8,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
-  
-  // Decorative elements
   topCircle: {
     position: 'absolute',
-    top: -30,
-    right: -30,
+    top: -50,
+    right: -50,
     width: 100,
     height: 100,
     borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   bottomWave: {
     position: 'absolute',
     bottom: -20,
-    left: -20,
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    left: -50,
+    right: -50,
+    height: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
-  
-  // ScrollView
-  scrollView: {
-    flex: 1,
-  },
-  
-  // Overview Card - Matching other screens
-  overviewCard: {
+
+  // Card Styles
+  card: {
     backgroundColor: theme.colors.background.surface,
     borderRadius: theme.borderRadius.l,
     padding: 20,
-    marginHorizontal: 16,
-    marginTop: 24,
-    marginBottom: 25,
+    marginBottom: 16,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  planHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    width: '100%',
+  row: { flexDirection: 'row', alignItems: 'center' },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15
   },
-  planInfo: {
-    flex: 1,
-    alignItems: 'flex-start',
-  },
-  planTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 8,
-    color: '#1A202C',
-    lineHeight: 32,
-  },
-  planSubtitle: {
-    fontSize: 16,
-    marginBottom: 6,
-    color: '#64748B',
-    lineHeight: 24,
-  },
-  planSpeciality: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#008272',
-    backgroundColor: 'rgba(0, 130, 114, 0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+  docName: { fontSize: 16, fontWeight: '700', color: theme.colors.text.primary },
+  docSpec: { fontSize: 14, color: theme.colors.text.secondary, marginTop: 2 },
+  badge: {
     alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 6
   },
-  
-  // Status Indicator (Professional Dot)
-  statusIndicator: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+
+  // Appointment Card Pattern Styles
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#eee' },
+  statusText: { fontSize: 12, fontWeight: 'bold' },
+  title: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: theme.colors.text.primary,
   },
-  
-  // Details Card - Matching AppointmentDetailScreen exactly
-  detailsCard: {
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: theme.borderRadius.l,
-    padding: 20,
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 25,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+  sub: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
   },
-  
-  // Instructions Card - Matching AppointmentDetailScreen exactly
-  instructionsCard: {
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: theme.borderRadius.l,
-    padding: 20,
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 25,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  
-  // Card Header - Professional Design
-  cardHeader: {
+  typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    marginBottom: 20,
-    gap: 12,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 130, 114, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  cardTitle: {
-    fontSize: 20,
+  typeText: {
+    fontSize: 10,
     fontWeight: '700',
-    color: '#1A202C',
-    lineHeight: 28,
+    marginLeft: 4,
+    textTransform: 'uppercase',
   },
-  
-  // Detail Rows - Professional Design
+  cardContent: {
+    marginBottom: 0,
+  },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    marginBottom: 20,
-    gap: 16,
-    width: '100%',
-    paddingVertical: 4,
+    marginBottom: 12,
   },
+  detailText: {
+    fontSize: 14,
+    color: theme.colors.text.primary,
+    flex: 1,
+  },
+  detailLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text.secondary,
+  },
+  mealStatsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  mealsContainer: {
+    marginTop: 8,
+    paddingBottom: 16,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: theme.colors.text.secondary,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+    marginTop: 2,
+  },
+  
+  // Meal Detail Styles
+  mealDetailCard: {
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E8F5E8',
+  },
+  mealDetailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  mealDetailIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E8F5E8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  mealDetailInfo: {
+    flex: 1,
+  },
+  mealDetailName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 2,
+  },
+  mealDetailTime: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+  },
+  mealDetailContent: {
+    marginTop: 8,
+  },
+  mealDetailLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.text.secondary,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  mealDetailDescription: {
+    fontSize: 14,
+    color: theme.colors.text.primary,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  mealDetailNotes: {
+    backgroundColor: '#FFF8E1',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FFC107',
+  },
+  mealDetailNotesLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#F57C00',
+    marginBottom: 4,
+  },
+  mealDetailNotesText: {
+    fontSize: 13,
+    color: '#5D4037',
+    fontStyle: 'italic',
+  },
+  mealDetailCalorieBadge: {
+    backgroundColor: '#FFE0B2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  mealDetailCalorieText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#E65100',
+  },
+  
+  // Detail Rows - Professional Design (Legacy)
   detailIcon: {
     width: 48,
     height: 48,
@@ -936,14 +1114,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-start',
     alignItems: 'flex-start',
-  },
-  detailLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-    color: '#64748B',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   detailValue: {
     fontSize: 16,
@@ -1113,19 +1283,14 @@ const styles = StyleSheet.create({
     color: '#92400E',
   },
   
-  // Meal Item Styles - Matching AppointmentDetailScreen exactly
+  // Meal Item Styles - Using consistent card styling
   mealItem: {
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: theme.borderRadius.l,
-    padding: 20,
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 25,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: 6,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4CAF50',
   },
   mealHeader: {
     flexDirection: 'row',
@@ -1134,21 +1299,10 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   
-  // Empty State - Matching other screens
+  // Empty State - Using consistent styling
   emptyState: {
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: theme.borderRadius.l,
-    padding: 20,
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 25,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 32,
   },
   emptyStateText: {
     marginTop: 16,
@@ -1157,6 +1311,154 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: theme.colors.text.secondary,
     lineHeight: 24,
+  },
+
+  // New Modern Meal Card Styles
+  mealItemNew: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: 16,
+    marginBottom: 20,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    overflow: 'hidden',
+  },
+  mealHeaderGradient: {
+    padding: 12,
+    paddingTop: 16,
+  },
+  dayBadgeNew: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  dayTextNew: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  mealHeaderContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  mealTitleContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  mealIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mealTitleInfo: {
+    flex: 1,
+  },
+  mealNameNew: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+    lineHeight: 24,
+  },
+  timeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mealTimeNew: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  calorieBadgeNew: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    gap: 4,
+  },
+  calorieTextNew: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  mealContent: {
+    padding: 12,
+  },
+  foodSection: {
+    marginBottom: 6,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  foodSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#008272',
+  },
+  foodItemsContainer: {
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: 12,
+    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#008272',
+  },
+  mealDescriptionNew: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: theme.colors.text.primary,
+  },
+  notesSection: {
+    backgroundColor: '#FFF8E1',
+    borderRadius: 12,
+    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#F59E0B',
+  },
+  notesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  notesTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#F59E0B',
+  },
+  notesContent: {
+    paddingLeft: 20,
+  },
+  noteTextNew: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    lineHeight: 18,
+    color: '#92400E',
   },
 });
 

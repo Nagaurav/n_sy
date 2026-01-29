@@ -6,18 +6,21 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
-  Platform,
   StatusBar,
   Animated,
   SafeAreaView,
   Alert,
   Dimensions,
   RefreshControl,
+  PermissionsAndroid,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import Share from 'react-native-share';
+const RNHTMLtoPDF = require('react-native-html-to-pdf');
 import { useAuth } from '../hooks/useAuth';
 import { medicalService } from '../services';
 import type { HomeStackParamList } from '../types/navigation';
@@ -25,7 +28,7 @@ import type { Prescription } from '../types/medical';
 import { useTheme } from '../contexts/ThemeContext';
 import { theme } from '../theme';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 type PrescriptionDetailRouteProp = RouteProp<
   HomeStackParamList,
@@ -49,7 +52,6 @@ const PrescriptionDetailScreen: React.FC = () => {
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
-  const scaleAnim = useRef(new Animated.Value(0.95)).current;
 
   const [prescription, setPrescription] = useState<Prescription | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -69,11 +71,6 @@ const PrescriptionDetailScreen: React.FC = () => {
         duration: 600,
         useNativeDriver: true,
       }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
     ]).start();
   }, []);
 
@@ -90,9 +87,17 @@ const PrescriptionDetailScreen: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await medicalService.getPrescription(prescriptionId);
+      // Since we're getting prescriptionId from appointment/booking, try booking-based endpoint first
+      let response = await medicalService.getPrescriptionByBooking(prescriptionId);
+      
+      console.log(' [PrescriptionDetail] Response from booking endpoint:', JSON.stringify(response, null, 2));
 
-      console.log(' [PrescriptionDetail] Full API Response:', JSON.stringify(response, null, 2));
+      // If booking endpoint fails, try direct prescription ID
+      if (!response?.success || !response?.data) {
+        console.log(' [PrescriptionDetail] Booking endpoint failed, trying direct prescription ID');
+        response = await medicalService.getPrescription(prescriptionId);
+        console.log(' [PrescriptionDetail] Response from direct endpoint:', JSON.stringify(response, null, 2));
+      }
 
       let prescriptionData = null;
 
@@ -132,29 +137,287 @@ const PrescriptionDetailScreen: React.FC = () => {
     fetchPrescriptionDetail();
   }, []);
 
-  const handleDownloadPdf = useCallback(() => {
-    console.log('Download PDF for prescription', prescriptionId);
-    Alert.alert(
-      'Download PDF',
-      'PDF download feature will be available soon.',
-      [{ text: 'OK', style: 'default' }]
-    );
-  }, [prescriptionId]);
+  const handleDownloadPdf = useCallback(async () => {
+    console.log('PDF download for prescription', prescriptionId);
+    if (!prescription) {
+      console.log('No prescription data available');
+      return;
+    }
+    
+    try {
+      // Request storage permissions for Android (only if needed)
+      if (Platform.OS === 'android') {
+        try {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
+          );
+          console.log('Permission granted:', granted);
+          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+            Alert.alert('Permission Required', 'Storage permission is required to download PDF files. Please enable it in your phone settings.');
+            return;
+          }
+        } catch (permissionError) {
+          console.log('Permission check failed, proceeding anyway:', permissionError);
+          // On newer Android versions, this might fail but PDF generation still works
+        }
+      }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
+      // Show loading indicator
+      Alert.alert('Generating PDF', 'Please wait while we generate and download your prescription PDF...');
+
+      // Generate HTML content for PDF
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Prescription - ${prescription.id || prescriptionId}</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              margin: 20px;
+              color: #333;
+              line-height: 1.6;
+            }
+            .header {
+              text-align: center;
+              border-bottom: 3px solid #2196F3;
+              padding-bottom: 20px;
+              margin-bottom: 30px;
+            }
+            .title {
+              color: #2196F3;
+              font-size: 28px;
+              font-weight: bold;
+              margin-bottom: 10px;
+            }
+            .subtitle {
+              color: #666;
+              font-size: 16px;
+              margin-bottom: 5px;
+            }
+            .section {
+              margin-bottom: 30px;
+              padding: 20px;
+              border: 1px solid #e0e0e0;
+              border-radius: 8px;
+              background-color: #f9f9f9;
+            }
+            .section-title {
+              color: #2196F3;
+              font-size: 20px;
+              font-weight: bold;
+              margin-bottom: 15px;
+              border-bottom: 2px solid #2196F3;
+              padding-bottom: 5px;
+            }
+            .info-row {
+              margin-bottom: 10px;
+              display: flex;
+              justify-content: space-between;
+            }
+            .info-label {
+              font-weight: bold;
+              color: #555;
+            }
+            .item {
+              margin-bottom: 20px;
+              padding: 15px;
+              border-left: 4px solid #2196F3;
+              background-color: white;
+              border-radius: 4px;
+            }
+            .item-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 10px;
+            }
+            .item-title {
+              font-weight: bold;
+              color: #2196F3;
+              font-size: 16px;
+            }
+            .item-details {
+              margin-top: 10px;
+            }
+            .footer {
+              margin-top: 40px;
+              text-align: center;
+              color: #666;
+              font-size: 12px;
+              border-top: 1px solid #e0e0e0;
+              padding-top: 20px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="title">PRESCRIPTION</div>
+            <div class="subtitle">ID: #${prescription.id || prescriptionId}</div>
+            <div class="subtitle">${prescription.prescriptionDate ? new Date(prescription.prescriptionDate).toLocaleDateString() : 'Date N/A'}</div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Patient Information</div>
+            <div class="info-row">
+              <span class="info-label">Name:</span>
+              <span>${prescription.patientName || 'N/A'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Age:</span>
+              <span>${prescription.patientAge ? `${prescription.patientAge} years` : 'N/A'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Gender:</span>
+              <span>${prescription.patientGender || 'N/A'}</span>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Doctor Information</div>
+            <div class="info-row">
+              <span class="info-label">Doctor:</span>
+              <span>${prescription.professional?.first_name && prescription.professional?.last_name ? 
+                `Dr. ${prescription.professional.first_name} ${prescription.professional.last_name}` : 
+                prescription.practitionerName || 'N/A'
+              }</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Qualification:</span>
+              <span>${prescription.professional?.speciality_new?.name || prescription.practitionerQualification || 'N/A'}</span>
+            </div>
+          </div>
+
+          ${prescription.diagnoses && prescription.diagnoses.length > 0 ? `
+          <div class="section">
+            <div class="section-title">Diagnosis</div>
+            ${prescription.diagnoses.map(diag => `
+              <div class="item">
+                <div class="item-header">
+                  <div class="item-title">${diag.condition}</div>
+                </div>
+                <div class="item-details">
+                  ${diag.severity ? `<div>Severity: ${diag.severity}</div>` : ''}
+                  ${diag.duration ? `<div>Duration: ${diag.duration}</div>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          ` : ''}
+
+          ${prescription.medicines && prescription.medicines.length > 0 ? `
+          <div class="section">
+            <div class="section-title">Medicines</div>
+            ${prescription.medicines.map(med => `
+              <div class="item">
+                <div class="item-header">
+                  <div class="item-title">${med.name}</div>
+                </div>
+                <div class="item-details">
+                  <div><strong>Dosage:</strong> ${med.dosage}</div>
+                  <div><strong>Frequency:</strong> ${med.frequency}</div>
+                  <div><strong>Duration:</strong> ${med.duration}</div>
+                  ${med.instructions ? `<div><strong>Instructions:</strong> ${med.instructions}</div>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          ` : ''}
+
+          ${prescription.advices && prescription.advices.length > 0 ? `
+          <div class="section">
+            <div class="section-title">Medical Advice</div>
+            ${prescription.advices.map(adv => `
+              <div class="item">
+                <div class="item-header">
+                  <div class="item-title">${adv.title}</div>
+                </div>
+                <div class="item-details">
+                  ${adv.description}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          ` : ''}
+
+          ${prescription.followUpDate ? `
+          <div class="section">
+            <div class="section-title">Follow-up</div>
+            <div class="info-row">
+              <span class="info-label">Next Appointment:</span>
+              <span>${new Date(prescription.followUpDate).toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              })}</span>
+            </div>
+          </div>
+          ` : ''}
+
+          <div class="footer">
+            Generated on ${new Date().toLocaleDateString()} by SamyaYog App
+          </div>
+        </body>
+        </html>
+      `;
+
+      // Generate PDF with Downloads directory for better accessibility
+      const options = {
+        html: htmlContent,
+        fileName: `Prescription_${prescription.id || prescriptionId}_${new Date().toISOString().split('T')[0]}`,
+        directory: Platform.OS === 'android' ? 'Download' : 'Documents', // Use Download folder on Android
+      };
+
+      const file = await RNHTMLtoPDF.generatePDF(options);
+      
+      console.log('PDF Generated:', file.filePath);
+
+      if (!file.filePath) throw new Error("File path is empty");
+
+      // Handle file path for sharing
+      const filePath = Platform.OS === 'android' && !file.filePath.startsWith('file://')
+        ? `file://${file.filePath}` 
+        : file.filePath;
+
+      // Show success message with download location info
+      Alert.alert(
+        '✅ PDF Downloaded Successfully!',
+        Platform.OS === 'android' 
+          ? `Your prescription PDF has been saved to your Downloads folder.\n\nFile: ${options.fileName}.pdf\n\nWould you like to open or share it?`
+          : `Your prescription PDF has been saved to your Documents folder.\n\nFile: ${options.fileName}.pdf\n\nWould you like to open or share it?`,
+        [
+          { text: 'OK', style: 'cancel' },
+          {
+            text: 'Open / Share',
+            onPress: async () => {
+              try {
+                await Share.open({
+                  url: filePath,
+                  type: 'application/pdf',
+                  title: `Prescription - ${prescription.id || prescriptionId}`,
+                  failOnCancel: false,
+                });
+              } catch (shareError) {
+                console.log('Share dismissed');
+              }
+            },
+          },
+        ]
+      );
+
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      Alert.alert('Error', 'Failed to generate PDF. Please check storage permissions and try again.');
+    }
+  }, [prescription, prescriptionId]);
 
   if (isLoading && !isRefreshing) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
-        <View style={styles.loadingContainer}>
+        <View style={styles.center}>
           <ActivityIndicator size="large" color={appTheme.colors.primary} />
           <Text style={styles.loadingText}>Loading prescription details...</Text>
         </View>
@@ -166,7 +429,7 @@ const PrescriptionDetailScreen: React.FC = () => {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
-        <View style={styles.errorContainer}>
+        <View style={styles.center}>
           <View style={styles.errorCard}>
             <Ionicons name="document-text-outline" size={48} color={appTheme.colors.primary} />
             <Text style={styles.errorTitle}>No Prescription Found</Text>
@@ -190,310 +453,271 @@ const PrescriptionDetailScreen: React.FC = () => {
   }
 
   if (!prescription) {
-    return null; // This will be handled by the error state above
+    return null;
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
-
-      {/* Modern Header with Gradient */}
-      <Animated.View
-        style={[
-          styles.headerWrapper,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
+      <LinearGradient 
+        colors={[appTheme.colors.primary, appTheme.colors.secondary]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
       >
-        <LinearGradient
-          colors={[appTheme.colors.primary, appTheme.colors.secondary]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.header}
-        >
-          <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
+        
+        <View style={styles.headerContent}>
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
+          </TouchableOpacity>
           
-          <View style={styles.headerContent}>
-            <TouchableOpacity 
-              onPress={() => navigation.goBack()}
-              style={styles.backButton}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="chevron-back" size={24} color={appTheme.colors.background.surface} />
-            </TouchableOpacity>
-            
-            <View style={styles.titleContainer}>
-              <Text style={styles.headerTitle}>Prescription</Text>
-              <Text style={styles.headerSubtitle}>Medical prescription details</Text>
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.moreButton} 
-              onPress={handleDownloadPdf}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="download" size={20} color={appTheme.colors.background.surface} />
-            </TouchableOpacity>
+          <View style={styles.titleContainer}>
+            <Text style={styles.headerTitle}>Prescription Details</Text>
+            <Text style={styles.headerSubtitle}>View your medical prescription</Text>
           </View>
           
-          {/* Decorative elements */}
-          <View style={styles.topCircle} />
-          <View style={styles.bottomWave} />
-        </LinearGradient>
-      </Animated.View>
-      
+          <View style={styles.placeholderButton} />
+        </View>
+        
+        {/* Decorative elements */}
+        <View style={styles.topCircle} />
+        <View style={styles.bottomWave} />
+      </LinearGradient>
+
       <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+        }
         showsVerticalScrollIndicator={false}
       >
-        {/* Prescription ID Card */}
-        <Animated.View
-          style={[
-            styles.prescriptionIdCard,
-            {
-              opacity: fadeAnim,
-              transform: [
-                { translateY: slideAnim },
-                { scale: scaleAnim },
-              ],
-            },
-          ]}
-        >
-          <View style={styles.prescriptionIdHeader}>
-            <View style={styles.prescriptionIdInfo}>
-              <Text style={styles.prescriptionIdLabel}>Prescription ID</Text>
-              <Text style={styles.prescriptionIdValue}>{prescription.prescriptionId}</Text>
+        {/* Main Info Card - Standardized */}
+        <Animated.View style={[
+          styles.card,
+          { 
+            opacity: fadeAnim, 
+            transform: [{ translateY: slideAnim }], 
+            borderLeftColor: theme.colors.primary, 
+            borderLeftWidth: 5 
+          }
+        ]}>
+          <View style={styles.cardHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.title}>Prescription Details</Text>
+              <Text style={styles.sub}>Medical prescription information</Text>
             </View>
-            <View style={styles.prescriptionTypeBadge}>
-              <Text style={styles.prescriptionTypeText}>{prescription.prescriptionType}</Text>
+            <View style={[styles.typeBadge, { backgroundColor: theme.colors.primary + '20' }]}>
+              <Ionicons name="document-text" size={14} color={theme.colors.primary} />
+              <Text style={[styles.typeText, { color: theme.colors.primary }]}>PRESCRIPTION</Text>
             </View>
           </View>
-          <View style={styles.prescriptionDate}>
-            <Ionicons name="calendar-outline" size={16} color={appTheme.colors.text.secondary} />
-            <Text style={styles.prescriptionDateText}>
+          
+          {/* Patient Information */}
+          <View style={styles.cardContent}>
+            <View style={styles.detailRow}>
+              <Ionicons name="person-outline" size={16} color="#666" />
+              <Text style={styles.detailText}>
+                <Text style={styles.detailLabel}>Patient: </Text>
+                {prescription.patientName || 'N/A'}
+              </Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Ionicons name="calendar-outline" size={16} color="#666" />
+              <Text style={styles.detailText}>
+                <Text style={styles.detailLabel}>Age: </Text>
+                {prescription.patientAge ? `${prescription.patientAge} years` : 'N/A'}
+              </Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Ionicons name="medkit-outline" size={16} color="#666" />
+              <Text style={styles.detailText}>
+                <Text style={styles.detailLabel}>Doctor: </Text>
+                {prescription.professional?.first_name && prescription.professional?.last_name ? 
+                  `${prescription.professional.first_name} ${prescription.professional.last_name}` : 
+                  prescription.practitionerName || 'N/A'
+                }
+              </Text>
+            </View>
+            <View style={styles.bookingIdRow}>
+              <Ionicons name="pricetag-outline" size={16} color="#666" />
+              <Text style={styles.bookingIdText}>
+                Booking ID: #{prescription.id || prescriptionId}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.cardFooter}>
+            <Text style={[styles.statusText, { color: theme.colors.primary }]}>
               {prescription.prescriptionDate ? 
-                new Date(prescription.prescriptionDate).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                }) : 
-                'N/A'
+                new Date(prescription.prescriptionDate).toLocaleDateString() : 
+                'Date N/A'
               }
             </Text>
+            <TouchableOpacity onPress={handleDownloadPdf}>
+              <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>Download PDF</Text>
+            </TouchableOpacity>
           </View>
         </Animated.View>
 
-        {/* Patient & Doctor Info Card */}
-        <Animated.View
-          style={[
-            styles.infoCard,
-            {
-              opacity: fadeAnim,
-              transform: [
-                { translateY: Animated.add(slideAnim, 20) },
-                { scale: scaleAnim },
-              ],
-            },
-          ]}
-        >
-          <View style={styles.infoSection}>
-            <View style={styles.infoHeader}>
-              <Ionicons name="person-outline" size={20} color={appTheme.colors.primary} />
-              <Text style={styles.infoTitle}>Patient Information</Text>
-            </View>
-            <View style={styles.infoGrid}>
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Name</Text>
-                <Text style={styles.infoValue}>{prescription.patientName || 'N/A'}</Text>
+        {/* Diagnosis Section - Standardized */}
+        {prescription.diagnoses && prescription.diagnoses.length > 0 && (
+          <Animated.View style={[
+            styles.card,
+            { 
+              borderLeftColor: theme.colors.primary, 
+              borderLeftWidth: 5, 
+              opacity: fadeAnim, 
+              transform: [{ translateY: Animated.add(slideAnim, 20) }] 
+            }
+          ]}>
+            <View style={styles.cardHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.title}>Diagnosis</Text>
+                <Text style={styles.sub}>Medical conditions identified</Text>
               </View>
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Age</Text>
-                <Text style={styles.infoValue}>{prescription.patientAge || 'N/A'} years</Text>
-              </View>
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Gender</Text>
-                <Text style={styles.infoValue}>{prescription.patientGender || 'N/A'}</Text>
+              <View style={[styles.typeBadge, { backgroundColor: theme.colors.primary + '20' }]}>
+                <Ionicons name="medical" size={14} color={theme.colors.primary} />
+                <Text style={[styles.typeText, { color: theme.colors.primary }]}>{prescription.diagnoses.length}</Text>
               </View>
             </View>
-          </View>
-
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoSection}>
-            <View style={styles.infoHeader}>
-              <Ionicons name="medkit-outline" size={20} color={appTheme.colors.primary} />
-              <Text style={styles.infoTitle}>Doctor Information</Text>
-            </View>
-            <View style={styles.infoGrid}>
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Name</Text>
-                <Text style={styles.infoValue}>
-                  {prescription.professional?.first_name && prescription.professional?.last_name ? 
-                    `${prescription.professional.first_name} ${prescription.professional.last_name}` : 
-                    prescription.practitionerName || 'N/A'
-                  }
-                </Text>
-              </View>
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Qualification</Text>
-                <Text style={styles.infoValue}>
-                  {prescription.professional?.speciality_new?.name || prescription.practitionerQualification || 'N/A'}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </Animated.View>
-
-        {/* Diagnosis */}
-        <Animated.View
-          style={[
-            styles.sectionCard,
-            {
-              opacity: fadeAnim,
-              transform: [
-                { translateY: Animated.add(slideAnim, 60) },
-                { scale: scaleAnim },
-              ],
-            },
-          ]}
-        >
-          <View style={styles.sectionHeader}>
-            <Ionicons name="medical-outline" size={20} color={appTheme.colors.primary} />
-            <Text style={styles.sectionTitle}>Diagnosis</Text>
-          </View>
-          {prescription.diagnoses && prescription.diagnoses.length > 0 ? (
-            prescription.diagnoses.map((diag, index) => (
-              <View key={diag.id || index} style={styles.diagnosisItem}>
-                <View style={styles.diagnosisHeader}>
-                  <Ionicons name="medical" size={16} color={appTheme.colors.primary} />
-                  <Text style={styles.diagnosisTitle}>{diag.condition}</Text>
+            
+            <View style={styles.cardContent}>
+              {prescription.diagnoses.map((diag: any, index: number) => (
+                <View key={diag.id || index} style={styles.detailRow}>
+                  <Ionicons name="medical-outline" size={16} color={theme.colors.primary} />
+                  <Text style={styles.detailText}>
+                    <Text style={styles.detailLabel}>{diag.condition}: </Text>
+                    {diag.severity && `Severity: ${diag.severity}`}
+                    {diag.duration && ` | Duration: ${diag.duration}`}
+                  </Text>
                 </View>
-                <View style={styles.diagnosisDetails}>
-                  {diag.severity && <Text style={styles.diagnosisDetail}>Severity: {diag.severity}</Text>}
-                  {diag.duration && <Text style={styles.diagnosisDetail}>Duration: {diag.duration}</Text>}
-                </View>
-              </View>
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="medical-outline" size={24} color={appTheme.colors.text.secondary} />
-              <Text style={styles.emptyText}>No diagnoses recorded</Text>
+              ))}
             </View>
-          )}
-        </Animated.View>
-
-        {/* Medicines */}
-        <Animated.View
-          style={[
-            styles.sectionCard,
-            {
-              opacity: fadeAnim,
-              transform: [
-                { translateY: Animated.add(slideAnim, 80) },
-                { scale: scaleAnim },
-              ],
-            },
-          ]}
-        >
-          <View style={styles.sectionHeader}>
-            <Ionicons name="pill-outline" size={20} color={appTheme.colors.primary} />
-            <Text style={styles.sectionTitle}>Medicines</Text>
-          </View>
-          {prescription.medicines && prescription.medicines.length > 0 ? (
-            prescription.medicines.map((med, index) => (
-              <View key={med.id || index} style={styles.medicineItem}>
-                <View style={styles.medicineHeader}>
-                  <View style={styles.medicineIcon}>
-                    <Ionicons name="medkit" size={20} color={appTheme.colors.primary} />
-                  </View>
-                  <View style={styles.medicineInfo}>
-                    <Text style={styles.medicineName}>{med.name}</Text>
-                    <Text style={styles.medicineDosage}>{med.dosage}</Text>
-                  </View>
-                </View>
-                <View style={styles.medicineDetails}>
-                  <View style={styles.medicineDetail}>
-                    <Ionicons name="time-outline" size={16} color={appTheme.colors.text.secondary} />
-                    <Text style={styles.medicineDetailText}>{med.frequency} for {med.duration}</Text>
-                  </View>
-                  {med.instructions && (
-                    <View style={styles.medicineDetail}>
-                      <Ionicons name="information-circle-outline" size={16} color={appTheme.colors.text.secondary} />
-                      <Text style={styles.medicineDetailText}>{med.instructions}</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="pill-outline" size={24} color={appTheme.colors.text.secondary} />
-              <Text style={styles.emptyText}>No medicines prescribed</Text>
+            
+            <View style={styles.cardFooter}>
+              <Text style={[styles.statusText, { color: theme.colors.primary }]}>
+                {prescription.diagnoses.length} {prescription.diagnoses.length === 1 ? 'condition' : 'conditions'}
+              </Text>
             </View>
-          )}
-        </Animated.View>
+          </Animated.View>
+        )}
 
-        {/* Advice */}
-        <Animated.View
-          style={[
-            styles.sectionCard,
-            {
-              opacity: fadeAnim,
-              transform: [
-                { translateY: Animated.add(slideAnim, 100) },
-                { scale: scaleAnim },
-              ],
-            },
-          ]}
-        >
-          <View style={styles.sectionHeader}>
-            <Ionicons name="bulb-outline" size={20} color={appTheme.colors.primary} />
-            <Text style={styles.sectionTitle}>Medical Advice</Text>
-          </View>
-          {prescription.advices && prescription.advices.length > 0 ? (
-            prescription.advices.map((adv, index) => (
-              <View key={adv.id || index} style={styles.adviceItem}>
-                <View style={styles.adviceHeader}>
-                  <Ionicons name="bulb" size={16} color={appTheme.colors.accent} />
-                  <Text style={styles.adviceTitle}>{adv.title}</Text>
-                </View>
-                <Text style={styles.adviceDescription}>{adv.description}</Text>
+        {/* Medicines Section - Standardized */}
+        {prescription.medicines && prescription.medicines.length > 0 && (
+          <Animated.View style={[
+            styles.card,
+            { 
+              borderLeftColor: '#FF9800', 
+              borderLeftWidth: 5, 
+              opacity: fadeAnim, 
+              transform: [{ translateY: Animated.add(slideAnim, 40) }] 
+            }
+          ]}>
+            <View style={styles.cardHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.title}>Medicines</Text>
+                <Text style={styles.sub}>Prescribed medications</Text>
               </View>
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="bulb-outline" size={24} color={appTheme.colors.text.secondary} />
-              <Text style={styles.emptyText}>No specific advice given</Text>
+              <View style={[styles.typeBadge, { backgroundColor: '#FF9800' + '20' }]}>
+                <Ionicons name="pill" size={14} color="#FF9800" />
+                <Text style={[styles.typeText, { color: '#FF9800' }]}>{prescription.medicines.length}</Text>
+              </View>
             </View>
-          )}
-        </Animated.View>
+            
+            <View style={styles.cardContent}>
+              {prescription.medicines.map((med: any, index: number) => (
+                <View key={med.id || index} style={styles.detailRow}>
+                  <Ionicons name="medical" size={16} color="#FF9800" />
+                  <Text style={styles.detailText}>
+                    <Text style={styles.detailLabel}>{med.name}: </Text>
+                    {med.dosage} - {med.frequency} for {med.duration}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            
+            <View style={styles.cardFooter}>
+              <Text style={[styles.statusText, { color: '#FF9800' }]}>
+                {prescription.medicines.length} {prescription.medicines.length === 1 ? 'medicine' : 'medicines'}
+              </Text>
+            </View>
+          </Animated.View>
+        )}
 
-        {/* Follow-up */}
+        {/* Medical Advice Section - Standardized */}
+        {prescription.advices && prescription.advices.length > 0 && (
+          <Animated.View style={[
+            styles.card,
+            { 
+              borderLeftColor: '#9C27B0', 
+              borderLeftWidth: 5, 
+              opacity: fadeAnim, 
+              transform: [{ translateY: Animated.add(slideAnim, 60) }] 
+            }
+          ]}>
+            <View style={styles.cardHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.title}>Medical Advice</Text>
+                <Text style={styles.sub}>Doctor's recommendations</Text>
+              </View>
+              <View style={[styles.typeBadge, { backgroundColor: '#9C27B0' + '20' }]}>
+                <Ionicons name="bulb" size={14} color="#9C27B0" />
+                <Text style={[styles.typeText, { color: '#9C27B0' }]}>{prescription.advices.length}</Text>
+              </View>
+            </View>
+            
+            <View style={styles.cardContent}>
+              {prescription.advices.map((adv: any, index: number) => (
+                <View key={adv.id || index} style={styles.detailRow}>
+                  <Ionicons name="bulb-outline" size={16} color="#9C27B0" />
+                  <Text style={styles.detailText}>
+                    <Text style={styles.detailLabel}>{adv.title}: </Text>
+                    {adv.description}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            
+            <View style={styles.cardFooter}>
+              <Text style={[styles.statusText, { color: '#9C27B0' }]}>
+                {prescription.advices.length} {prescription.advices.length === 1 ? 'tip' : 'tips'}
+              </Text>
+            </View>
+          </Animated.View>
+        )}
+
+        {/* Follow-up Section - Standardized */}
         {prescription.followUpDate && (
-          <Animated.View
-            style={[
-              styles.sectionCard,
-              {
-                opacity: fadeAnim,
-                transform: [
-                  { translateY: Animated.add(slideAnim, 120) },
-                  { scale: scaleAnim },
-                ],
-              },
-            ]}
-          >
-            <View style={styles.sectionHeader}>
-              <Ionicons name="calendar-outline" size={20} color={appTheme.colors.primary} />
-              <Text style={styles.sectionTitle}>Follow-up</Text>
+          <Animated.View style={[
+            styles.card,
+            { 
+              borderLeftColor: '#4CAF50', 
+              borderLeftWidth: 5, 
+              opacity: fadeAnim, 
+              transform: [{ translateY: Animated.add(slideAnim, 80) }] 
+            }
+          ]}>
+            <View style={styles.cardHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.title}>Next Follow-up</Text>
+                <Text style={styles.sub}>Schedule your next consultation</Text>
+              </View>
+              <View style={[styles.typeBadge, { backgroundColor: '#4CAF50' + '20' }]}>
+                <Ionicons name="calendar-check" size={14} color="#4CAF50" />
+                <Text style={[styles.typeText, { color: '#4CAF50' }]}>IMPORTANT</Text>
+              </View>
             </View>
-            <View style={styles.followUpCard}>
-              <View style={styles.followUpDate}>
-                <Ionicons name="calendar" size={20} color={appTheme.colors.primary} />
-                <Text style={styles.followUpDateText}>
+            
+            <View style={styles.cardContent}>
+              <View style={styles.detailRow}>
+                <Ionicons name="calendar" size={16} color="#4CAF50" />
+                <Text style={styles.detailText}>
+                  <Text style={styles.detailLabel}>Appointment Date: </Text>
                   {new Date(prescription.followUpDate).toLocaleDateString('en-US', {
                     weekday: 'long',
                     year: 'numeric',
@@ -502,59 +726,49 @@ const PrescriptionDetailScreen: React.FC = () => {
                   })}
                 </Text>
               </View>
-              {prescription.followUpReason && (
-                <Text style={styles.followUpReason}>{prescription.followUpReason}</Text>
-              )}
+              <View style={styles.detailRow}>
+                <Ionicons name="notifications" size={16} color="#4CAF50" />
+                <Text style={styles.detailText}>
+                  <Text style={styles.detailLabel}>Reminder: </Text>
+                  We'll notify you 1 day before
+                </Text>
+              </View>
+            </View>
+            
+            <View style={styles.cardFooter}>
+              <Text style={[styles.statusText, { color: '#4CAF50' }]}>
+                Follow-up scheduled
+              </Text>
+              <TouchableOpacity>
+                <Text style={{ color: '#4CAF50', fontWeight: 'bold' }}>Set Reminder</Text>
+              </TouchableOpacity>
             </View>
           </Animated.View>
         )}
 
-        {/* Notes */}
-        {prescription.notes && (
-          <Animated.View
-            style={[
-              styles.sectionCard,
-              {
-                opacity: fadeAnim,
-                transform: [
-                  { translateY: Animated.add(slideAnim, 140) },
-                  { scale: scaleAnim },
-                ],
-              },
-            ]}
-          >
-            <View style={styles.sectionHeader}>
-              <Ionicons name="document-text-outline" size={20} color={appTheme.colors.primary} />
-              <Text style={styles.sectionTitle}>Doctor's Notes</Text>
-            </View>
-            <View style={styles.notesCard}>
-              <Text style={styles.notesText}>{prescription.notes}</Text>
-            </View>
-          </Animated.View>
-        )}
-
-        {/* Bottom spacing */}
-        <View style={styles.bottomSpacing} />
+        <View style={{ height: 80 }} />
       </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background.primary,
-  },
-  // Header styles
-  headerWrapper: {
-    paddingBottom: theme.spacing.l,
-  },
-  header: {
-    paddingTop: Platform.OS === 'ios' ? theme.spacing.xl : theme.spacing.l,
-    paddingBottom: theme.spacing.xl,
-    paddingHorizontal: theme.spacing.l,
-    borderBottomLeftRadius: theme.borderRadius.xl,
-    borderBottomRightRadius: theme.borderRadius.xl,
+  container: { flex: 1, backgroundColor: theme.colors.background.primary },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scrollView: { flex: 1 },
+  scrollContent: { flexGrow: 1, padding: 16 },
+  
+  header: { 
+    paddingTop: 40,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
   },
   headerContent: {
     flexDirection: 'row',
@@ -562,357 +776,156 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    padding: 8,
+    borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   titleContainer: {
     flex: 1,
     alignItems: 'center',
   },
-  headerTitle: {
-    ...theme.typography.h2,
-    color: theme.colors.background.surface,
-    fontWeight: '600',
+  headerTitle: { 
+    color: theme.colors.background.surface, 
+    fontSize: 20, 
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   headerSubtitle: {
-    ...theme.typography.caption,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 12,
+    color: theme.colors.background.surface,
+    fontSize: 14,
+    opacity: 0.8,
+    marginTop: 2,
   },
-  moreButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  placeholderButton: {
+    width: 40,
   },
-  // Decorative elements
   topCircle: {
     position: 'absolute',
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    top: -60,
-    right: -40,
+    top: -50,
+    right: -50,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   bottomWave: {
     position: 'absolute',
-    bottom: -30,
-    left: 0,
-    right: 0,
-    height: 60,
+    bottom: -20,
+    left: -50,
+    right: -50,
+    height: 40,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderTopLeftRadius: 100,
-    borderTopRightRadius: 100,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
-  // Content styles
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingVertical: theme.spacing.m,
-  },
-  // Prescription ID Card
-  prescriptionIdCard: {
+
+  card: {
     backgroundColor: theme.colors.background.surface,
     borderRadius: theme.borderRadius.l,
-    padding: theme.spacing.l,
-    marginHorizontal: theme.spacing.l,
-    marginBottom: theme.spacing.l,
-    ...theme.shadows.card,
+    padding: 20,
+    marginBottom: 16,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
-  prescriptionIdHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  row: { flexDirection: 'row', alignItems: 'center' },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: theme.spacing.s,
+    marginRight: 15
   },
-  prescriptionIdInfo: {
+  docName: { fontSize: 16, fontWeight: '700', color: theme.colors.text.primary },
+  docSpec: { fontSize: 14, color: theme.colors.text.secondary, marginTop: 2 },
+  badge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 6
+  },
+
+  // Standard Card Pattern Styles (matching AppointmentsScreen)
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#eee' },
+  statusText: { fontSize: 12, fontWeight: 'bold' },
+  title: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: theme.colors.text.primary,
+  },
+  sub: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+  },
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    minWidth: 40,
+    justifyContent: 'center',
+  },
+  typeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginLeft: 4,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+  },
+  cardContent: {
+    marginBottom: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  detailText: {
+    fontSize: 14,
+    color: theme.colors.text.primary,
     flex: 1,
+    marginLeft: 8,
   },
-  prescriptionIdLabel: {
-    ...theme.typography.caption,
+  detailLabel: {
+    fontSize: 14,
+    fontWeight: '600',
     color: theme.colors.text.secondary,
-    marginBottom: theme.spacing.xs,
   },
-  prescriptionIdValue: {
-    ...theme.typography.h3,
-    color: theme.colors.text.primary,
-    fontWeight: '600',
+  doctorInfoContainer: {
+    flex: 1,
+    marginLeft: 8,
+    justifyContent: 'center',
   },
-  prescriptionTypeBadge: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: theme.spacing.m,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.borderRadius.m,
-  },
-  prescriptionTypeText: {
-    ...theme.typography.small,
-    color: theme.colors.background.surface,
-    fontWeight: '600',
-  },
-  prescriptionDate: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  prescriptionDateText: {
-    ...theme.typography.caption,
-    color: theme.colors.text.secondary,
-    marginLeft: theme.spacing.s,
-  },
-  // Info Card
-  infoCard: {
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: theme.borderRadius.l,
-    padding: theme.spacing.l,
-    marginHorizontal: theme.spacing.l,
-    marginBottom: theme.spacing.l,
-    ...theme.shadows.card,
-  },
-  infoSection: {
-    marginBottom: theme.spacing.m,
-  },
-  infoHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: theme.spacing.m,
-  },
-  infoTitle: {
-    ...theme.typography.h3,
-    color: theme.colors.text.primary,
-    fontWeight: '600',
-    marginLeft: theme.spacing.s,
-  },
-  infoGrid: {
-    gap: theme.spacing.s,
-  },
-  infoItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  infoLabel: {
-    ...theme.typography.body,
+  bookingIdText: {
+    fontSize: 12,
     color: theme.colors.text.secondary,
     fontWeight: '500',
+    marginLeft: 8,
   },
-  infoValue: {
-    ...theme.typography.body,
-    color: theme.colors.text.primary,
-    fontWeight: '600',
-  },
-  infoDivider: {
-    height: 1,
-    backgroundColor: theme.colors.background.secondary,
-    marginVertical: theme.spacing.m,
-  },
-  // Section Card
-  sectionCard: {
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: theme.borderRadius.l,
-    padding: theme.spacing.l,
-    marginHorizontal: theme.spacing.l,
-    marginBottom: theme.spacing.l,
-    ...theme.shadows.card,
-  },
-  sectionHeader: {
+  bookingIdRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: theme.spacing.m,
+    marginBottom: 12,
   },
-  sectionTitle: {
-    ...theme.typography.h3,
-    color: theme.colors.text.primary,
-    fontWeight: '600',
-    marginLeft: theme.spacing.s,
-  },
-  // Vitals
-  vitalsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.m,
-  },
-  vitalItem: {
-    backgroundColor: theme.colors.background.secondary,
-    borderRadius: theme.borderRadius.m,
-    padding: theme.spacing.m,
-    minWidth: (width - theme.spacing.l * 4) / 2,
-  },
-  vitalLabel: {
-    ...theme.typography.caption,
-    color: theme.colors.text.secondary,
-    marginBottom: theme.spacing.xs,
-  },
-  vitalValue: {
-    ...theme.typography.body,
-    color: theme.colors.text.primary,
-    fontWeight: '600',
-  },
-  // Diagnosis
-  diagnosisItem: {
-    backgroundColor: theme.colors.background.secondary,
-    borderRadius: theme.borderRadius.m,
-    padding: theme.spacing.m,
-    marginBottom: theme.spacing.s,
-    borderLeftWidth: 3,
-    borderLeftColor: theme.colors.primary,
-  },
-  diagnosisHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: theme.spacing.xs,
-  },
-  diagnosisTitle: {
-    ...theme.typography.body,
-    color: theme.colors.text.primary,
-    fontWeight: '600',
-    marginLeft: theme.spacing.s,
-  },
-  diagnosisDetails: {
-    marginLeft: theme.spacing.m,
-  },
-  diagnosisDetail: {
-    ...theme.typography.small,
-    color: theme.colors.text.secondary,
-    marginBottom: theme.spacing.xs,
-  },
-  // Medicines
-  medicineItem: {
-    backgroundColor: theme.colors.background.secondary,
-    borderRadius: theme.borderRadius.m,
-    padding: theme.spacing.m,
-    marginBottom: theme.spacing.s,
-  },
-  medicineHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: theme.spacing.s,
-  },
-  medicineIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: theme.colors.primary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: theme.spacing.m,
-  },
-  medicineInfo: {
-    flex: 1,
-  },
-  medicineName: {
-    ...theme.typography.body,
-    color: theme.colors.text.primary,
-    fontWeight: '600',
-    marginBottom: theme.spacing.xs,
-  },
-  medicineDosage: {
-    ...theme.typography.caption,
-    color: theme.colors.text.secondary,
-  },
-  medicineDetails: {
-    gap: theme.spacing.xs,
-  },
-  medicineDetail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  medicineDetailText: {
-    ...theme.typography.small,
-    color: theme.colors.text.secondary,
-    marginLeft: theme.spacing.s,
-  },
-  // Advice
-  adviceItem: {
-    backgroundColor: theme.colors.background.secondary,
-    borderRadius: theme.borderRadius.m,
-    padding: theme.spacing.m,
-    marginBottom: theme.spacing.s,
-  },
-  adviceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: theme.spacing.s,
-  },
-  adviceTitle: {
-    ...theme.typography.body,
-    color: theme.colors.text.primary,
-    fontWeight: '600',
-    marginLeft: theme.spacing.s,
-  },
-  adviceDescription: {
-    ...theme.typography.body,
-    color: theme.colors.text.secondary,
-    lineHeight: 22,
-  },
-  // Follow-up
-  followUpCard: {
-    backgroundColor: theme.colors.background.secondary,
-    borderRadius: theme.borderRadius.m,
-    padding: theme.spacing.m,
-  },
-  followUpDate: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: theme.spacing.s,
-  },
-  followUpDateText: {
-    ...theme.typography.body,
-    color: theme.colors.text.primary,
-    fontWeight: '600',
-    marginLeft: theme.spacing.s,
-  },
-  followUpReason: {
-    ...theme.typography.body,
-    color: theme.colors.text.secondary,
-  },
-  // Notes
-  notesCard: {
-    backgroundColor: theme.colors.background.secondary,
-    borderRadius: theme.borderRadius.m,
-    padding: theme.spacing.m,
-  },
-  notesText: {
-    ...theme.typography.body,
-    color: theme.colors.text.primary,
-    lineHeight: 22,
-  },
-  // Empty states
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: theme.spacing.xl,
-  },
-  emptyText: {
-    ...theme.typography.body,
-    color: theme.colors.text.secondary,
-    marginTop: theme.spacing.s,
-  },
-  // Loading states
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: theme.spacing.m,
-  },
+
+  divider: { height: 1, backgroundColor: '#e9ecef', marginVertical: 15 },
+  infoRow: { flexDirection: 'row', alignItems: 'center' },
+  infoText: { marginLeft: 10, color: theme.colors.text.primary, fontWeight: '500', fontSize: 15 },
+
   loadingText: {
     marginTop: theme.spacing.m,
-    ...theme.typography.body,
     color: theme.colors.text.secondary,
+    ...theme.typography.body,
+    fontSize: 16,
+    fontWeight: '500',
   },
-  // Error states
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: theme.spacing.m,
-  },
+
   errorCard: {
     backgroundColor: theme.colors.background.surface,
     borderRadius: theme.borderRadius.l,
@@ -938,42 +951,495 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.l,
     paddingVertical: theme.spacing.m,
     borderRadius: theme.borderRadius.m,
-    ...theme.shadows.card,
+    marginBottom: theme.spacing.s,
   },
   retryButtonText: {
-    ...theme.typography.body,
     color: theme.colors.background.surface,
     fontWeight: '600',
   },
-  // Empty state
-  emptyContainer: {
-    flex: 1,
+
+  // Diagnosis Card Styles
+  diagnosisCard: {
+    borderLeftColor: theme.colors.primary,
+    borderLeftWidth: 4,
+    backgroundColor: '#F0F8FF',
+  },
+  diagnosisHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  diagnosisIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: theme.spacing.m,
+    marginRight: 16,
   },
-  emptyCard: {
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: theme.borderRadius.l,
-    padding: theme.spacing.xl,
-    alignItems: 'center',
-    ...theme.shadows.card,
+  diagnosisTitleContainer: {
+    flex: 1,
   },
-  emptyTitle: {
-    ...theme.typography.h3,
+  diagnosisMainTitle: {
+    fontSize: 18,
+    fontWeight: '700',
     color: theme.colors.text.primary,
-    fontWeight: '600',
-    marginTop: theme.spacing.m,
-    marginBottom: theme.spacing.s,
+    marginBottom: 2,
   },
-  emptyMessage: {
-    ...theme.typography.body,
+  diagnosisSubtitle: {
+    fontSize: 14,
     color: theme.colors.text.secondary,
-    textAlign: 'center',
   },
-  // Bottom spacing
-  bottomSpacing: {
-    height: theme.spacing.xl,
+  diagnosisBadge: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  diagnosisBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.5,
+  },
+  diagnosisContent: {
+    gap: 12,
+  },
+  diagnosisItemCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E3F2FD',
+  },
+  diagnosisItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  diagnosisItemIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E3F2FD',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  diagnosisItemText: {
+    flex: 1,
+  },
+  diagnosisItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 2,
+  },
+  diagnosisItemDetail: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    marginTop: 2,
+  },
+  diagnosisItemStatus: {
+    padding: 4,
+    borderRadius: 12,
+    backgroundColor: '#E8F5E9',
+  },
+
+  // Medicines Card Styles
+  medicinesCard: {
+    borderLeftColor: '#FF9800',
+    borderLeftWidth: 4,
+    backgroundColor: '#FFF8E1',
+  },
+  medicinesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  medicinesIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FF9800',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  medicinesTitleContainer: {
+    flex: 1,
+  },
+  medicinesMainTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+    marginBottom: 2,
+  },
+  medicinesSubtitle: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+  },
+  medicinesBadge: {
+    backgroundColor: '#FF9800',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  medicinesBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.5,
+  },
+  medicinesContent: {
+    gap: 12,
+  },
+  medicineItemCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
+  },
+  medicineItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  medicineItemIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FF9800',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  medicineItemText: {
+    flex: 1,
+  },
+  medicineItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 2,
+  },
+  medicineItemDosage: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    marginTop: 2,
+  },
+  medicineItemStatus: {
+    padding: 4,
+    borderRadius: 12,
+    backgroundColor: '#FFF3E0',
+  },
+  medicineItemDetails: {
+    marginTop: 12,
+  },
+
+  // Medical Advice Card Styles
+  adviceCard: {
+    borderLeftColor: '#9C27B0',
+    borderLeftWidth: 4,
+    backgroundColor: '#F3E5F5',
+  },
+  adviceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  adviceIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#9C27B0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  adviceTitleContainer: {
+    flex: 1,
+  },
+  adviceMainTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+    marginBottom: 2,
+  },
+  adviceSubtitle: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+  },
+  adviceBadge: {
+    backgroundColor: '#9C27B0',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  adviceBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.5,
+  },
+  adviceContent: {
+    gap: 12,
+  },
+  adviceItemCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E1BEE7',
+  },
+  adviceItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  adviceItemIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#9C27B0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  adviceItemText: {
+    flex: 1,
+  },
+  adviceItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 2,
+  },
+  adviceItemDescription: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    marginTop: 2,
+    lineHeight: 20,
+  },
+  adviceItemStatus: {
+    padding: 4,
+    borderRadius: 12,
+    backgroundColor: '#F3E5F5',
+  },
+
+  // Main Info Card Styles
+  infoCard: {
+    borderLeftColor: '#2196F3',
+    borderLeftWidth: 4,
+    backgroundColor: '#E3F2FD',
+  },
+  infoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  infoIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#2196F3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  infoTitleContainer: {
+    flex: 1,
+  },
+  infoMainTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+    marginBottom: 2,
+  },
+  infoSubtitle: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+  },
+  infoBadge: {
+    backgroundColor: '#2196F3',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  infoBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.5,
+  },
+  infoContent: {
+    gap: 16,
+  },
+  infoSectionCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#BBDEFB',
+  },
+  infoSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  infoSectionIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#2196F3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  infoSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+  },
+  infoSectionContent: {
+    gap: 8,
+  },
+  followUpCard: {
+    borderLeftColor: '#4CAF50',
+    borderLeftWidth: 4,
+    backgroundColor: '#F8FFF8',
+  },
+  followUpHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  followUpIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  followUpTitleContainer: {
+    flex: 1,
+  },
+  followUpTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+    marginBottom: 2,
+  },
+  followUpSubtitle: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+  },
+  followUpBadge: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  followUpBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.5,
+  },
+  followUpStatusIcon: {
+    padding: 6,
+    borderRadius: 12,
+    backgroundColor: '#E8F5E9',
+  },
+  followUpDateContainer: {
+    gap: 12,
+  },
+  followUpDateCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E8F5E9',
+  },
+  followUpDateHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  followUpDateLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text.secondary,
+    marginLeft: 8,
+  },
+  followUpDateText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+  },
+  followUpReminderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    padding: 12,
+  },
+  followUpReminderIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  followUpReminderText: {
+    flex: 1,
+  },
+  followUpReminderTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  followUpReminderSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  followUpActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  followUpActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F5E9',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  followUpActionButtonSecondary: {
+    backgroundColor: '#F5F5F5',
+    borderColor: '#E0E0E0',
+  },
+  followUpActionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4CAF50',
+    marginLeft: 6,
   },
 });
 

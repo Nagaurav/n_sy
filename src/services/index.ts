@@ -79,6 +79,7 @@ export const apiService = {
   // Yoga methods
   getYogaClasses: yogaService.getClasses,
   getClassById: yogaService.getClassById,
+  getYogaBookings: yogaService.getUserBookings,
   
   // Payment methods (legacy compatibility)
   // ✅ UPDATED METHOD

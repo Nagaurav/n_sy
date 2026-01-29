@@ -39,7 +39,7 @@ export const yogaService = {
 
   // Get user's yoga class bookings
   getUserBookings: async (userId: string | number, page: number = 1, limit: number = 20): Promise<ApiResult<any>> => {
-    return apiClient.get('/user/yoga-classes/bookings', {
+    return apiClient.get('/user/yoga-booking', {
       params: { user_id: userId, page, limit }
     });
   },

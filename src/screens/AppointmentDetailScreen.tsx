@@ -367,23 +367,56 @@ const AppointmentDetailScreen: React.FC = () => {
         <Text style={styles.sectionTitle}>Quick Actions</Text>
 
         {/* Chat */}
-        <TouchableOpacity style={[styles.listButton, { borderColor: color + '40' }]} onPress={handleChatPress}>
-          <View style={[styles.iconBox, { backgroundColor: color + '15' }]}>
-            <Ionicons name="chatbubbles" size={22} color={color} />
+        <TouchableOpacity 
+          style={[
+            styles.listButton, 
+            { 
+              borderColor: detail.status === 'CONFIRMED' ? color + '40' : '#e0e0e0',
+              opacity: detail.status === 'CONFIRMED' ? 1 : 0.5
+            }
+          ]} 
+          onPress={handleChatPress}
+          disabled={detail.status !== 'CONFIRMED'}
+        >
+          <View style={[styles.iconBox, { backgroundColor: detail.status === 'CONFIRMED' ? color + '15' : '#f5f5f5' }]}>
+            <Ionicons name="chatbubbles" size={22} color={detail.status === 'CONFIRMED' ? color : '#999'} />
           </View>
-          <Text style={styles.listText}>Message {isYoga ? 'Instructor' : 'Doctor'}</Text>
-          <Ionicons name="chevron-forward" size={20} color="#ccc" />
+          <Text style={[
+            styles.listText, 
+            { color: detail.status === 'CONFIRMED' ? theme.colors.text.primary : '#999' }
+          ]}>
+            Message {isYoga ? 'Instructor' : 'Doctor'}
+          </Text>
+          <Ionicons name="chevron-forward" size={20} color={detail.status === 'CONFIRMED' ? '#ccc' : '#e0e0e0'} />
         </TouchableOpacity>
 
         {/* Add to Calendar */}
-        <TouchableOpacity style={[styles.listButton, { marginTop: 10, borderColor: '#E3F2FD' }]} onPress={() => {
-          Alert.alert("Coming Soon", "Calendar integration will be available soon!");
-        }}>
-          <View style={[styles.iconBox, { backgroundColor: '#E3F2FD' }]}>
-            <Ionicons name="calendar-outline" size={22} color="#2196F3" />
+        <TouchableOpacity 
+          style={[
+            styles.listButton, 
+            { 
+              marginTop: 10,
+              borderColor: detail.status === 'CONFIRMED' ? '#E3F2FD' : '#e0e0e0',
+              opacity: detail.status === 'CONFIRMED' ? 1 : 0.5
+            }
+          ]} 
+          onPress={() => {
+            if (detail.status === 'CONFIRMED') {
+              Alert.alert("Coming Soon", "Calendar integration will be available soon!");
+            }
+          }}
+          disabled={detail.status !== 'CONFIRMED'}
+        >
+          <View style={[styles.iconBox, { backgroundColor: detail.status === 'CONFIRMED' ? '#E3F2FD' : '#f5f5f5' }]}>
+            <Ionicons name="calendar-outline" size={22} color={detail.status === 'CONFIRMED' ? '#2196F3' : '#999'} />
           </View>
-          <Text style={styles.listText}>Add to Calendar</Text>
-          <Ionicons name="chevron-forward" size={20} color="#ccc" />
+          <Text style={[
+            styles.listText, 
+            { color: detail.status === 'CONFIRMED' ? theme.colors.text.primary : '#999' }
+          ]}>
+            Add to Calendar
+          </Text>
+          <Ionicons name="chevron-forward" size={20} color={detail.status === 'CONFIRMED' ? '#ccc' : '#e0e0e0'} />
         </TouchableOpacity>
 
         {/* Cancel */}
@@ -396,7 +429,9 @@ const AppointmentDetailScreen: React.FC = () => {
             <View style={[styles.iconBox, { backgroundColor: '#FFEBEE' }]}>
               {cancelling ? <ActivityIndicator size="small" color="#D32F2F" /> : <Ionicons name="close-circle" size={22} color="#D32F2F" />}
             </View>
-            <Text style={[styles.listText, { color: '#D32F2F' }]}>Cancel Booking</Text>
+            <Text style={[styles.listText, { color: '#D32F2F' }]}>
+              Cancel {isYoga ? 'Class' : 'Booking'}
+            </Text>
           </TouchableOpacity>
         )}
 

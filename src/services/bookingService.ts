@@ -2,6 +2,9 @@ import { apiClient, ApiResult } from './apiClient';
 import { BookingPaymentParams, UnifiedAppointment } from '../types/booking';
 import { TimeSlot, ProfessionalFilters, ProfessionalsResponse } from '../types/booking';
 
+// Re-export BookingPaymentParams for convenience
+export type { BookingPaymentParams } from '../types/booking';
+
 export interface BookingData {
   user_id: number;
   professional_id: number;

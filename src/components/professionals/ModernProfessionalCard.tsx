@@ -44,93 +44,98 @@ const ModernProfessionalCard: React.FC<ModernProfessionalCardProps> = ({
   const reviewCount = professional.review_count;
   const hasValidAvatar = avatar && avatar.trim() !== '';
 
+  const cardColor = professional.role === 'nutritionist' ? '#4CAF50' : '#2196F3';
+  const roleIcon = professional.role === 'nutritionist' ? 'nutrition' : 
+                 professional.role === 'yoga_teacher' || professional.role === 'yoga_instructor' ? 'fitness' : 
+                 professional.role === 'therapist' ? 'medkit' : 'person';
+
   return (
     <TouchableOpacity
-      style={styles.container}
+      style={[styles.card, { borderLeftColor: cardColor, borderLeftWidth: 5 }]}
       activeOpacity={0.8}
       onPress={() => onPress(professional)}
     >
-      {/* Gradient Background */}
-      <View style={styles.gradientBackground} />
+      <View style={styles.cardHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>{fullName}</Text>
+          <Text style={styles.sub}>{speciality}</Text>
+        </View>
+        <View style={[styles.typeBadge, { backgroundColor: cardColor + '20' }]}>
+          <Ionicons name={roleIcon} size={14} color={cardColor} />
+          <Text style={[styles.typeText, { color: cardColor }]}>
+            {professional.role === 'nutritionist' ? 'Nutrition' : 
+             professional.role === 'yoga_teacher' || professional.role === 'yoga_instructor' ? 'Yoga' : 
+             professional.role === 'therapist' ? 'Therapy' : 'Professional'}
+          </Text>
+        </View>
+      </View>
       
-      {/* Content */}
-      <View style={styles.content}>
-        {/* Left Section - Avatar */}
-        <View style={styles.avatarSection}>
+      <View style={styles.cardContent}>
+        {/* Avatar and Basic Info */}
+        <View style={styles.avatarRow}>
           {hasValidAvatar ? (
-            <Image
-              source={{ uri: avatar }}
-              style={styles.avatar}
-            />
+            <Image source={{ uri: avatar }} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.defaultAvatar]}>
               <Ionicons name="person" size={24} color="#FFFFFF" />
             </View>
           )}
-          {isVerified && (
-            <View style={styles.verifiedBadge}>
-              <Ionicons name="checkmark" size={10} color="#FFFFFF" />
+          <View style={styles.avatarInfo}>
+            <View style={styles.infoRow}>
+              <Ionicons name="location-outline" size={14} color="#6B7280" />
+              <Text style={styles.infoText}>{location}</Text>
             </View>
-          )}
-          {isAvailable && (
-            <View style={styles.availableIndicator} />
-          )}
-        </View>
-
-        {/* Middle Section - Info */}
-        <View style={styles.infoSection}>
-          {/* Name and Experience */}
-          <View style={styles.headerRow}>
-            <Text style={styles.name} numberOfLines={1}>
-              {fullName}
-            </Text>
             {experience && (
-              <View style={styles.experienceBadge}>
-                <Text style={styles.experienceText}>{experience}y</Text>
+              <View style={styles.infoRow}>
+                <Ionicons name="briefcase-outline" size={14} color="#6B7280" />
+                <Text style={styles.infoText}>{experience} years experience</Text>
+              </View>
+            )}
+            {rating > 0 && (
+              <View style={styles.infoRow}>
+                <Ionicons name="star" size={14} color="#F59E0B" />
+                <Text style={styles.infoText}>{rating.toFixed(1)} {reviewCount && `(${reviewCount})`}</Text>
               </View>
             )}
           </View>
-
-          {/* Specialization */}
-          <Text style={styles.specialization} numberOfLines={1}>
-            {speciality}
-          </Text>
-
-          {/* Location */}
-          <View style={styles.locationRow}>
-            <Ionicons name="location-outline" size={12} color="#6B7280" />
-            <Text style={styles.location} numberOfLines={1}>
-              {location}
-            </Text>
+          <View style={styles.avatarBadges}>
+            {isVerified && (
+              <View style={styles.verifiedBadge}>
+                <Ionicons name="checkmark" size={10} color="#FFFFFF" />
+              </View>
+            )}
+            {isAvailable && (
+              <View style={styles.availableBadge}>
+                <Ionicons name="checkmark-circle" size={10} color="#FFFFFF" />
+              </View>
+            )}
           </View>
-
-          {/* Rating */}
-          {rating > 0 ? (
-            <View style={styles.ratingRow}>
-              <Ionicons name="star" size={12} color="#F59E0B" />
-              <Text style={styles.rating}>{rating.toFixed(1)}</Text>
-              {reviewCount && (
-                <Text style={styles.reviewCount}>({reviewCount})</Text>
-              )}
-            </View>
+        </View>
+      </View>
+      
+      <View style={styles.cardFooter}>
+        <View style={styles.statusInfo}>
+          {isAvailable ? (
+            <Text style={[styles.statusText, { color: '#10B981' }]}>Available</Text>
           ) : (
-            <Text style={styles.newProfessional}>New Professional</Text>
+            <Text style={[styles.statusText, { color: '#6B7280' }]}>Busy</Text>
           )}
         </View>
-
-        {/* Right Section - Actions */}
-        <View style={styles.actionsSection}>
+        
+        <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={styles.profileButton}
+            style={[styles.actionButton, { backgroundColor: '#f8f9fa', borderColor: '#e9ecef' }]}
             onPress={() => onProfilePress(professional)}
           >
-            <Ionicons name="person-outline" size={16} color={theme.colors.primary} />
+            <Ionicons name="person-outline" size={16} color="#6B7280" />
+            <Text style={[styles.actionButtonText, { color: '#6B7280' }]}>Profile</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.bookButton}
+            style={[styles.actionButton, { backgroundColor: cardColor + '20', borderColor: cardColor }]}
             onPress={() => onBookPress(professional)}
           >
-            <Ionicons name="calendar-outline" size={16} color="#FFFFFF" />
+            <Ionicons name="calendar-outline" size={16} color={cardColor} />
+            <Text style={[styles.actionButtonText, { color: cardColor }]}>Book</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -139,151 +144,135 @@ const ModernProfessionalCard: React.FC<ModernProfessionalCardProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    width: width - theme.spacing.l * 2,
-    height: 100,
-    marginBottom: theme.spacing.m,
-    borderRadius: theme.borderRadius.l,
-    overflow: 'hidden',
-    ...theme.shadows.card,
-  },
-  gradientBackground: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  // Main Card - Matching Appointment Cards
+  card: {
     backgroundColor: theme.colors.background.surface,
+    marginBottom: 16,
     borderRadius: theme.borderRadius.l,
+    padding: 16,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
-  content: {
-    flex: 1,
+  cardHeader: {
     flexDirection: 'row',
-    padding: theme.spacing.m,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
-  avatarSection: {
-    position: 'relative',
-    marginRight: theme.spacing.m,
+  title: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: theme.colors.text.primary,
+  },
+  sub: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+  },
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  typeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginLeft: 4,
+    textTransform: 'uppercase',
+  },
+  
+  // Card Content
+  cardContent: {
+    marginBottom: 12,
+  },
+  avatarRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 12,
   },
   defaultAvatar: {
     backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  verifiedBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: theme.colors.feedback.success,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: theme.colors.background.surface,
-  },
-  availableIndicator: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: theme.colors.feedback.success,
-    borderWidth: 2,
-    borderColor: theme.colors.background.surface,
-  },
-  infoSection: {
+  avatarInfo: {
     flex: 1,
-    justifyContent: 'center',
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 2,
-  },
-  name: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.colors.text.primary,
-    flex: 1,
-    marginRight: theme.spacing.s,
-  },
-  experienceBadge: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 2,
-    borderRadius: theme.spacing.xs,
-  },
-  experienceText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: theme.colors.background.white,
-  },
-  specialization: {
-    fontSize: 13,
-    color: theme.colors.text.secondary,
-    marginBottom: 4,
-    fontWeight: '500',
-  },
-  locationRow: {
+  infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
   },
-  location: {
-    fontSize: 11,
-    color: theme.colors.text.secondary,
-    marginLeft: 4,
-    flex: 1,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  rating: {
+  infoText: {
     fontSize: 12,
+    color: theme.colors.text.secondary,
+    marginLeft: 6,
+    flex: 1,
+  },
+  avatarBadges: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  verifiedBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: theme.colors.feedback.success,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  availableBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#10B981',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  // Card Footer
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  statusInfo: {
+    flex: 1,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  actionButtonText: {
+    fontSize: 11,
     fontWeight: '600',
-    color: theme.colors.text.primary,
     marginLeft: 4,
-  },
-  reviewCount: {
-    fontSize: 11,
-    color: theme.colors.text.secondary,
-    marginLeft: 2,
-  },
-  newProfessional: {
-    fontSize: 11,
-    color: theme.colors.text.secondary,
-    fontStyle: 'italic',
-  },
-  actionsSection: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: theme.spacing.s,
-  },
-  profileButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: `${theme.colors.primary}10`,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bookButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });
 
