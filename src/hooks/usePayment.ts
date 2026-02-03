@@ -1,13 +1,15 @@
 import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
-import apiService from '../services/apiService';
-import { useAuth } from '../contexts/AuthContext';
+import { apiService } from '../services';
+import { useAuth } from '../hooks/useAuth';
 
 type PaymentParams = {
   amount: number;
   bookingId: string;
   professionalId: string | number;
-  slotId: string | number;
+  slotId?: string | number; // 👈 Make Optional
+  yogaPlanId?: number; // 👈 Add yogaPlanId for yoga classes
+  deliveryMode?: string; // 👈 Add deliveryMode for yoga classes
   duration: number; // in minutes
   serviceType?: 'yoga_class' | 'consultation' | 'membership';
   serviceId?: string;
@@ -54,11 +56,21 @@ export const usePayment = () => {
           throw new Error(errorMsg);
         }
 
-        if (!params.professionalId || !params.slotId || !params.duration) {
-          const errorMsg = `Missing required booking information - Professional: ${params.professionalId}, Slot: ${params.slotId}, Duration: ${params.duration}`;
-          console.error(errorMsg);
-          setPaymentError(errorMsg);
-          throw new Error(errorMsg);
+        // 1. Check Professional (Always required)
+        if (!params.professionalId) {
+           throw new Error('Professional ID is required');
+        }
+
+        // 2. Check Slot ID (ONLY required for Consultations)
+        const isConsultation = !params.serviceType || params.serviceType === 'consultation';
+        
+        if (isConsultation && (!params.slotId || Number(params.slotId) === 0)) {
+           throw new Error(`Slot ID is required for consultations.`);
+        }
+
+        // 3. Check Duration (Optional for classes, required for slots)
+        if (isConsultation && (!params.duration || params.duration <= 0)) {
+           throw new Error(`Duration is required.`);
         }
 
         console.log('Initiating booking and payment with params:', {
@@ -74,32 +86,70 @@ export const usePayment = () => {
         });
         
         try {
-          // Use the createBookingAndInitiatePayment function
-          const response = await apiService.createBookingAndInitiatePayment({
+        // For consultations, check slot availability first
+        if (!params.serviceType || params.serviceType === 'consultation') {
+          console.log('🔍 [usePayment] Checking slot availability before booking...');
+          const availabilityCheck = await apiService.checkSlotAvailability(params.slotId!, params.professionalId!);
+          
+          if (!availabilityCheck.success || !availabilityCheck.data) {
+            throw new Error('Unable to verify slot availability. Please try again.');
+          }
+          
+          if (!availabilityCheck.data.available) {
+            const reason = availabilityCheck.data.reason || 'This time slot is no longer available';
+            throw new Error(reason);
+          }
+          
+          console.log('✅ [usePayment] Slot is available, proceeding with booking');
+        }
+
+        // Use the createBookingAndInitiatePayment function
+          console.log('🚀 [usePayment] Calling apiService.createBookingAndInitiatePayment with:', {
             userId,
             professionalId: params.professionalId,
             slotId: params.slotId,
             serviceType,
             serviceId,
+            amount: params.amount,
             couponCode: params.couponCode,
             duration: params.duration,
             metadata: params.metadata
           });
 
-          console.log('Payment initiation response:', {
-            hasPaymentUrl: !!response?.payment_url,
-            bookingId: response?.booking_id,
-            responseKeys: response ? Object.keys(response) : 'No response'
+          const response = await apiService.createBookingAndInitiatePayment({
+            userId,
+            professionalId: params.professionalId,
+            amount: params.amount, // ✅ Add missing amount parameter
+            slotId: params.slotId ? Number(params.slotId) : undefined,
+            serviceType: params.serviceType === 'membership' ? 'consultation' : (params.serviceType || 'consultation'),
+            yogaPlanId: params.yogaPlanId, // ✅ Add yogaPlanId
+            deliveryMode: params.deliveryMode, // ✅ Add deliveryMode
+            couponCode: params.couponCode
           });
 
-          if (response?.payment_url) {
+          console.log('Payment initiation response:', {
+            success: response?.success,
+            hasPaymentUrl: !!response?.data?.payment_url,
+            hasDataPaymentUrl: !!response?.data?.data?.payment_url,
+            bookingId: response?.data?.booking_id,
+            responseKeys: response ? Object.keys(response) : 'No response',
+            dataKeys: response?.data ? Object.keys(response.data) : 'No data',
+            innerDataKeys: response?.data?.data ? Object.keys(response.data.data) : 'No inner data',
+            fullResponse: response,
+            errorMessage: response?.error
+          });
+
+          if (response?.success && response?.data?.payment_url) {
+            console.log('✅ Payment initiation successful - returning payment URL');
             return {
               ...response,
-              paymentUrl: response.payment_url // Ensure consistent property name
+              paymentUrl: response.data.payment_url // Ensure consistent property name
             };
           }
 
-          const errorMsg = 'Failed to initiate payment: No payment URL in response';
+          const errorMsg = response?.success 
+            ? 'Failed to initiate payment: No payment URL in response' 
+            : `Failed to initiate payment: ${response?.error || 'API call failed'}`;
           console.error(errorMsg, { response });
           throw new Error(errorMsg);
         } catch (apiError: any) {
@@ -116,17 +166,34 @@ export const usePayment = () => {
           throw apiError; // Re-throw to be caught by the outer catch
         }
       } catch (error: any) {
-        const errorMessage = error.response?.data?.message || 
-                           error.message || 
-                           'Payment processing failed. Please try again.';
+        // Handle specific HTTP status codes with user-friendly messages
+        let errorMessage = 'Payment processing failed. Please try again.';
+        
+        if (error.response?.status === 409) {
+          errorMessage = error.response.data?.message || 
+                        error.response.data?.error || 
+                        'This time slot is already booked. Please choose a different time.';
+        } else if (error.response?.status === 400) {
+          errorMessage = error.response.data?.message || 
+                        error.response.data?.error || 
+                        'Invalid booking details. Please check and try again.';
+        } else if (error.response?.status === 403) {
+          errorMessage = error.response.data?.message || 
+                        error.response.data?.error || 
+                        'Access denied. Please log in again.';
+        } else if (error.response?.data?.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
         
         console.error('Payment initiation error:', {
-          error: errorMessage,
-          stack: error.stack,
-          response: error.response?.data
+          message: errorMessage,
+          status: error.response?.status,
+          responseData: error.response?.data,
+          originalError: error
         });
         
-        setPaymentError(errorMessage);
         throw new Error(errorMessage);
       } finally {
         setIsProcessing(false);
@@ -148,7 +215,7 @@ export const usePayment = () => {
         throw new Error('Invalid response from server');
       }
       
-      const status = response.status || 'unknown';
+      const status = response.data?.status || 'unknown';
       setPaymentStatus(status);
       return response;
     } catch (error: any) {
@@ -174,7 +241,7 @@ export const usePayment = () => {
         throw new Error('Invalid verification response');
       }
       
-      const status = response.status || 'unknown';
+      const status = response.data?.status || 'unknown';
       setPaymentStatus(status);
       return response;
     } catch (error: any) {
@@ -209,7 +276,7 @@ export const usePayment = () => {
       }
       
       // Update payment status based on response
-      const status = response.status || 'PENDING';
+      const status = response.data?.status || 'PENDING';
       setPaymentStatus(status);
       
       return {

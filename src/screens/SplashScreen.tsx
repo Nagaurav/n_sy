@@ -1,13 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, StatusBar, ViewStyle, TextStyle, Animated } from 'react-native';
+import { View, StyleSheet, StatusBar, ViewStyle, Animated, Image, ImageStyle } from 'react-native';
 import { theme, commonStyles } from '../theme';
 
 type Styles = {
   container: ViewStyle;
   logoContainer: ViewStyle;
-  logoCircle: ViewStyle;
-  logoText: TextStyle;
-  appName: TextStyle;
+  logoImage: ImageStyle;
 };
 
 const styles = StyleSheet.create<Styles>({
@@ -20,27 +18,10 @@ const styles = StyleSheet.create<Styles>({
   logoContainer: {
     alignItems: 'center',
   },
-  logoCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: theme.borderRadius.circle,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: theme.spacing.l,
-    overflow: 'hidden',
-  },
-  logoText: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: theme.colors.background.surface,
-  },
-  appName: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: theme.colors.background.surface,
-    letterSpacing: 2,
-    marginTop: theme.spacing.l,
+  logoImage: {
+    width: 280,
+    height: 280,
+    marginBottom: theme.spacing.s,
   },
 });
 
@@ -52,12 +33,12 @@ const SplashScreen = () => {
     Animated.parallel([
       Animated.timing(scaleAnim, {
         toValue: 1,
-        duration: 600,
+        duration: 1200, // Slower animation
         useNativeDriver: true,
       }),
       Animated.timing(opacityAnim, {
         toValue: 1,
-        duration: 600,
+        duration: 1200, // Slower animation
         useNativeDriver: true,
       }),
     ]).start();
@@ -72,10 +53,13 @@ const SplashScreen = () => {
     <View style={styles.container}>
       <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
       <Animated.View style={[styles.logoContainer, animatedLogoStyle]}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>SY</Text>
-        </View>
-        <Text style={styles.appName}>SAMYAYOG</Text>
+        <Image 
+          source={require('../assets/logo.jpg')} 
+          style={styles.logoImage} 
+          resizeMode="contain" 
+          onError={() => console.log('❌ Logo image failed to load')}
+          onLoad={() => console.log('✅ Logo image loaded successfully')}
+        />
       </Animated.View>
     </View>
   );

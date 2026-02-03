@@ -1,16 +1,15 @@
 // App.tsx
 import 'react-native-gesture-handler';
 import React, { useEffect, useState } from 'react';
-import { AppRegistry } from 'react-native';
+import { AppRegistry, StatusBar, View, Text, Linking } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StatusBar } from 'react-native';
 import { Provider } from 'react-redux';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { store } from './src/store';
-import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { useAuth } from './src/hooks/useAuth';
 import { theme } from './src/theme';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 
@@ -20,14 +19,15 @@ import LoginScreen from './src/screens/LoginScreen';
 import PhoneNumberScreen from './src/screens/PhoneNumberScreen';
 import OTPScreen from './src/screens/OTPScreen';
 import SignupScreen from './src/screens/SignupScreen';
-import HomeScreen from './src/screens/HomeScreen';
-import DateTimeSelectionScreen from './src/screens/DateTimeSelectionScreen';
+import ModernHomeScreen from './src/screens/ModernHomeScreen';
+import SelectTimeScreen from './src/screens/SelectTimeScreen';
 import BookingConfirmationScreen from './src/screens/BookingConfirmationScreen';
 import PaymentGatewayScreen from './src/screens/PaymentGatewayScreen';
 import BookingSuccessScreen from './src/screens/BookingSuccessScreen';
 import BookingFailedScreen from './src/screens/BookingFailedScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import PrescriptionDetailScreen from './src/screens/PrescriptionDetailScreen';
+import DietPlanScreen from './src/screens/DietPlanScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import AppointmentsScreen from './src/screens/AppointmentsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -52,84 +52,27 @@ export type DrawerParamList = {
   HelpSupport: undefined;
 };
 
+import { HomeStackParamList } from './src/types/navigation';
+
 // Combined root navigation types
 export type RootStackParamList = AuthStackParamList & 
   Omit<DrawerParamList, keyof AuthStackParamList> & 
-  Omit<HomeStackParamList, keyof AuthStackParamList | keyof DrawerParamList>;
-
-export type HomeStackParamList = {
-  Home: undefined;
-  ProfessionalsList: { categoryId?: string; searchQuery?: string; categoryName?: string };
-  ProfessionalProfile: { 
-    professionalId: string;
-    refresh?: boolean;  // Optional refresh flag to trigger data reload
-  };
-  ClassesList: undefined;
-  AppointmentDetail: { 
-    appointmentId: string;
-    professionalId: string;
-    userId: string;
-    professionalName?: string;
-  };
-  DateTimeSelection: { 
-    professionalId: string;
-    professionalName: string;
-    serviceId?: string; 
-    serviceName?: string; 
-    price?: number; 
-    duration?: number;
-    serviceDetails?: {
-      id: string;
-      name: string;
-      duration: number;
-      price: number;
+  Omit<HomeStackParamList, keyof AuthStackParamList | keyof DrawerParamList> & {
+    MainDrawer: undefined;
+    SelectTime: {
+      professionalId: string;
+      professionalName: string;
+      serviceDetails?: {
+        id: string;
+        name: string;
+        duration: number;
+        price: number;
+      };
     };
   };
-  BookingConfirmation: { 
-    bookingData: any;
-    onGoBack?: () => void;
-  };
-  PaymentGateway: {
-    paymentUrl: string;
-    bookingId: string;
-    paymentId: string;
-    amount: number;
-    customerId: string;
-    customerEmail: string;
-    customerPhone: string;
-    merchantId?: string;
-  };
-  BookingSuccess: {
-    bookingId: string;
-    paymentId: string;
-    amount: number;
-    bookingDetails?: {
-      professionalName?: string;
-      serviceName?: string;
-      date?: string;
-      time?: string;
-    };
-  };
-  BookingFailed: {
-    bookingId?: string;
-    error?: string;
-  };
-  EditProfile: {
-    currentUser: import('./src/types/userProfile').UserProfileData;
-  };
-  ChatScreen: {
-    chatId: string;
-    appointmentId: string;
-    title?: string;
-    receiverId?: string;
-  };
-  PrescriptionDetail: {
-    prescriptionId: string;
-    appointmentId?: string;
-  };
-};
 
 const AuthStack = createStackNavigator<AuthStackParamList>();
+const RootStack = createStackNavigator<RootStackParamList>();
 const Drawer = createDrawerNavigator<DrawerParamList>();
 const HomeStack = createStackNavigator<HomeStackParamList>();
 
@@ -144,49 +87,62 @@ import HelpSupportScreen from './src/screens/HelpSupportScreen';
 import ProfessionalsListScreen from './src/screens/ProfessionalsListScreen';
 import ProfessionalProfileScreen from './src/screens/ProfessionalProfileScreen';
 import ClassesListScreen from './src/screens/ClassesListScreen';
+import ClassDetailsScreen from './src/screens/ClassDetailsScreen';
 import AppointmentDetailScreen from './src/screens/AppointmentDetailScreen';
 
-// Home Stack Navigator
-const HomeStackNavigator = () => (
-  <HomeStack.Navigator
-    screenOptions={{
-      headerShown: false,
-      cardStyle: { backgroundColor: '#FFFFFF' } 
-    }}
-  >
-    <HomeStack.Screen name="Home" component={HomeScreen} />
-    <HomeStack.Screen name="ProfessionalsList" component={ProfessionalsListScreen} />
-    <HomeStack.Screen name="ProfessionalProfile" component={ProfessionalProfileScreen} />
-    <HomeStack.Screen name="ClassesList" component={ClassesListScreen} />
-    <HomeStack.Screen name="AppointmentDetail" component={AppointmentDetailScreen} />
-    <HomeStack.Screen name="DateTimeSelection" component={DateTimeSelectionScreen} />
-    <HomeStack.Screen name="BookingConfirmation" component={BookingConfirmationScreen} />
-    <HomeStack.Screen 
-      name="PaymentGateway" 
-      component={PaymentGatewayScreen} 
-      options={{
-        gestureEnabled: false,
-      }}
-    />
-    <HomeStack.Screen 
-      name="BookingSuccess" 
-      component={BookingSuccessScreen} 
-      options={{
-        gestureEnabled: false,
-      }}
-    />
-    <HomeStack.Screen 
-      name="BookingFailed" 
-      component={BookingFailedScreen}
-      options={{
-        gestureEnabled: true,
-      }}
-    />
-    <HomeStack.Screen name="EditProfile" component={EditProfileScreen} />
-    <HomeStack.Screen name="ChatScreen" component={ChatScreen} />
-    <HomeStack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
-  </HomeStack.Navigator>
+// Temporary test component to verify navigation
+const RedTestScreen = () => (
+  <View style={{ flex: 1, backgroundColor: '#FF0000' }}>
+    <Text style={{ marginTop: 100, textAlign: 'center', color: '#FFF', fontSize: 20, fontWeight: 'bold' }}>
+      RED TEST SCREEN
+    </Text>
+  </View>
 );
+
+// Home Stack Navigator
+const HomeStackNavigator = () => {
+  return (
+    <HomeStack.Navigator
+      screenOptions={{
+        headerShown: false,
+        cardStyle: { backgroundColor: '#FFFFFF' } 
+      }}
+    >
+      <HomeStack.Screen name="Home" component={ModernHomeScreen} />
+      <HomeStack.Screen name="ProfessionalsList" component={ProfessionalsListScreen} />
+      <HomeStack.Screen name="ProfessionalProfile" component={ProfessionalProfileScreen} />
+      <HomeStack.Screen name="ClassesList" component={ClassesListScreen} />
+      <HomeStack.Screen name="ClassDetails" component={ClassDetailsScreen} />
+      <HomeStack.Screen name="AppointmentDetail" component={AppointmentDetailScreen} />
+      <HomeStack.Screen name="BookingConfirmation" component={BookingConfirmationScreen} />
+      <HomeStack.Screen 
+        name="PaymentGateway" 
+        component={PaymentGatewayScreen} 
+        options={{
+          gestureEnabled: false,
+        }}
+      />
+      <HomeStack.Screen 
+        name="BookingSuccess" 
+        component={BookingSuccessScreen} 
+        options={{
+          gestureEnabled: false,
+        }}
+      />
+      <HomeStack.Screen 
+        name="BookingFailed" 
+        component={BookingFailedScreen}
+        options={{
+          gestureEnabled: true,
+        }}
+      />
+      <HomeStack.Screen name="EditProfile" component={EditProfileScreen} />
+      <HomeStack.Screen name="ChatScreen" component={ChatScreen} />
+      <HomeStack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
+      <HomeStack.Screen name="DietPlan" component={DietPlanScreen} />
+    </HomeStack.Navigator>
+  );
+};
 
 // Custom Drawer Content Component
 import CustomDrawerContent from './src/components/CustomDrawerContent';
@@ -290,7 +246,12 @@ const MainDrawerNavigator = () => {
 
 // Navigation component that handles auth routing
 const AppNavigator = () => {
-  const { isAuthenticated, isLoading, isAuthReady } = useAuth();
+  const { isAuthenticated, isLoading, isAuthReady, initializeAuth } = useAuth();
+  
+  // Initialize auth state on mount
+  React.useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
   
   // Add a timeout to prevent infinite loading
   const [isNavigationReady, setIsNavigationReady] = React.useState(false);
@@ -299,7 +260,7 @@ const AppNavigator = () => {
     const timer = setTimeout(() => {
       console.log('🔧 Navigation ready timeout reached');
       setIsNavigationReady(true);
-    }, 5000); // 5 second timeout
+    }, 2000); // 2 second timeout
     
     return () => clearTimeout(timer);
   }, []);
@@ -311,9 +272,8 @@ const AppNavigator = () => {
     isNavigationReady 
   });
 
-  // Show splash screen only if we're still loading and navigation isn't ready
-  if ((isLoading || !isAuthReady) && !isNavigationReady) {
-    console.log('⏳ Showing splash screen...');
+  // Show splash screen for 2 seconds using navigation timeout only
+  if (!isNavigationReady) {
     return (
       <AuthStack.Navigator screenOptions={{ headerShown: false }}>
         <AuthStack.Screen name="Splash" component={SplashScreen} />
@@ -322,10 +282,61 @@ const AppNavigator = () => {
   }
 
   if (isAuthenticated) {
-    console.log('✅ User authenticated, showing main app');
-    return <MainDrawerNavigator />;
+    return (
+      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        {/* The Home Tabs (Base Layer) */}
+        <RootStack.Screen 
+          name="MainDrawer" 
+          component={MainDrawerNavigator} 
+        />
+        
+        {/* ✅ THE FIX: SelectTime sits on TOP LAYER */}
+        <RootStack.Screen
+          name="SelectTime"
+          component={SelectTimeScreen}
+          options={{
+            headerShown: false,
+            presentation: 'card',
+            animation: 'slide_from_right',
+            gestureEnabled: false,
+          }}
+        />
+        
+        {/* ✅ AppointmentDetail sits on TOP LAYER for direct access */}
+        <RootStack.Screen
+          name="AppointmentDetail"
+          component={AppointmentDetailScreen}
+          options={{
+            headerShown: false,
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
+        
+        {/* ✅ ChatScreen sits on TOP LAYER for direct access */}
+        <RootStack.Screen
+          name="ChatScreen"
+          component={ChatScreen}
+          options={{
+            headerShown: false,
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
+        
+        {/* ✅ DietPlan sits on TOP LAYER for direct access */}
+        <RootStack.Screen
+          name="DietPlan"
+          component={DietPlanScreen}
+          options={{
+            headerShown: false,
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
+      </RootStack.Navigator>
+    );
   } else {
-    console.log('❌ User not authenticated, showing auth screens');
     return (
       <AuthStack.Navigator
         screenOptions={{
@@ -345,20 +356,26 @@ const AppNavigator = () => {
 };
 
 const App = () => {
-  console.log('🚀 [App] Application starting...');
   
   try {
     return (
       <Provider store={store}>
         <ThemeProvider>
-          <AuthProvider>
-            <SafeAreaProvider>
-              <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-              <NavigationContainer>
-                <AppNavigator />
-              </NavigationContainer>
-            </SafeAreaProvider>
-          </AuthProvider>
+          <SafeAreaProvider>
+            <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+            <NavigationContainer
+              linking={{
+                prefixes: ['samyayog://'],
+                config: {
+                  screens: {
+                    BookingSuccess: 'payment/confirmation/:bookingId',
+                  }
+                }
+              }}
+            >
+              <AppNavigator />
+            </NavigationContainer>
+          </SafeAreaProvider>
         </ThemeProvider>
       </Provider>
     );

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -7,935 +8,514 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
-  Alert,
-  RefreshControl,
   StatusBar,
+  Animated,
+  RefreshControl,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
-import { apiService } from '../services/apiService';
-import { ConsultationBooking } from '../types/booking';
-import { theme as defaultTheme } from '../theme';
+import { bookingService } from '../services';
+import { UnifiedAppointment } from '../types/booking';
+import { theme } from '../theme';
 
-const AppointmentsScreen: React.FC<{ navigation: any, route: any }> = ({ navigation, route }) => {
-  const { user, signOut, isLoading: authLoading } = useAuth();
+const AppointmentsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const { user, isLoading: authLoading } = useAuth();
   const { theme: themeHook } = useTheme();
-  const theme = themeHook || defaultTheme;
+  const theme = themeHook || require('../theme').theme;
+
+  // Helper function to format time with AM/PM
+  const formatTimeWithAMPM = (timeString: string): string => {
+    if (!timeString) return '';
+    
+    // Handle time formats like "09:00 - 09:15" or "14:30"
+    const timeParts = timeString.split(' - ');
+    
+    const formatSingleTime = (time: string): string => {
+      // Remove any extra spaces and split
+      const cleanTime = time.trim();
+      const [hours, minutes] = cleanTime.split(':').map(Number);
+      
+      if (isNaN(hours) || isNaN(minutes)) return cleanTime;
+      
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+      
+      return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+    };
+    
+    if (timeParts.length === 2) {
+      // Format time range like "09:00 - 09:15"
+      return `${formatSingleTime(timeParts[0])} - ${formatSingleTime(timeParts[1])}`;
+    } else {
+      // Format single time like "14:30"
+      return formatSingleTime(timeString);
+    }
+  };
+
+  const appTheme = themeHook || theme;
   
-  // Set up header with back button
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShown: true,
-      headerTitle: 'My Appointments',
-      headerTitleAlign: 'center',
-      headerLeft: () => (
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()}
-          style={{
-            marginLeft: 16,
-            padding: 8,
-            borderRadius: 20,
-            backgroundColor: 'rgba(0,0,0,0.05)'
-          }}
-        >
-          <Ionicons name="arrow-back" size={24} color={theme.colors.primary} />
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation, theme.colors.primary]);
-  const [appointments, setAppointments] = useState<ConsultationBooking[]>([]);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  
+  const [appointments, setAppointments] = useState<UnifiedAppointment[]>([]);
+  const [filteredAppointments, setFilteredAppointments] = useState<UnifiedAppointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<'all' | 'upcoming' | 'completed'>('all');
+  const [subFilter, setSubFilter] = useState<'all' | 'consultation' | 'yoga_class'>('all');
 
-  useEffect(() => {
-    console.log('📱 AppointmentsScreen - Auth State:', {
-      authLoading,
-      hasUser: !!user,
-      userId: user?._id,
-      userObject: user, // Log the entire user object to see what fields it has
-    });
+  // Enhanced filter function
+  const applyFilter = useCallback((data: UnifiedAppointment[], mainFilter: string, subF: string) => {
+    let filtered = data;
 
-    // Wait for auth to finish loading before checking user
-    if (authLoading) {
-      console.log('⏳ Waiting for auth to finish loading...');
-      return;
+    // Apply main filter
+    if (mainFilter === 'upcoming') {
+      filtered = filtered.filter(item => 
+        item.status === 'CONFIRMED' || item.status === 'PENDING'
+      );
+    } else if (mainFilter === 'completed') {
+      filtered = filtered.filter(item => item.status === 'COMPLETED');
     }
 
-    // Check for user_id, _id, or id (API returns user_id)
-    const userId = (user as any)?.user_id || user?._id || (user as any)?.id;
+    // Apply sub filter
+    if (subF !== 'all') {
+      filtered = filtered.filter(item => item.type === subF);
+    }
+
+    setFilteredAppointments(filtered);
+  }, []);
+
+  // �🟢 SINGLE SOURCE OF TRUTH
+  const loadData = useCallback(async () => {
+    const userId = (user as any)?.user_id || (user as any)?._id || (user as any)?.id;
+    if (!userId) return; // Wait for user
     
-    if (userId) {
-      console.log('✅ User authenticated, fetching appointments for:', userId);
-      fetchAppointments(1);
-    } else {
-      console.log('❌ User not authenticated - user object:', user);
-      setIsLoading(false);
-      setError('User not authenticated');
-    }
-  }, [(user as any)?.user_id, user?._id, (user as any)?.id, authLoading]);
-
-  const fetchAppointments = useCallback(async (pageToLoad: number = 1) => {
-    // Check for user_id, _id, or id (API returns user_id)
-    const userId = (user as any)?.user_id || user?._id || (user as any)?.id;
-    
-    if (!userId) {
-      setError('User not authenticated');
-      if (pageToLoad === 1) {
-        setIsLoading(false);
-      } else {
-        setIsLoadingMore(false);
-      }
-      return;
-    }
-
-    const limit = 10;
-    const offset = (pageToLoad - 1) * limit;
-
     try {
+      if (!isRefreshing) setIsLoading(true);
       setError(null);
-
-      if (pageToLoad === 1) {
-        setIsLoading(true);
-      } else {
-        setIsLoadingMore(true);
-      }
-
-      const response = await apiService.getUserAppointments(String(userId), {
-        limit,
-        offset,
-      });
       
-      console.log('📋 Appointments API Response:', response);
-      console.log('📋 response.data type:', typeof response.data);
-      console.log('📋 response.data is array?', Array.isArray(response.data));
-      console.log('📋 response.data keys:', Object.keys(response.data || {}));
-      console.log('📋 response.data content:', JSON.stringify(response.data, null, 2));
+      // Call the unified service
+      const res = await bookingService.getAllUserBookings(userId);
       
-      if (response.success && response.data) {
-        // API returns data as array directly, not nested in appointments field
-        const appointmentsList = Array.isArray(response.data) 
-          ? response.data 
-          : (response.data as any).data || (response.data as any).appointments || [];
-        
-        console.log('📋 Appointments list:', appointmentsList);
-        console.log('📋 Appointments count:', appointmentsList.length);
-        
-        // Sort appointments by date (newest first)
-        const sortedAppointments = appointmentsList.sort((a: any, b: any) => {
-          return new Date(b.date).getTime() - new Date(a.date).getTime();
-        });
-
-        if (pageToLoad === 1) {
-          setAppointments(sortedAppointments as any);
-        } else {
-          setAppointments((prev) => [...prev, ...(sortedAppointments as any)]);
-        }
-
-        setHasMore(appointmentsList.length === limit);
-        setPage(pageToLoad);
+      if (res.success && res.data) {
+        setAppointments(res.data);
+        // Apply current filter to new data
+        applyFilter(res.data, selectedFilter, subFilter);
       } else {
-        setError(response.error || 'Failed to fetch appointments');
+        setError('Failed to load appointments.');
       }
     } catch (err) {
-      console.error('Error fetching appointments:', err);
-      setError('Network error. Please check your connection and try again.');
+      setError('Network error. Pull to refresh.');
     } finally {
-      if (pageToLoad === 1) {
-        setIsLoading(false);
-        setIsRefreshing(false);
-      } else {
-        setIsLoadingMore(false);
-      }
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
-  }, [user?._id]);
+  }, [user, isRefreshing, selectedFilter, applyFilter]);
 
-  const handleRefresh = useCallback(() => {
-    console.log('🔄 [AppointmentsScreen] User triggered refresh');
-    setIsRefreshing(true);
-    setPage(1);
-    setHasMore(true);
-    fetchAppointments(1);
-  }, [fetchAppointments]);
+  // Handle filter change
+  useEffect(() => {
+    applyFilter(appointments, selectedFilter, subFilter);
+  }, [selectedFilter, subFilter, appointments, applyFilter]);
 
-  const handleLoadMore = useCallback(() => {
-    if (isLoadingMore || isLoading || !hasMore) {
-      console.log('⏸️ [AppointmentsScreen] Load more skipped:', {
-        isLoadingMore,
-        isLoading,
-        hasMore,
-      });
-      return;
+  // Initial Load
+  useEffect(() => {
+    if (user && !authLoading) {
+      loadData();
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
+      ]).start();
     }
-    console.log('📄 [AppointmentsScreen] Loading more appointments, page:', page + 1);
-    fetchAppointments(page + 1);
-  }, [fetchAppointments, page, isLoadingMore, isLoading, hasMore]);
+  }, [user, authLoading, loadData]);
 
-  const handleViewPrescription = useCallback(
-    async (bookingId: number | string) => {
-      const numericId = Number(bookingId);
-      console.log('💊 [AppointmentsScreen] View prescription pressed:', {
-        bookingId,
-        numericId,
-      });
-      
-      try {
-        console.log('📡 [AppointmentsScreen] Fetching prescription for booking:', numericId);
-        const response = await apiService.getBookingPrescription(numericId);
-        console.log('📡 [AppointmentsScreen] Prescription API response:', {
-          hasData: !!response?.data,
-          prescriptionId: response?.data?.id,
-          prescriptionType: response?.data?.prescriptionType,
-        });
-        
-        if (response?.data?.id) {
-          console.log('🚀 [AppointmentsScreen] Navigating to PrescriptionDetail:', {
-            prescriptionId: response.data.id,
-          });
-          navigation.navigate('HomeStack', {
-            screen: 'PrescriptionDetail',
-            params: { prescriptionId: response.data.id },
-          });
-        } else {
-          console.log('ℹ️ [AppointmentsScreen] No prescription found');
-          Alert.alert('No prescription uploaded yet.');
-        }
-      } catch (error: any) {
-        const status = error?.response?.status;
-        console.error('❌ [AppointmentsScreen] Error fetching prescription:', {
-          status,
-          error: error?.message,
-          bookingId: numericId,
-        });
-        
-        if (status === 404) {
-          console.log('ℹ️ [AppointmentsScreen] Prescription not found (404)');
-          Alert.alert('No prescription uploaded yet.');
-        } else {
-          Alert.alert('Error', 'Failed to fetch prescription. Please try again later.');
-        }
-      }
-    },
-    [navigation],
+  // Refresh on Focus
+  useFocusEffect(
+    useCallback(() => {
+      if (user) loadData();
+    }, [user, loadData])
   );
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-            } catch (error) {
-              console.error('Logout error:', error);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const getStatusBadgeStyle = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'confirmed':
-      case 'upcoming':
-        return {
-          backgroundColor: '#E6F4F1',
-          textColor: theme.colors.primary,
-          icon: 'calendar-check',
-        };
-      case 'completed':
-        return {
-          backgroundColor: '#DCFCE7',
-          textColor: '#166534',
-          icon: 'checkmark-done-circle',
-        };
-      case 'pending':
-        return {
-          backgroundColor: '#FEF3C7',
-          textColor: '#92400E',
-          icon: 'time',
-        };
-      case 'cancelled':
-        return {
-          backgroundColor: '#FEE2E2',
-          textColor: '#B91C1C',
-          icon: 'close-circle',
-        };
-      default:
-        return {
-          backgroundColor: '#F8F9FA',
-          textColor: '#6B7280',
-          icon: 'help-circle',
-        };
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      const options: Intl.DateTimeFormatOptions = { 
-        weekday: 'short', 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric' 
-      };
-      return date.toLocaleDateString('en-US', options);
-    } catch {
-      return dateString;
-    }
-  };
-
-  const formatTime = (timeString: string) => {
-    try {
-      // Handle time format like "10:00" or "14:30"
-      const [hours, minutes] = timeString.split(':');
-      const hour = parseInt(hours, 10);
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const displayHour = hour % 12 || 12;
-      return `${displayHour}:${minutes} ${ampm}`;
-    } catch {
-      return timeString;
-    }
-  };
-
-  const renderAppointment = ({ item }: { item: any }) => {
-    // Handle both API response formats
-    const status = (item.booking_status || item.status || '').toLowerCase();
-    const statusBadgeStyle = getStatusBadgeStyle(status);
-    const bookingId = item.booking_id || item._id;
-    const appointmentId = item.appointment_id || bookingId?.toString();
-    const timeDisplay = item.time; // Already formatted as "09:00 - 09:15"
-
-    const handleAppointmentPress = () => {
-      // Log the full item to see available fields
-      console.log('🔍 [AppointmentsScreen] Full appointment item:', JSON.stringify(item, null, 2));
-      
-      // Extract professional ID with multiple fallbacks
-      const professionalId = String(
-        item.professional_id || 
-        item.professionalId || 
-        (item.professional && (item.professional.id || item.professional._id)) ||
-        (item.professional_data && (item.professional_data.id || item.professional_data._id)) ||
-        (item.professionalInfo && (item.professionalInfo.id || item.professionalInfo._id)) ||
-        ''
-      );
-      
-      // Extract current user ID with multiple fallbacks
-      const currentUserId = String(
-        (user as any)?.user_id || 
-        user?._id || 
-        (user as any)?.id || 
-        ''
-      );
-      
-      // Get professional name with fallbacks
-      const professionalName = 
-        item.professional_name ||
-        (item.professional && (item.professional.name || item.professional.fullName)) ||
-        (item.professional_data && item.professional_data.name) ||
-        (item.professionalInfo && item.professionalInfo.name) ||
-        'Unknown Professional';
-      
-      console.log('👆 [AppointmentsScreen] Appointment card pressed:', {
-        appointmentId,
-        bookingId,
-        professionalId: professionalId || 'NOT FOUND',
-        professionalName,
-        userId: currentUserId || 'NOT FOUND',
-        date: item.date,
-        status,
-        hasProfessionalId: !!professionalId,
-        itemKeys: Object.keys(item)
-      });
-      
-      if (appointmentId && currentUserId) {
-        console.log('🚀 [AppointmentsScreen] Navigating to AppointmentDetail:', { 
-          appointmentId, 
-          professionalId, 
-          userId: currentUserId,
-          professionalName
-        });
-        navigation.navigate('HomeStack', {
-          screen: 'AppointmentDetail',
-          params: {
-            appointmentId,
-            professionalId: professionalId || 'unknown',
-            userId: currentUserId,
-            professionalName,
-            appointmentData: item // Pass the complete appointment data
-          }
-        });
-      } else {
-        const missingFields = [];
-        if (!appointmentId) missingFields.push('appointmentId');
-        if (!currentUserId) missingFields.push('userId');
-        
-        console.error('❌ [AppointmentsScreen] Missing required parameters:', { 
-          appointmentId, 
-          professionalId, 
-          userId: currentUserId,
-          missingFields
-        });
-        
-        Alert.alert(
-          'Missing Information', 
-          `Unable to open appointment details. Missing: ${missingFields.join(', ')}`
-        );
-      }
-    };
+  const renderItem = ({ item }: { item: UnifiedAppointment }) => {
+    const isYoga = item.type === 'yoga_class';
+    const color = isYoga ? '#4CAF50' : '#2196F3'; 
 
     return (
-      <TouchableOpacity style={styles.appointmentCard} onPress={handleAppointmentPress}>
+      <View style={[styles.card, { borderLeftColor: color, borderLeftWidth: 5 }]}>
         <View style={styles.cardHeader}>
-          <View style={styles.dateTimeContainer}>
-            {/* Professional Name */}
-            {item.professional_name && (
-              <View style={styles.iconTextRow}>
-                <Ionicons name="person-circle" size={18} color="#1E88E5" />
-                <Text style={styles.professionalName}>{item.professional_name}</Text>
-              </View>
-            )}
-            <View style={styles.iconTextRow}>
-              <Ionicons name="calendar" size={18} color="#1E88E5" />
-              <Text style={styles.appointmentDate}>{formatDate(item.date)}</Text>
-            </View>
-            <View style={styles.iconTextRow}>
-              <Ionicons name="time" size={18} color="#1E88E5" />
-              <Text style={styles.appointmentTime}>{timeDisplay}</Text>
-            </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{item.title}</Text>
+            <Text style={styles.sub}>{item.subtitle}</Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: statusBadgeStyle.backgroundColor }]}>
-            <Ionicons name={statusBadgeStyle.icon as any} size={14} color={statusBadgeStyle.textColor} />
-            <Text style={[styles.statusText, { color: statusBadgeStyle.textColor }]}>
-              {status.toUpperCase()}
+          <View style={[styles.typeBadge, { backgroundColor: color + '20' }]}>
+            <Ionicons name={isYoga ? 'fitness' : 'medkit'} size={14} color={color} />
+            <Text style={[styles.typeText, { color }]}>{isYoga ? 'Yoga' : 'Consult'}</Text>
+          </View>
+        </View>
+        
+        {/* Date and Time Section */}
+        <View style={styles.cardContent}>
+          <View style={styles.detailRow}>
+            <Ionicons name="calendar" size={16} color="#6B7280" />
+            <Text style={styles.detailText}>
+              <Text style={styles.detailLabel}>Date: </Text>
+              {new Date(item.date).toLocaleDateString()}
+            </Text>
+          </View>
+          
+          <View style={styles.detailRowLast}>
+            <Ionicons name="time" size={16} color="#6B7280" />
+            <Text style={styles.detailText}>
+              <Text style={styles.detailLabel}>Time: </Text>
+              {formatTimeWithAMPM(item.time)}
             </Text>
           </View>
         </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.cardDetails}>
-          <View style={styles.detailRow}>
-            <Ionicons name="timer-outline" size={20} color="#6B7280" />
-            <Text style={styles.detailLabel}>Duration:</Text>
-            <Text style={styles.detailValue}>{item.duration} minutes</Text>
-          </View>
-
-          <View style={styles.detailRow}>
-            <Ionicons name="document-text-outline" size={20} color="#6B7280" />
-            <Text style={styles.detailLabel}>Booking ID:</Text>
-            <Text style={styles.detailValue}>#{bookingId}</Text>
-          </View>
-
-          {item.mode && (
-            <View style={styles.detailRow}>
-              <Ionicons name="videocam-outline" size={20} color="#6B7280" />
-              <Text style={styles.detailLabel}>Mode:</Text>
-              <Text style={styles.detailValue}>{item.mode.toUpperCase()}</Text>
-            </View>
-          )}
-
-          {item.amount && (
-            <View style={styles.detailRow}>
-              <Ionicons name="cash-outline" size={20} color="#6B7280" />
-              <Text style={styles.detailLabel}>Amount:</Text>
-              <Text style={styles.detailValue}>₹{item.amount}</Text>
-            </View>
-          )}
-
-          {item.coupon_code && (
-            <View style={styles.detailRow}>
-              <Ionicons name="pricetag-outline" size={20} color="#6B7280" />
-              <Text style={styles.detailLabel}>Coupon:</Text>
-              <Text style={styles.detailValue}>{item.coupon_code}</Text>
-            </View>
-          )}
-
-          {item.payment_status && (
-            <View style={styles.detailRow}>
-              <Ionicons name="card-outline" size={20} color="#6B7280" />
-              <Text style={styles.detailLabel}>Payment:</Text>
-              <Text style={styles.detailValue}>{item.payment_status}</Text>
-            </View>
-          )}
+        
+        <View style={styles.cardFooter}>
+          <Text style={[styles.statusText, { 
+             color: item.status === 'CONFIRMED' ? 'green' : 
+                    item.status === 'PENDING' ? 'orange' : 'red' 
+          }]}>
+            {item.status}
+          </Text>
+          
+          <TouchableOpacity onPress={() => {
+             // ✅ CORRECT: Navigate directly to the screen
+             navigation.navigate('AppointmentDetail', { 
+               appointmentId: item.reference_id,
+               type: item.type
+             });
+          }}>
+            <Text style={{ color: color, fontWeight: 'bold' }}>View Details</Text>
+          </TouchableOpacity>
         </View>
-
-        {(status === 'confirmed' || status === 'completed') && (
-          <View style={styles.actionsRow}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => {
-                Alert.alert(
-                  'Appointment Details',
-                  `Professional: ${item.professional_name}\nDate: ${formatDate(item.date)}\nTime: ${timeDisplay}\nMode: ${item.mode}\nAmount: ₹${item.amount}`,
-                );
-              }}
-            >
-              <Ionicons name="information-circle" size={20} color="#1E88E5" />
-              <Text style={styles.actionButtonText}>View Details</Text>
-            </TouchableOpacity>
-
-            {status === 'completed' && (
-              <TouchableOpacity
-                style={styles.secondaryActionButton}
-                onPress={() => handleViewPrescription(bookingId)}
-              >
-                <Ionicons name="medkit-outline" size={20} color={theme.colors.primary} />
-                <Text style={styles.secondaryActionButtonText}>View Prescription</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-      </TouchableOpacity>
+      </View>
     );
   };
 
-  if (isLoading || authLoading) {
+  if (isLoading && !isRefreshing && appointments.length === 0) {
     return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#1E88E5" />
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>My Appointments</Text>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#1E88E5" />
-          <Text style={styles.loadingText}>
-            {authLoading ? 'Loading...' : 'Loading your appointments...'}
-          </Text>
-        </View>
-      </SafeAreaView>
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={appTheme.colors.primary} />
+      </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1E88E5" />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Appointments</Text>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-          <Ionicons name="log-out-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* User Info Card */}
-      <View style={styles.userInfo}>
-        <View style={styles.userInfoHeader}>
-          <View style={styles.avatarContainer}>
-            <Ionicons name="person" size={24} color="#1E88E5" />
+      <StatusBar barStyle="light-content" backgroundColor={appTheme.colors.primary} />
+      <LinearGradient 
+        colors={[appTheme.colors.primary, appTheme.colors.secondary]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        
+        <View style={styles.headerContent}>
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
+          </TouchableOpacity>
+          
+          <View style={styles.titleContainer}>
+            <Text style={styles.headerTitle}>My Bookings</Text>
+            <Text style={styles.headerSubtitle}>Manage your appointments</Text>
           </View>
-          <View style={styles.userDetails}>
-            <Text style={styles.welcomeText}>
-              Welcome, {user?.first_name || user?.firstName || 'User'} {user?.last_name || user?.lastName || ''}
-            </Text>
-            {user?.phone && (
-              <View style={styles.phoneRow}>
-                <Ionicons name="call" size={14} color="#6B7280" />
-                <Text style={styles.userPhone}>{user.phone}</Text>
-              </View>
-            )}
-          </View>
+          
+          <View style={styles.placeholderButton} />
         </View>
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{appointments.length}</Text>
-            <Text style={styles.statLabel}>Total</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>
-              {appointments.filter((a: any) => (a.booking_status || a.status || '').toLowerCase() === 'confirmed').length}
-            </Text>
-            <Text style={styles.statLabel}>Confirmed</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>
-              {appointments.filter((a: any) => (a.booking_status || a.status || '').toLowerCase() === 'completed').length}
-            </Text>
-            <Text style={styles.statLabel}>Completed</Text>
-          </View>
-        </View>
-      </View>
+        
+        {/* Decorative elements */}
+        <View style={styles.topCircle} />
+        <View style={styles.bottomWave} />
+      </LinearGradient>
 
-      {/* Content Area */}
-      {error ? (
-        <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={64} color="#EF4444" />
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={handleRefresh} style={styles.retryButton}>
-            <Ionicons name="refresh" size={20} color="#FFFFFF" />
-            <Text style={styles.retryText}>Retry</Text>
+      {/* Filter Chips */}
+      <View style={styles.filterContainer}>
+        {/* Main Filters */}
+        <View style={styles.mainFilterRow}>
+          <TouchableOpacity
+            style={[styles.filterChip, selectedFilter === 'all' && styles.filterChipActive]}
+            onPress={() => {
+              setSelectedFilter('all');
+              setSubFilter('all');
+            }}
+          >
+            <Text style={[styles.filterText, selectedFilter === 'all' && styles.filterTextActive]}>
+              All ({appointments.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterChip, selectedFilter === 'upcoming' && styles.filterChipActive]}
+            onPress={() => {
+              setSelectedFilter('upcoming');
+              setSubFilter('all');
+            }}
+          >
+            <Text style={[styles.filterText, selectedFilter === 'upcoming' && styles.filterTextActive]}>
+              Upcoming ({appointments.filter(item => item.status === 'CONFIRMED' || item.status === 'PENDING').length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterChip, selectedFilter === 'completed' && styles.filterChipActive]}
+            onPress={() => {
+              setSelectedFilter('completed');
+              setSubFilter('all');
+            }}
+          >
+            <Text style={[styles.filterText, selectedFilter === 'completed' && styles.filterTextActive]}>
+              Completed ({appointments.filter(item => item.status === 'COMPLETED').length})
+            </Text>
           </TouchableOpacity>
         </View>
-      ) : (
+
+        {/* Sub Filters - Show only when main filter is not 'all' */}
+        {selectedFilter !== 'all' && (
+          <View style={styles.subFilterRow}>
+            <TouchableOpacity
+              style={[styles.subFilterChip, subFilter === 'all' && styles.subFilterChipActive]}
+              onPress={() => setSubFilter('all')}
+            >
+              <Text style={[styles.subFilterText, subFilter === 'all' && styles.subFilterTextActive]}>
+                All Types
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.subFilterChip, subFilter === 'consultation' && styles.subFilterChipActive]}
+              onPress={() => setSubFilter('consultation')}
+            >
+              <Text style={[styles.subFilterText, subFilter === 'consultation' && styles.subFilterTextActive]}>
+                Consultations
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.subFilterChip, subFilter === 'yoga_class' && styles.subFilterChipActive]}
+              onPress={() => setSubFilter('yoga_class')}
+            >
+              <Text style={[styles.subFilterText, subFilter === 'yoga_class' && styles.subFilterTextActive]}>
+                Yoga Classes
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
         <FlatList
-          data={appointments}
-          renderItem={renderAppointment}
-          keyExtractor={(item: any) => String(item.booking_id || item._id || Math.random())}
-          contentContainerStyle={[
-            styles.listContainer,
-            appointments.length === 0 && styles.emptyListContainer,
-          ]}
+          data={filteredAppointments}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ padding: 16 }}
           refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              colors={["#1E88E5"]}
-              tintColor="#1E88E5"
-            />
-          }
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={
-            isLoadingMore ? (
-              <View style={styles.footerLoader}>
-                <ActivityIndicator size="small" color="#1E88E5" />
-                <Text style={styles.footerLoaderText}>Loading more appointments...</Text>
-              </View>
-            ) : null
+            <RefreshControl refreshing={isRefreshing} onRefresh={() => { setIsRefreshing(true); loadData(); }} />
           }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="calendar-outline" size={80} color="#D1D5DB" />
-              <Text style={styles.emptyText}>No Appointments Yet</Text>
-              <Text style={styles.emptySubtext}>
-                Your booking history will appear here.{"\n"}
-                Start by booking your first consultation!
-              </Text>
+            <View style={styles.center}>
+               <Text style={{ color: '#999', marginTop: 50 }}>No appointments found.</Text>
             </View>
           }
         />
-      )}
+      </Animated.View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#1E88E5',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingTop: (StatusBar.currentHeight || 0) + 16,
-    elevation: 4,
+  container: { flex: 1, backgroundColor: theme.colors.background.primary },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: { 
+    paddingTop: 40,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  titleContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerTitle: { 
+    color: theme.colors.background.surface, 
+    fontSize: 20, 
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  headerSubtitle: {
+    color: theme.colors.background.surface,
+    fontSize: 14,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  placeholderButton: {
+    width: 40,
+  },
+  topCircle: {
+    position: 'absolute',
+    top: -50,
+    right: -50,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  bottomWave: {
+    position: 'absolute',
+    bottom: -20,
+    left: -50,
+    right: -50,
+    height: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  card: { 
+    backgroundColor: theme.colors.background.surface, 
+    marginBottom: 16, 
+    borderRadius: theme.borderRadius.l, 
+    padding: 16, 
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+  title: { fontSize: 16, fontWeight: 'bold', color: theme.colors.text.primary },
+  sub: { fontSize: 14, color: theme.colors.text.secondary },
+  cardContent: { marginBottom: 12 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  detailRowLast: { flexDirection: 'row', alignItems: 'center', marginBottom: 0 },
+  detailText: { fontSize: 14, color: theme.colors.text.secondary, marginLeft: 8 },
+  detailLabel: { fontWeight: '600', color: theme.colors.text.primary },
+  typeBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  typeText: { fontSize: 10, fontWeight: '700', marginLeft: 4, textTransform: 'uppercase' },
+  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#eee' },
+  statusText: { fontSize: 12, fontWeight: 'bold' },
+  
+  // Filter Styles
+  filterContainer: { 
+    backgroundColor: theme.colors.background.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingHorizontal: 16,
+  },
+  mainFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  subFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingBottom: 16,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  filterChip: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16, 
+    paddingVertical: 8, 
+    borderRadius: 20, 
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    height: 36,
+    marginRight: 24,
+    minWidth: 80,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  filterChipActive: { 
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
+    elevation: 3,
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  logoutButton: {
+  subFilterChip: { 
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 4,
-  },
-  logoutText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  userInfo: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    marginBottom: 8,
-    elevation: 2,
+    justifyContent: 'center',
+    paddingHorizontal: 18, 
+    paddingVertical: 8, 
+    borderRadius: 18, 
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    height: 36,
+    marginRight: 24,
+    minWidth: 90,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 2,
+    elevation: 1,
   },
-  userInfoHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
+  subFilterChipActive: { 
+    backgroundColor: theme.colors.secondary || '#6c757d',
+    borderColor: theme.colors.secondary || '#6c757d',
+    shadowColor: theme.colors.secondary || '#6c757d',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  avatarContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#E0F2FE',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  userDetails: {
-    flex: 1,
-  },
-  welcomeText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  phoneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  userPhone: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1E88E5',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    textTransform: 'uppercase',
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#E5E7EB',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#EF4444',
+  filterText: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    color: '#495057',
     textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 24,
-    lineHeight: 24,
+    lineHeight: 18,
+    letterSpacing: 0.2,
   },
-  retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1E88E5',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  retryText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  listContainer: {
-    padding: 16,
-  },
-  emptyListContainer: {
-    flexGrow: 1,
-  },
-  appointmentCard: {
-    backgroundColor: defaultTheme.colors.background.surface,
-    borderRadius: 16,
-    marginBottom: 16,
-    ...defaultTheme.shadows.card,
-    overflow: 'hidden',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: 16,
-    paddingBottom: 12,
-  },
-  dateTimeContainer: {
-    flex: 1,
-    gap: 8,
-  },
-  iconTextRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  appointmentDate: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  appointmentTime: {
-    fontSize: 15,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  professionalName: {
-    fontSize: 16,
+  filterTextActive: { 
+    color: '#fff',
     fontWeight: '700',
-    color: '#1F2937',
   },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 16,
-  },
-  cardDetails: {
-    padding: 16,
-    gap: 12,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  detailValue: {
-    fontSize: 14,
-    color: '#1F2937',
-    fontWeight: '600',
-    flex: 1,
-  },
-  notesContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    backgroundColor: '#F9FAFB',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 4,
-  },
-  notesText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#4B5563',
-    lineHeight: 20,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#E0F2FE',
-    paddingVertical: 12,
-    gap: 8,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-  },
-  actionButtonText: {
-    color: '#1E88E5',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  secondaryActionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: defaultTheme.colors.primary,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-  },
-  secondaryActionButtonText: {
-    color: defaultTheme.colors.primary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 80,
-    paddingHorizontal: 32,
-  },
-  emptyText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#6B7280',
-    marginTop: 24,
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 15,
-    color: '#9CA3AF',
+  subFilterText: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    color: '#6c757d',
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 18,
+    letterSpacing: 0.2,
   },
-  footerLoader: {
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  footerLoaderText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#6B7280',
-  },
+  subFilterTextActive: { 
+    color: '#fff',
+    fontWeight: '700',
+  }
 });
 
 export default AppointmentsScreen;

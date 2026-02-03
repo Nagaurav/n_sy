@@ -1,207 +1,57 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
-  ViewStyle,
-  TextStyle,
+  StatusBar,
+  TextInput,
   ActivityIndicator,
   Linking,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Animated,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { theme } from '../theme';
-import { apiService } from '../services/apiService';
-import { FloatingLabelInput } from '../components/FloatingLabelInput';
+import Icon from 'react-native-vector-icons/Ionicons'; // Ensure you have this or MaterialIcons
 import { useTheme } from '../contexts/ThemeContext';
-
-type Styles = {
-  container: ViewStyle;
-  header: ViewStyle;
-  logoContainer: ViewStyle;
-  logoCircle: ViewStyle;
-  logoText: TextStyle;
-  appName: TextStyle;
-  content: ViewStyle;
-  title: TextStyle;
-  subtitle: TextStyle;
-  inputContainer: ViewStyle;
-  input: TextStyle;
-  countryCode: TextStyle;
-  phoneInputContainer: ViewStyle;
-  phoneInputWrapper: ViewStyle;
-  phoneInput: TextStyle;
-  button: ViewStyle;
-  buttonText: TextStyle;
-  buttonDisabled: ViewStyle;
-  errorText: TextStyle;
-  loginWithEmailButton: ViewStyle;
-  loginWithEmailText: TextStyle;
-  footer: ViewStyle;
-  footerText: TextStyle;
-  linkText: TextStyle;
-};
-
-const styles = StyleSheet.create<Styles>({
-  container: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-  },
-  header: {
-    backgroundColor: theme.colors.primary,
-    paddingVertical: 40,
-    paddingBottom: 60,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    alignItems: 'center',
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  logoCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  logoText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  appName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: 1,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 40,
-    marginTop: -30,
-    backgroundColor: '#F3F4F6',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 40,
-    lineHeight: 24,
-  },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  input: {
-    fontSize: 16,
-    color: '#1F2937',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  phoneInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    marginBottom: 24,
-  },
-  phoneInputWrapper: {
-    flex: 1,
-    marginLeft: 0,
-  },
-  phoneInput: {
-    fontSize: 16,
-  },
-  countryCode: {
-    fontSize: 16,
-    color: '#1F2937',
-    fontWeight: '600',
-    marginRight: 8,
-  },
-  button: {
-    backgroundColor: '#008272',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  buttonDisabled: {
-    backgroundColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  errorText: {
-    color: '#EF4444',
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  loginWithEmailButton: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    marginTop: 8,
-  },
-  loginWithEmailText: {
-    color: theme.colors.primary,
-    fontSize: 14,
-    fontWeight: '500',
-    textDecorationLine: 'underline',
-  },
-  footer: {
-    position: 'absolute',
-    bottom: 40,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 24,
-  },
-  footerText: {
-    fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  linkText: {
-    color: '#1E88E5',
-    textDecorationLine: 'underline',
-  },
-});
+import { authService } from '../services';
 
 const PhoneNumberScreen = ({ navigation }: any) => {
   const { theme } = useTheme();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(50));
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   // Validate phone number (exactly 10 digits)
   const isValidPhoneNumber = (number: string) => {
     const phoneRegex = /^[0-9]{10}$/;
     return phoneRegex.test(number);
+  };
+
+  const handlePhoneNumberChange = (text: string) => {
+    // Only allow numeric input and limit to 10 digits
+    const numericText = text.replace(/[^0-9]/g, '').slice(0, 10);
+    setPhoneNumber(numericText);
+    setError('');
   };
 
   const handleSendOTP = async () => {
@@ -214,100 +64,204 @@ const PhoneNumberScreen = ({ navigation }: any) => {
     setError('');
 
     try {
-      const response = await apiService.sendOTP(phoneNumber);
-
+      const response = await authService.sendOTP(phoneNumber);
       if (response.success) {
         navigation.navigate('OTP', { phoneNumber });
       } else {
         setError(response.error || 'Failed to send OTP. Please try again.');
       }
     } catch (err) {
-      console.error('OTP send error:', err);
-      setError('Network error. Please check your connection and try again.');
+      setError('Unable to connect. Please check your internet connection and try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handlePhoneNumberChange = (text: string) => {
-    // Only allow numeric input and limit to 10 digits
-    const numericText = text.replace(/[^0-9]/g, '').slice(0, 10);
-    setPhoneNumber(numericText);
-    setError('');
-  };
-
-  const openTermsOfService = () => {
-    // Replace with actual terms of service URL
-    Linking.openURL('https://samyayog.com/terms');
-  };
-
-  const openPrivacyPolicy = () => {
-    // Replace with actual privacy policy URL
-    Linking.openURL('https://samyayog.com/privacy');
-  };
-
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      
+      {/* Header with Logo (matching LoginScreen) */}
       <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
-        <View style={styles.logoContainer}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>SY</Text>
-          </View>
-          <Text style={styles.appName}>SAMYAYOG</Text>
-        </View>
+        <Image 
+          source={require('../assets/logo.jpg')} 
+          style={styles.logoImage} 
+          resizeMode="contain" 
+        />
       </View>
       
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
-
         <View style={styles.content}>
-          <Text style={styles.title}>Welcome to Samyayog</Text>
-          <Text style={styles.subtitle}>Enter your mobile number to begin.</Text>
-
-          <View style={styles.phoneInputContainer}>
-            <Text style={styles.countryCode}>🇮🇳 +91</Text>
-            <FloatingLabelInput
-              label="Phone Number"
-              value={phoneNumber}
-              onChangeText={handlePhoneNumberChange}
-              error={error}
-              keyboardType="phone-pad"
-              maxLength={10}
-              autoFocus
-              containerStyle={styles.phoneInputWrapper}
-              inputStyle={styles.phoneInput}
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[
-              phoneNumber.length === 10 ? styles.button : styles.buttonDisabled
-            ]}
-            onPress={handleSendOTP}
-            disabled={phoneNumber.length !== 10 || isLoading}
-            activeOpacity={0.8}
+          <Animated.View 
+            style={{
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }}
           >
-            {isLoading ? (
-              <ActivityIndicator color={theme.colors.background.white} size="small" />
-            ) : (
-              <Text style={styles.buttonText}>Send OTP</Text>
-            )}
-          </TouchableOpacity>
+            <View style={[styles.card, { backgroundColor: theme.colors.background.surface, ...theme.shadows.float }]}>
+              <Text style={[styles.title, { color: theme.colors.text.primary }]}>Welcome to Samyayog</Text>
+              <Text style={[styles.subtitle, { color: theme.colors.text.secondary }]}>Enter your mobile number</Text>
 
-          {/* Login with Email option */}
-          <TouchableOpacity
-            style={styles.loginWithEmailButton}
-            onPress={() => navigation.navigate('Login')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.loginWithEmailText}>Login with Email Instead</Text>
-          </TouchableOpacity>
+              {/* PHONE INPUT */}
+              <View style={styles.inputContainer}>
+                <Text style={[styles.label, { color: theme.colors.text.secondary }]}>Enter your phone</Text>
+                <View style={[styles.phoneInputContainer, { borderBottomColor: theme.colors.text.secondary }]}>
+                  <Text style={[styles.countryCode, { color: theme.colors.text.primary }]}>+91</Text>
+                  <TextInput
+                    style={[styles.phoneInput, { color: theme.colors.text.primary }]}
+                    value={phoneNumber}
+                    onChangeText={handlePhoneNumberChange}
+                    keyboardType="phone-pad"
+                    maxLength={10}
+                    placeholder="9876543210"
+                    placeholderTextColor={theme.colors.text.secondary}
+                    autoFocus
+                  />
+                </View>
+                {error ? <Text style={[styles.errorText, { color: theme.colors.error }]}>{error}</Text> : null}
+              </View>
+
+              {/* ACTION BUTTON */}
+              <TouchableOpacity 
+                style={[
+                  styles.button, 
+                  phoneNumber.length === 10 && !isLoading ? { backgroundColor: theme.colors.primary } : { backgroundColor: theme.colors.text.secondary },
+                  phoneNumber.length === 10 && !isLoading && { ...theme.shadows.card }
+                ]} 
+                onPress={handleSendOTP}
+                disabled={phoneNumber.length < 10 || isLoading}
+                activeOpacity={0.8}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.buttonText}>Send OTP</Text>
+                )}
+              </TouchableOpacity>
+
+              <Text style={[styles.otpText, { color: theme.colors.text.secondary }]}>We'll send you a one-time password</Text>
+
+              {/* Login with Email option */}
+              <TouchableOpacity
+                style={styles.toggleButton}
+                onPress={() => navigation.navigate('Login')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.toggleButtonText, { color: theme.colors.primary }]}>Log in using Email</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+
+      </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  // 🟢 NEW HEADER STYLES (matching LoginScreen)
+  header: {
+    height: 160, // Same as LoginScreen
+    width: '100%',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden',
+    position: 'relative',
+    marginTop: 40, // Same as LoginScreen
+    alignItems: 'center', // Center the logo
+    justifyContent: 'center', // Center the logo
+  },
+  logoImage: {
+    width: 120, // Same as LoginScreen
+    height: 120, // Same as LoginScreen
+    resizeMode: 'contain', // Same as LoginScreen
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 30,
+  },
+  card: {
+    marginHorizontal: 0,
+    marginTop: 20,
+    marginBottom: 40,
+    borderRadius: 24,
+    padding: 32,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  phoneInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    paddingVertical: 12,
+  },
+  phoneInput: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  countryCode: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginRight: 10,
+  },
+  errorText: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: '400',
+  },
+  otpText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  button: {
+    borderRadius: 16,
+    paddingVertical: 18,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  toggleButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  toggleButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  });
 
 export default PhoneNumberScreen;

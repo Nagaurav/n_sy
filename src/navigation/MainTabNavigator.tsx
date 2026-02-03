@@ -5,7 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { MainTabParamList } from '../types/navigation';
 
 // Import your screen components
-import HomeScreen from '../screens/HomeScreen';
+import ModernHomeScreen from '../screens/ModernHomeScreen';
 import AppointmentsScreen from '../screens/AppointmentsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
@@ -55,7 +55,7 @@ export const MainTabNavigator: React.FC = () => {
     >
       <Tab.Screen 
         name="Home" 
-        component={HomeScreen}
+        component={ModernHomeScreen}
         options={{
           tabBarLabel: 'Home',
         }}

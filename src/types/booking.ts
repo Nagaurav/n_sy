@@ -1,4 +1,6 @@
 // Booking and consultation related types
+import { Professional } from './professional'; // <--- Add this import
+
 export interface Speciality {
   speciality_id: number;
   name: string;
@@ -6,37 +8,6 @@ export interface Speciality {
   type: string;
   created_at: string;
   updated_at: string;
-}
-
-export interface Professional {
-  // API Response Fields
-  professional_id: number;
-  first_name: string;
-  last_name: string;
-  role: string;
-  city: string;
-  state: string;
-  gender: string;
-  language: string;
-  speciality_new: Speciality;
-  work_arrangement: string;
-  is_verified: boolean;
-  
-  // Backward compatibility fields
-  _id?: string;
-  firstName?: string;
-  lastName?: string;
-  specialization?: string;
-  speciality?: string;
-  experience?: number;
-  rating?: number;
-  availability?: boolean;
-  is_online?: boolean;
-  profileImage?: string;
-  profile_picture_url?: string;
-  min_session_price?: number;
-  description?: string;
-  languages?: string[];
 }
 
 export interface TimeSlot {
@@ -66,18 +37,30 @@ export interface TimeSlot {
 }
 
 export interface ConsultationBooking {
-  _id: string;
-  user_id: string;
-  professional_id: string;
-  slot_id: string;
+  // API Response Fields (snake_case from backend)
+  booking_id?: number;
+  professional_name?: string;
+  booking_status?: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
+  payment_status?: 'PENDING' | 'COMPLETED';
+  mode?: 'online' | 'offline';
+  amount?: number;
+  transaction_id?: string;
+  
+  // Core fields (both API and legacy)
+  user_id: number | string;
+  professional_id: number | string;
   date: string;
-  time: string;
+  time: string; // Already formatted as "09:00 - 09:15"
   duration: number;
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
   coupon_code?: string;
+  
+  // Legacy fields for backward compatibility (camelCase)
+  _id?: string;
+  slot_id?: string;
+  status?: 'pending' | 'confirmed' | 'completed' | 'cancelled';
   notes?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CreateBookingRequest {
@@ -185,6 +168,7 @@ export interface SectionData {
   title: string; // The date string (YYYY-MM-DD or formatted)
   data: FormattedAvailableSlot[]; // Slots for that date
   formattedDate?: string; // Formatted date string (e.g., 'Monday, January 1, 2023')
+  dateLabel?: string; // Short date label (e.g., 'Today', 'Tomorrow', 'Monday')
 }
 
 // Filter and Sort interfaces
@@ -217,4 +201,36 @@ export interface FilterModalState {
   sort_by: 'rating' | 'price_asc' | 'price_desc' | 'reviews';
   city?: string;
   role?: string;
+}
+
+// 🟢 Unified Payment Parameters for both Consultation and Yoga Bookings
+export interface BookingPaymentParams {
+  userId: string | number;
+  professionalId: string | number;
+  serviceType: 'consultation' | 'yoga_class'; // 🟢 The Switch
+  amount: number;
+  duration?: number; // Duration in minutes for consultations
+  couponCode?: string;
+  
+  // 🟢 Optionals based on type
+  slotId?: number;       // For Consultations
+  yogaPlanId?: number;   // For Yoga
+  deliveryMode?: string; // For Yoga (e.g., 'GROUP_ONLINE')
+}
+
+// 🟢 Unified Appointment Structure for UI Display
+export interface UnifiedAppointment {
+  id: string; // Unique UI ID (e.g., "yoga-5", "consult-10")
+  reference_id: number; // Database ID
+  type: 'consultation' | 'yoga_class';
+  status: string;
+  payment_status: string;
+  amount: number;
+  date: string;
+  time: string; // Time slot or schedule time
+  title: string;
+  subtitle: string;
+  imageUrl?: string;
+  professional?: any;
+  yoga_plan?: any; // Extra details for Yoga
 }

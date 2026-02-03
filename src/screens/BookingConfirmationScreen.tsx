@@ -1,870 +1,741 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ActivityIndicator, 
-  Alert, 
+import React, { useState, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
-  TextInput,
-  Linking,
-  Platform
+  ActivityIndicator,
+  StatusBar,
+  Animated,
+  SafeAreaView,
+  Dimensions,
+  Alert,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { useAppSelector } from '../store';
-import Config from 'react-native-config';
-import { CommonActions, useFocusEffect } from '@react-navigation/native';
+import LinearGradient from 'react-native-linear-gradient';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useAuth } from '../hooks/useAuth';
+import { useTheme } from '../contexts/ThemeContext';
+import { formatDisplayDate, formatDisplayTime, formatSlotTimeRange, formatShortDate } from '../utils/dateUtils';
 import { theme } from '../theme';
-import { usePayment } from '../hooks/usePayment';
-import apiService from '../services/apiService';
+import { apiService } from '../services';
 
-// Define the structure of data received via route.params
-interface BookingData {
-  // Professional info
-  professionalId: string;
-  professionalName: string;
-  
-  // Booking details
-  slot_id?: string;
-  date?: string;
-  time?: string;
-  startDate?: string;
-  startTime?: string;
-  endTime?: string;
-  days?: string;
-  duration: number | string;
-  price: number;
-  coupon_code?: string;
-  
-  // Service/Plan info
-  serviceName?: string;
-  serviceId?: string;
-  serviceType?: 'yoga_class' | 'consultation' | 'membership';
-  yogaPlanId?: number;
-  planTitle?: string;
-  
-  // Session details
-  sessionMode?: string;
-  sessionModeLabel?: string;
-  location?: string;
-  languages?: string;
-  maxParticipants?: number;
-  
-  // Service details (nested object)
-  serviceDetails?: {
-    id: string;
-    name: string;
-    duration: number;
+type RouteParams = {
+  bookingData: {
+    serviceType: 'consultation' | 'yoga_class';
+    professionalId: string | number;
+    professionalName: string;
+    professionalSpecialization?: string;
+    serviceName: string;
     price: number;
-    serviceType?: string;
+    basePrice?: number;
+    discount?: number;
+    platformFee?: number;
+    date?: string;
+    time?: string;
+    startTime?: string;
+    endTime?: string;
+    duration?: number;
+    deliveryMode?: string;
+    yogaPlanId?: string | number;
+    slotId?: string | number;
+    cancellationPolicy?: string;
   };
-  
-  // Additional identifiers (commented out as they're likely duplicates)
-  // id: string;
-  // name: string;
-  // duration: number;
-  // price: number;
-}
-
-type BookingConfirmationRouteProp = RouteProp<{
-  BookingConfirmation: {
-    bookingData: BookingData;
-  };
-}, 'BookingConfirmation'>;
-
-type NavigationProp = {
-  navigate: (screen: string, params?: any) => void;
-  goBack: () => void;
-  dispatch: (action: any) => void;
 };
 
-// Define the expected structure of the API response
-interface CreateBookingSuccessResponse {
-  msg: string;
-  data: {
-    booking_id: number;
-    user_id: number;
-    professional_id: number;
-    coupon_code: string | null;
-    date: string;
-    time: string;
-    mode: 'online' | 'offline';
-    duration: number;
-    payment_id: string;
-    final_amount: number;
-    original_amount: number;
-    discount_amount: number;
-  };
-  payment_url: string;
-}
+const { width, height } = Dimensions.get('window');
 
 const BookingConfirmationScreen = () => {
-  const navigation = useNavigation<NavigationProp>();
-  const route = useRoute<BookingConfirmationRouteProp>();
-  const { bookingData } = route.params;
+  const navigation = useNavigation();
+  const route = useRoute();
+  const { user } = useAuth();
+  const appTheme = useTheme();
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Get auth state from Redux
-  const { user, isAuthenticated, isLoading: isAuthLoading } = useAppSelector((state: any) => state.auth);
-  const userId = user?.user_id || user?._id;
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const { checkPaymentStatus, initiatePayment, isProcessing: isPaymentProcessing, paymentStatus, paymentError, resetPaymentState } = usePayment();
-  const [couponCode, setCouponCode] = useState(bookingData?.coupon_code || '');
-  const [isCouponApplied, setIsCouponApplied] = useState(!!bookingData?.coupon_code);
-  const [priceDetails, setPriceDetails] = useState({
-    original_amount: bookingData?.price || 0,
-    discount_amount: 0,
-    final_amount: bookingData?.price || 0
-  });
-
-  // Format price with currency
-  const formatPrice = (amount: number) => {
-    return `₹${amount.toFixed(2)}`;
-  };
-
-  const handleApplyCoupon = useCallback(async () => {
-    const code = couponCode.trim();
-    if (!code) return;
-
-    try {
-      setIsLoading(true);
-
-      // Determine slot and duration for price calculation
-      const rawSlotId = (bookingData as any).slotId ?? bookingData.slot_id;
-      const numericSlotId = Number(rawSlotId);
-
-      if (!Number.isFinite(numericSlotId) || numericSlotId <= 0) {
-        Alert.alert(
-          'Error',
-          'Unable to apply coupon because the booking slot could not be determined. Please go back and re-select your time slot.',
-        );
-        return;
-      }
-
-      const duration =
-        typeof bookingData.duration === 'string'
-          ? parseInt(bookingData.duration, 10)
-          : bookingData.duration || 60;
-
-      const result = await apiService.calculateBookingPrice({
-        slotId: numericSlotId,
-        duration,
-        couponCode: code,
-        userId,
-      });
-
-      if (!result.success || !result.data) {
-        Alert.alert('Error', result.error || 'Invalid or expired coupon code');
-        return;
-      }
-
-      setPriceDetails({
-        original_amount: result.data.original_amount,
-        discount_amount: result.data.discount_amount,
-        final_amount: result.data.final_amount,
-      });
-
-      setIsCouponApplied(true);
-    } catch (error) {
-      console.error('Error applying coupon:', error);
-      Alert.alert(
-        'Error',
-        error instanceof Error
-          ? error.message
-          : 'Invalid or expired coupon code',
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [couponCode, bookingData]);
-
-  const handleRemoveCoupon = useCallback(() => {
-    setCouponCode('');
-    setIsCouponApplied(false);
-    setPriceDetails(prev => ({
-      ...prev,
-      discount_amount: 0,
-      final_amount: prev.original_amount
-    }));
-  }, []);
-
-  // Handle authentication and navigation
-  useEffect(() => {
-    if (isAuthLoading) {
-      // Still loading auth state
-      return;
-    }
-
-    if (!isAuthenticated || !userId) {
-      console.log('User not authenticated, redirecting to login...');
-      setError('Please sign in to continue with booking');
-      
-      const timer = setTimeout(() => {
-        navigation.dispatch(
-          CommonActions.reset({
-            index: 0,
-            routes: [
-              { 
-                name: 'Auth',
-                params: { 
-                  screen: 'Login',
-                  params: { 
-                    redirect: 'BookingConfirmation',
-                    params: { bookingData }
-                  }
-                } 
-              }
-            ]
-          })
-        );
-      }, 1000);
-      
-      return () => clearTimeout(timer);
-    } else {
-      // User is authenticated
-      setError('');
-      console.log('User is authenticated, proceeding with booking confirmation');
-    }
-  }, [isAuthenticated, isAuthLoading, userId, navigation, bookingData]);
-
-  // Show loading state while checking auth
-  if (isAuthLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+  // Helper component for consistent detail rows
+  const DetailRow = ({ label, value, icon }: { label: string; value: string; icon: string }) => (
+    <View style={styles.detailRow}>
+      <View style={styles.detailIconContainer}>
+        <Ionicons name={icon as any} size={20} color={appTheme.theme.colors.primary} />
       </View>
-    );
-  }
-
-  // Show error if not authenticated
-  if (!isAuthenticated || !userId) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>{error}</Text>
+      <View style={styles.detailContent}>
+        <Text style={styles.detailLabel}>{label}</Text>
+        <Text style={styles.detailValue}>{value}</Text>
       </View>
-    );
-  }
-
-  // Handle deep linking for payment callback
-  useFocusEffect(
-    useCallback(() => {
-      const handleDeepLink = async (event: { url: string }) => {
-        const url = event.url;
-        if (url.includes('payment-status')) {
-          const params = new URLSearchParams(url.split('?')[1]);
-          const status = params.get('status');
-          const bookingId = params.get('bookingId');
-          const paymentId = params.get('paymentId');
-          
-          if (status === 'success' && bookingId && paymentId) {
-            try {
-              setIsLoading(true);
-              // Verify payment status with the backend
-              const paymentStatus = await checkPaymentStatus(paymentId);
-              
-              if (paymentStatus.success) {
-                // Navigate to success screen with booking details
-                navigation.navigate('BookingSuccess', {
-                  bookingId: bookingId,
-                  paymentId: paymentId || '',
-                  amount: priceDetails.final_amount,
-                  bookingDetails: {
-                    professionalName: bookingData.professionalName,
-                    serviceName: bookingData.serviceDetails?.name || 'Yoga Session'
-                  }
-                });
-              } else {
-                setError(paymentStatus.error || 'Payment verification failed. Please check your bookings.');
-              }
-            } catch (error) {
-              console.error('Error verifying payment:', error);
-              setError('Error verifying payment. Please check your bookings.');
-            } finally {
-              setIsLoading(false);
-            }
-          } else {
-            setError('Payment failed or incomplete. Please try again.');
-          }
-        }
-      };
-
-      // Add event listener for deep links
-      const subscription = Linking.addEventListener('url', handleDeepLink as any);
-
-      // Check if the app was opened from a deep link
-      Linking.getInitialURL().then(url => {
-        if (url) handleDeepLink({ url });
-      });
-
-      return () => {
-        subscription.remove();
-      };
-    }, [navigation, bookingData, priceDetails, checkPaymentStatus])
+    </View>
   );
 
-  // Handle payment errors
-  useEffect(() => {
-    if (paymentError) {
-      Alert.alert('Payment Error', paymentError);
-      resetPaymentState();
-    }
-  }, [paymentError, resetPaymentState]);
+  // Helper functions for labels
+  const getDeliveryModeLabel = (mode: string) => {
+    const modeMap: Record<string, string> = {
+      'online': 'Online Video Call',
+      'offline': 'In-Person Visit',
+      'group_online': 'Group Online Class',
+      'group_offline': 'Group In-Person Class',
+      'one_to_one': '1-on-1 Session',
+      'home_visit': 'Home Visit',
+    };
+    return modeMap[mode] || mode.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
 
-  // Handle booking confirmation
-  const handleConfirmBooking = useCallback(async () => {
-    if (!userId) {
-      setError('Please sign in to continue with booking');
+  const getDurationLabel = (duration: number, isYoga: boolean) => {
+    if (isYoga) {
+      if (duration >= 60) {
+        const months = Math.floor(duration / 60);
+        return `${months} Month${months > 1 ? 's' : ''}`;
+      }
+      return `${duration} Days`;
+    }
+    return `${duration} Minutes`;
+  };
+
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+
+  const { bookingData } = route.params as RouteParams;
+  const isYoga = bookingData?.serviceType === 'yoga_class';
+
+  // Start animations when component mounts
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  const handleConfirmBooking = async () => {
+    if (!user?.user_id && !user?.id && !user?._id) {
+      Alert.alert('Error', 'Please login to continue with booking.');
       return;
     }
 
-    setIsLoading(true);
-    setError('');
-
+    setIsProcessing(true);
+    
     try {
-      // Log the booking data for debugging
-      console.log('Booking data:', {
-        bookingData,
-        priceDetails,
-        userId
-      });
+      // Normalize delivery mode for backend (convert to uppercase)
+      const normalizedDeliveryMode = bookingData.deliveryMode?.toUpperCase();
 
-      // Validate required fields
-      if (!bookingData.professionalId) {
-        throw new Error('Professional ID is required');
-      }
-
-      // Check if we have either a slot_id or a date (for both regular and yoga plan bookings)
-      const hasSlotInfo = bookingData.slot_id || bookingData.date || bookingData.startDate;
-      
-      if (!hasSlotInfo) {
-        console.log('Missing booking info:', {
-          slot_id: bookingData.slot_id,
-          startDate: bookingData.startDate,
-          date: bookingData.date,
-          yogaPlanId: bookingData.yogaPlanId,
-          isYogaPlan: !!bookingData.yogaPlanId,
-          allBookingData: bookingData
-        });
-        throw new Error('Booking information is incomplete. Please select a time slot or date.');
-      }
-      
-      // Log the booking info that will be used
-      console.log('Using booking info:', {
-        slot_id: bookingData.slot_id,
-        date: bookingData.date || bookingData.startDate,
-        isYogaPlan: !!bookingData.yogaPlanId,
-        yogaPlanId: bookingData.yogaPlanId
-      });
-
-      // Determine desired duration early
-      const duration = typeof bookingData.duration === 'string' 
-        ? parseInt(bookingData.duration, 10) 
-        : bookingData.duration || 60;
-
-      // CRITICAL: Slot resolution must be handled by backend, not frontend
-      // Frontend guessing slots is a security/authenticity hazard
-      // Require slot_id to be present and valid - fail if missing
-      const rawSlotId = bookingData.slot_id;
-      const numericSlotId = Number(rawSlotId);
-      
-      if (!rawSlotId || !Number.isFinite(numericSlotId) || numericSlotId <= 0) {
-        const errorMsg = 'Slot ID is required for booking. Please go back and select a time slot.';
-        console.error('❌ [BookingConfirmation] Slot resolution hazard prevented:', {
-          slot_id: rawSlotId,
-          numericSlotId,
-          bookingData: {
-            date: bookingData.date,
-            startDate: bookingData.startDate,
-            time: bookingData.time,
-            startTime: bookingData.startTime,
-          }
-        });
-        throw new Error(errorMsg);
-      }
-      
-      const slotId = numericSlotId;
-      console.log('✅ [BookingConfirmation] Using validated slot_id:', slotId);
-      
-      const serviceType = bookingData.serviceType || 'yoga_class';
-      const serviceId = bookingData.serviceId || 
-                       bookingData.yogaPlanId?.toString() || 
-                       `service_${Date.now()}`;
-
-      console.log('Payment parameters:', {
-        serviceType,
-        serviceId,
-        slotId,
-        duration,
+      const response = await apiService.createBookingAndInitiatePayment({
+        userId: user?.user_id || user?.id || user?._id || 0,
         professionalId: bookingData.professionalId,
-        amount: priceDetails.final_amount
+        serviceType: bookingData.serviceType,
+        amount: bookingData.price,
+        duration: bookingData.duration || 30,
+        couponCode: undefined,
+        slotId: bookingData.slotId ? Number(bookingData.slotId) : undefined,
+        yogaPlanId: bookingData.yogaPlanId ? Number(bookingData.yogaPlanId) : undefined,
+        deliveryMode: normalizedDeliveryMode
       });
 
-      // Combine booking and payment into a single API call
-      const paymentResponse = await initiatePayment({
-        bookingId: `booking_${Date.now()}`,
-        amount: priceDetails.final_amount,
-        professionalId: bookingData.professionalId,
-        slotId,
-        duration,
-        serviceType,
-        serviceId,
-        couponCode: isCouponApplied ? couponCode : undefined,
-        metadata: {
-          professionalName: bookingData.professionalName,
-          serviceName: bookingData.serviceDetails?.name || bookingData.planTitle || 'Yoga Session',
-          date: bookingData.date || bookingData.startDate || new Date().toISOString().split('T')[0],
-          time: bookingData.time || bookingData.startTime || new Date().toLocaleTimeString(),
-          mode: bookingData.sessionMode || 'online',
-          userId: String(userId),
-          isYogaPlan: !!bookingData.yogaPlanId || serviceType === 'yoga_class',
-          yogaPlanId: bookingData.yogaPlanId
-        }
-      });
+      console.log('📡 [BookingConfirmation] Raw API Response:', response);
+      console.log('📡 [BookingConfirmation] Response success:', response.success);
+      console.log('📡 [BookingConfirmation] Response data exists:', !!response.data);
 
-      // If we have a payment URL, open it in the WebView
-      if (paymentResponse?.payment_url) {
-        navigation.navigate('PaymentGateway', {
-          paymentUrl: paymentResponse.payment_url,
-          bookingId: paymentResponse.booking_id?.toString() || '',
-          paymentId: paymentResponse.data?.payment_id || '',
-          amount: paymentResponse.data?.final_amount || bookingData.price,
-          customerId: userId?.toString() || '',
-          customerEmail: user?.email || '',
-          customerPhone: user?.phone || '',
-          merchantId: Config.PHONEPE_MERCHANT_ID || 'PGTESTPAYUAT' // Fallback to test ID if not set
+      if (response.success && response.data) {
+        const resp = response.data;
+        
+        // Enhanced booking ID extraction
+        const finalBookingId = resp.booking_id || resp.data?.booking_id || resp.id || resp.data?.id;
+        
+        // Enhanced transaction ID extraction - look into nested payment objects for Yoga
+        const finalTransactionId = 
+          resp.transaction_id || 
+          resp.data?.transaction_id || 
+          resp.payment_id || 
+          resp.data?.payment_id ||
+          resp.payment?.transaction_id || // Yoga nested payment object
+          resp.data?.payment?.transaction_id || // Double nested for Yoga
+          resp.payment?.payment_id || // Alternative payment ID field
+          resp.data?.payment?.payment_id; // Double nested alternative
+
+        console.log('✅ [BookingConfirmation] Extracted IDs:', { 
+            bookingId: finalBookingId, 
+            transactionId: finalTransactionId,
+            // Debug: Show the structure we're working with
+            hasRespData: !!resp,
+            hasRespDataData: !!resp.data,
+            hasRespPayment: !!resp.payment,
+            hasRespDataPayment: !!resp.data?.payment
+        });
+
+        (navigation as any).navigate('PaymentGateway', {
+            paymentUrl: resp.payment_url || resp.data?.payment_url,
+            redirectUrl: "https://samyayog.com/payment-status", 
+            bookingId: finalBookingId,
+            transactionId: finalTransactionId, // This should now be properly extracted
+            bookingType: bookingData.serviceType
         });
       } else {
-        throw new Error('No payment URL received');
+        console.log('❌ [BookingConfirmation] Booking failed:', response);
+        Alert.alert("Booking Failed", response.error || "Could not initiate payment.");
       }
-    } catch (err) {
-      console.error('Booking/Payment failed:', err);
-      setError(err instanceof Error ? err.message : 'Failed to process payment. Please try again.');
+    } catch (error) {
+      console.error('🔥 [BookingConfirmation] Booking error:', error);
+      Alert.alert("Error", "Network error occurred.");
     } finally {
-      setIsLoading(false);
+      setIsProcessing(false);
     }
-  }, [userId, bookingData, priceDetails, initiatePayment, navigation]);
+  };
+
+  if (!bookingData) return null;
+
+  const color = isYoga ? '#4CAF50' : appTheme.theme.colors.primary;
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      
+      {/* Modern Gradient Header - Matching Other Screens */}
+      <LinearGradient 
+        colors={[appTheme.theme.colors.primary, appTheme.theme.colors.secondary]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <View style={styles.headerContent}>
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color={appTheme.theme.colors.background.white} />
+          </TouchableOpacity>
+          
+          <View style={styles.titleContainer}>
+            <Text style={styles.headerTitle}>
+              Confirm Booking
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              Review your booking details
+            </Text>
           </View>
-        ) : error ? (
-          <Text style={styles.errorText}>{error}</Text>
-        ) : (
-          <View style={styles.content}>
-            <Text style={styles.title}>Confirm Your Booking</Text>
-            
-            {/* Professional Info */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Professional</Text>
-              <Text style={styles.text}>{bookingData?.professionalName}</Text>
-            </View>
+          
+          <View style={styles.placeholderButton} />
+        </View>
+        
+        {/* Decorative elements */}
+        <View style={styles.topCircle} />
+        <View style={styles.bottomWave} />
+      </LinearGradient>
 
-            {/* Service Details */}
-            {bookingData?.serviceDetails && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Service</Text>
-                <Text style={styles.text}>{bookingData.serviceDetails.name}</Text>
-                <Text style={styles.text}>
-                  Duration: {bookingData.serviceDetails.duration} minutes
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        
+        {/* Comprehensive Booking Summary Card */}
+        <Animated.View style={[
+          styles.card,
+          appTheme.theme.shadows.card,
+          { 
+            opacity: fadeAnim, 
+            transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+            borderLeftColor: color, 
+            borderLeftWidth: 5 
+          }
+        ]}>
+          <View style={styles.cardHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.title}>{bookingData.serviceName}</Text>
+              <Text style={styles.sub}>
+                {bookingData.professionalName}
+                {bookingData.professionalSpecialization && ` • ${bookingData.professionalSpecialization}`}
+              </Text>
+            </View>
+            <View style={[styles.typeBadge, { backgroundColor: color + '20' }]}>
+              <Ionicons name={isYoga ? 'fitness' : 'medkit'} size={14} color={color} />
+              <Text style={[styles.typeText, { color }]}>{isYoga ? 'Yoga' : 'Consult'}</Text>
+            </View>
+          </View>
+          
+          {/* Appointment Details */}
+          <View style={styles.detailsContainer}>
+            <Text style={styles.sectionTitle}>Appointment Details</Text>
+            
+            <DetailRow 
+              label="Service" 
+              value={bookingData.serviceName} 
+              icon="medkit" 
+            />
+            
+            <DetailRow 
+              label="Provider" 
+              value={bookingData.professionalName} 
+              icon="person" 
+            />
+            
+            {bookingData.date && (
+              <DetailRow 
+                label="Date" 
+                value={formatDisplayDate(bookingData.date)} 
+                icon="calendar" 
+              />
+            )}
+            
+            {(bookingData.startTime || bookingData.time) && (
+              <DetailRow 
+                label="Time" 
+                value={
+                  bookingData.startTime && bookingData.endTime 
+                    ? formatSlotTimeRange(bookingData.startTime, bookingData.endTime)
+                    : bookingData.time 
+                    ? formatDisplayTime(bookingData.time)
+                    : 'To be scheduled'
+                } 
+                icon="time-outline" 
+              />
+            )}
+            
+            {bookingData.deliveryMode && (
+              <DetailRow 
+                label="Mode" 
+                value={getDeliveryModeLabel(bookingData.deliveryMode)} 
+                icon="videocam" 
+              />
+            )}
+            
+            {bookingData.duration && (
+              <DetailRow 
+                label="Duration" 
+                value={getDurationLabel(bookingData.duration, isYoga)} 
+                icon="hourglass-outline" 
+              />
+            )}
+          </View>
+        </Animated.View>
+
+        {/* Comprehensive Price Breakdown Card */}
+        <Animated.View style={[
+          styles.card,
+          appTheme.theme.shadows.card,
+          { 
+            opacity: fadeAnim, 
+            transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+            borderLeftColor: appTheme.theme.colors.primary, 
+            borderLeftWidth: 5 
+          }
+        ]}>
+          <View style={styles.cardHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.title}>Payment Summary</Text>
+              <Text style={styles.sub}>Secure transaction</Text>
+            </View>
+            <View style={[styles.typeBadge, { backgroundColor: appTheme.theme.colors.feedback.success + '20' }]}>
+              <Ionicons name="shield-checkmark-outline" size={14} color={appTheme.theme.colors.feedback.success} />
+              <Text style={[styles.typeText, { color: appTheme.theme.colors.feedback.success }]}>SECURE</Text>
+            </View>
+          </View>
+          
+          {/* Price Breakdown */}
+          <View style={styles.priceBreakdown}>
+            <Text style={styles.sectionTitle}>Payment Details</Text>
+            
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Base Amount</Text>
+              <Text style={styles.priceValue}>₹{bookingData.basePrice || bookingData.price.toLocaleString()}</Text>
+            </View>
+            
+            {bookingData.discount && bookingData.discount > 0 && (
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Discount</Text>
+                <Text style={[styles.priceValue, { color: appTheme.theme.colors.feedback.success }]}>
+                  -₹{bookingData.discount.toLocaleString()}
                 </Text>
               </View>
             )}
-
-            {/* Session Details */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Session Details</Text>
-              {bookingData?.startDate && (
-                <Text style={styles.text}>
-                  Date: {new Date(bookingData.startDate).toLocaleDateString()}
-                </Text>
-              )}
-              {bookingData?.startTime && (
-                <Text style={styles.text}>
-                  Time: {bookingData.startTime}
-                  {bookingData?.endTime ? ` - ${bookingData.endTime}` : ''}
-                </Text>
-              )}
-              {bookingData?.location && (
-                <Text style={styles.text}>Location: {bookingData.location}</Text>
-              )}
-              {bookingData?.sessionModeLabel && (
-                <Text style={styles.text}>Session Type: {bookingData.sessionModeLabel}</Text>
-              )}
+            
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Platform Fee</Text>
+              <Text style={styles.priceValue}>₹{bookingData.platformFee || 0}</Text>
             </View>
-
-            {/* Coupon Code */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Apply Coupon</Text>
-              <View style={styles.couponContainer}>
-                <TextInput
-                  style={[styles.input, isCouponApplied && styles.inputDisabled]}
-                  placeholder="Enter coupon code"
-                  value={couponCode}
-                  onChangeText={setCouponCode}
-                  editable={!isCouponApplied}
-                  placeholderTextColor="#999"
-                />
-                <TouchableOpacity 
-                  style={[styles.button, styles.couponButton, isCouponApplied && styles.buttonDisabled]}
-                  onPress={handleApplyCoupon}
-                  disabled={isCouponApplied || !couponCode.trim()}
-                >
-                  <Text style={styles.buttonText}>
-                    {isCouponApplied ? 'Applied' : 'Apply'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              {isCouponApplied && (
-                <TouchableOpacity 
-                  style={styles.removeCouponButton}
-                  onPress={handleRemoveCoupon}
-                >
-                  <Text style={styles.removeCouponText}>Remove coupon</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Price Summary */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Price Summary</Text>
-              <View style={styles.priceRow}>
-                <Text style={styles.priceLabel}>Base Price:</Text>
-                <Text style={styles.priceValue}>₹{priceDetails.original_amount.toFixed(2)}</Text>
-              </View>
-              {priceDetails.discount_amount > 0 && (
-                <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>Discount ({couponCode}):</Text>
-                  <Text style={[styles.priceValue, styles.discountText]}>-₹{priceDetails.discount_amount.toFixed(2)}</Text>
-                </View>
-              )}
-              <View style={[styles.priceRow, styles.totalRow]}>
-                <Text style={styles.totalLabel}>Total Amount:</Text>
-                <Text style={styles.totalValue}>₹{priceDetails.final_amount.toFixed(2)}</Text>
-              </View>
-            </View>
-
-            {/* Action Buttons */}
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
-                onPress={() => navigation.goBack()}
-                disabled={isLoading}
-              >
-                <Text style={styles.cancelButtonText}>Back</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.button, styles.confirmButton, isLoading && styles.disabledButton]}
-                onPress={handleConfirmBooking}
-                disabled={isLoading}
-              >
-                {isLoading || isPaymentProcessing ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.confirmButtonText}>
-                    Confirm & Pay {formatPrice(priceDetails.final_amount)}
-                  </Text>
-                )}
-              </TouchableOpacity>
+            
+            <View style={[styles.priceRow, styles.totalRow]}>
+              <Text style={styles.totalLabel}>Total Payable</Text>
+              <Text style={styles.totalValue}>₹{bookingData.price.toLocaleString()}</Text>
             </View>
           </View>
-        )}
+        </Animated.View>
+
+        {/* Cancellation Policy Card */}
+        <Animated.View style={[
+          styles.card,
+          appTheme.theme.shadows.card,
+          { 
+            opacity: fadeAnim, 
+            transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+            borderLeftColor: appTheme.theme.colors.secondary, 
+            borderLeftWidth: 5 
+          }
+        ]}>
+          <View style={styles.cardHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.title}>Cancellation Policy</Text>
+              <Text style={styles.sub}>Important information</Text>
+            </View>
+            <View style={[styles.typeBadge, { backgroundColor: appTheme.theme.colors.secondary + '20' }]}>
+              <Ionicons name="information-circle" size={14} color={appTheme.theme.colors.secondary} />
+              <Text style={[styles.typeText, { color: appTheme.theme.colors.secondary }]}>INFO</Text>
+            </View>
+          </View>
+          
+          <View style={styles.policyContent}>
+            <Text style={styles.policyText}>
+              {bookingData.cancellationPolicy || 
+               (isYoga 
+                 ? "Cancellations are allowed up to 24 hours before the class start time for a full refund."
+                 : "Cancellations are allowed up to 2 hours before the appointment for a full refund."
+               )
+              }
+            </Text>
+          </View>
+        </Animated.View>
+
+
       </ScrollView>
+
+      {/* Modern Footer */}
+      <View style={styles.footer}>
+        <View style={styles.footerContent}>
+          <View style={styles.totalContainer}>
+            <Text style={styles.totalLabelFooter}>
+              Total Amount
+            </Text>
+            <Text style={styles.totalAmount}>
+              ₹ {bookingData.price.toLocaleString()}
+            </Text>
+          </View>
+          
+          <TouchableOpacity 
+            style={[
+              styles.confirmButton, 
+              appTheme.theme.shadows.float,
+              { 
+                backgroundColor: isProcessing ? appTheme.theme.colors.text.secondary : appTheme.theme.colors.primary,
+                opacity: isProcessing ? 0.7 : 1
+              }
+            ]} 
+            onPress={handleConfirmBooking}
+            disabled={isProcessing}
+            activeOpacity={0.8}
+          >
+            {isProcessing ? (
+              <ActivityIndicator color={appTheme.theme.colors.background.white} size="small" />
+            ) : (
+              <View style={styles.buttonContent}>
+                <Ionicons name="lock-closed" size={18} color={appTheme.theme.colors.background.white} />
+                <Text style={styles.confirmButtonText}>
+                  Pay ₹ {bookingData.price.toLocaleString()}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
     </SafeAreaView>
   );
 };
 
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
+  container: { 
+    flex: 1, 
+    backgroundColor: theme.colors.background.primary 
   },
-  scrollContainer: {
-    flexGrow: 1,
-    padding: 16,
+  scrollContent: {
+    padding: theme.spacing.m,
+    paddingBottom: 120, // Extra padding for footer
   },
-  couponContainer: {
+  header: {
+    paddingTop: 50,
+    paddingBottom: 24,
+    paddingHorizontal: theme.spacing.l,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  headerContent: {
     flexDirection: 'row',
-    marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 2,
   },
-  input: {
-    flex: 1,
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
-    fontSize: 16,
-    color: '#333',
-  },
-  inputDisabled: {
-    backgroundColor: '#f5f5f5',
-    color: '#888',
-  },
-  couponButton: {
-    paddingHorizontal: 16,
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.primary,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-    backgroundColor: theme.colors.text.secondary,
-  },
-  removeCouponButton: {
-    alignSelf: 'flex-end',
-    marginTop: 4,
-  },
-  removeCouponText: {
-    color: theme.colors.primary,
-    fontSize: 14,
-    textDecorationLine: 'underline',
-  },
-  loadingContainer: {
+  titleContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
   },
-  errorText: {
-    color: theme.colors.feedback.error,
-    fontSize: 16,
-    lineHeight: 20,
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.background.white,
     textAlign: 'center',
-    marginTop: 20,
+    letterSpacing: -0.5,
   },
-  content: {
-    paddingBottom: 24,
+  headerSubtitle: {
+    color: theme.colors.background.white,
+    fontSize: 14,
+    opacity: 0.8,
+    marginTop: 2,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 24,
-    color: theme.colors.primary,
-    textAlign: 'center',
+  placeholderButton: {
+    width: 44,
+    height: 44,
   },
-  section: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
+  topCircle: {
+    position: 'absolute',
+    top: -50,
+    right: -50,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  bottomWave: {
+    position: 'absolute',
+    bottom: -20,
+    left: -50,
+    right: -50,
+    height: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+
+  // Card Styles (matching AppointmentsScreen)
+  card: { 
+    backgroundColor: theme.colors.background.surface, 
+    marginBottom: theme.spacing.m, 
+    borderRadius: theme.borderRadius.l, 
+    padding: theme.spacing.m, 
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowRadius: 4,
   },
-  sectionTitle: {
-    fontSize: 18,
+  cardHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'flex-start', 
+    marginBottom: 12 
+  },
+  title: { 
+    fontSize: 16, 
+    fontWeight: 'bold', 
+    color: theme.colors.text.primary 
+  },
+  sub: { 
+    fontSize: 14, 
+    color: theme.colors.text.secondary 
+  },
+  typeBadge: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: 8, 
+    paddingVertical: 4, 
+    borderRadius: 8 
+  },
+  typeText: { 
+    fontSize: 10, 
+    fontWeight: '700', 
+    marginLeft: 4, 
+    textTransform: 'uppercase' 
+  },
+  cardFooter: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    marginTop: 12, 
+    paddingTop: 12, 
+    borderTopWidth: 1, 
+    borderTopColor: '#eee' 
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: theme.colors.text.secondary,
+    marginBottom: 2,
+  },
+  detailValue: {
+    fontSize: 14,
     fontWeight: '600',
-    marginBottom: 12,
-    color: theme.colors.primary,
+    color: theme.colors.text.primary,
   },
-  text: {
-    fontSize: 16,
-    marginBottom: 8,
-    color: '#333',
+
+  // Section Title
+  sectionTitle: { 
+    fontSize: 16, 
+    fontWeight: '700',
+    marginBottom: theme.spacing.m,
+    color: theme.colors.text.primary
+  },
+
+  // Price Breakdown Styles
+  priceBreakdown: {
+    marginTop: theme.spacing.m,
+    paddingTop: theme.spacing.m,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.background.secondary,
   },
   priceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  priceLabel: {
-    fontSize: 16,
-    color: '#666',
-  },
-  priceValue: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  discountText: {
-    color: '#4CAF50',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.s,
   },
   totalRow: {
-    marginTop: 12,
-    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: theme.colors.background.secondary,
+    paddingTop: theme.spacing.s,
+    marginTop: theme.spacing.xs,
   },
-  totalLabel: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+  priceLabel: { 
+    fontSize: 14, 
+    fontWeight: '500',
+    color: theme.colors.text.secondary
   },
-  totalValue: {
-    fontSize: 18,
+  totalLabel: { 
+    fontSize: 16, 
     fontWeight: '700',
-    color: theme.colors.primary,
+    color: theme.colors.text.primary
   },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    marginTop: 24,
-    marginBottom: 24,
+  priceValue: { 
+    fontSize: 14, 
+    fontWeight: '600',
+    color: theme.colors.text.primary
   },
-  button: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    minHeight: 56,
+  totalValue: { 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    color: theme.colors.primary
   },
-  cancelButton: {
-    backgroundColor: theme.colors.background.white,
-    borderWidth: 1,
-    borderColor: theme.colors.background.light,
-    marginRight: 8,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: 48,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-      },
-    }),
+
+  // Policy Styles
+  policyContent: {
+    marginTop: theme.spacing.m,
+    paddingTop: theme.spacing.m,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.background.secondary,
   },
-  confirmButton: {
-    flex: 2,
-    backgroundColor: theme.colors.primary,
-    marginLeft: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: theme.colors.primary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
-  },
-  cancelButtonText: {
+  policyText: {
+    fontSize: 14,
+    lineHeight: 20,
     color: theme.colors.text.secondary,
-    fontSize: 16,
-    fontWeight: '600',
   },
-  confirmButtonText: {
-    color: theme.colors.background.white,
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    marginRight: 40, // To center the title (back button is 40px wide)
-  },
-  bookingCard: {
-    backgroundColor: theme.colors.background.white,
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-    color: theme.colors.primary,
+
+  // Redesigned Details Styles
+  detailsContainer: {
+    marginTop: theme.spacing.m,
+    paddingTop: theme.spacing.m,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.background.secondary,
   },
   detailRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-  },
-  couponText: {
-    color: theme.colors.primary,
-    fontWeight: '600',
-    fontSize: 14,
-    marginTop: 8,
-  },
-  errorContainer: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: theme.colors.feedback.error,
-  },
-  confirmButtonContent: {
-    flexDirection: 'column',
     alignItems: 'center',
+    paddingVertical: theme.spacing.s,
   },
-  confirmButtonSubtext: {
+  detailIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.borderRadius.s,
+    backgroundColor: theme.colors.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: theme.spacing.m,
+  },
+  detailContent: {
+    flex: 1,
+  },
+  modeBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: theme.spacing.s,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.s,
+    backgroundColor: theme.colors.primary + '20',
+  },
+  modeText: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
+    fontWeight: '700',
+    color: theme.colors.primary,
+    letterSpacing: 0.5,
   },
-  priceCard: {
-    backgroundColor: theme.colors.background.white,
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 24,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+
+  // Footer
+  footer: { 
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: theme.spacing.m,
+    paddingVertical: theme.spacing.m,
+    backgroundColor: theme.colors.background.surface,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.background.secondary,
   },
-  userCard: {
-    backgroundColor: theme.colors.background.white,
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 24,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+  footerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.m,
   },
+  totalContainer: {
+    flex: 1,
+  },
+  totalLabelFooter: {
+    fontSize: theme.typography.small.fontSize,
+    marginBottom: theme.spacing.xs,
+    color: theme.colors.text.secondary
+  },
+  totalAmount: {
+    fontSize: theme.typography.h2.fontSize,
+    fontWeight: 'bold',
+    color: theme.colors.primary
+  },
+  confirmButton: { 
+    paddingVertical: theme.spacing.m,
+    paddingHorizontal: theme.spacing.l,
+    borderRadius: theme.borderRadius.m,
+    alignItems: 'center',
+    minWidth: 180,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.s,
+  },
+  confirmButtonText: { 
+    color: theme.colors.background.white, 
+    fontSize: theme.typography.body.fontSize, 
+    fontWeight: 'bold'
+  }
 });
+
 export default BookingConfirmationScreen;

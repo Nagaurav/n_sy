@@ -8,18 +8,26 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  TextInput,
   SafeAreaView,
   ViewStyle,
   TextStyle,
+  Image,
+  ImageStyle,
+  Dimensions,
+  StatusBar,
+  Pressable,
+  Animated,
 } from 'react-native';
 import { StackScreenProps } from '@react-navigation/stack';
-import { apiService } from '../services/apiService';
-import { useAuth } from '../contexts/AuthContext';
+import { authService } from '../services'; // Ensure authService is correctly imported
+import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
+import { theme } from '../theme';
 import { FloatingLabelInput } from '../components/FloatingLabelInput';
 
 type LoginScreenProps = StackScreenProps<any, 'Login'>;
+
+const { width } = Dimensions.get('window');
 
 interface LoginCredentials {
   identifier: string;
@@ -29,25 +37,70 @@ interface LoginCredentials {
 const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   const [identifier, setIdentifier] = useState<string>('');
   const [password, setPassword] = useState<string>('');
-  const [isPasswordLogin, setIsPasswordLogin] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isButtonPressed, setIsButtonPressed] = useState(false);
+  const [errors, setErrors] = useState<{identifier?: string; password?: string}>({});
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(50));
 
   const { signIn } = useAuth();
   const { theme } = useTheme();
 
-  const handlePasswordLogin = useCallback(async () => {
-    // Basic validation
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  const validateInputs = () => {
+    const newErrors: {identifier?: string; password?: string} = {};
+    
+    // Validate identifier (email or phone)
     if (!identifier.trim()) {
-      Alert.alert('Error', 'Please enter your email or phone number');
-      return;
+      newErrors.identifier = 'Please enter your email or phone number';
+    } else if (!isValidEmail(identifier) && !isValidPhone(identifier)) {
+      newErrors.identifier = 'Please enter a valid email or phone number';
     }
-
+    
+    // Validate password
     if (!password.trim()) {
-      Alert.alert('Error', 'Please enter your password');
+      newErrors.password = 'Please enter your password';
+    } else if (password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+  
+  const isValidEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+  
+  const isValidPhone = (phone: string) => {
+    const phoneRegex = /^[+]?[\d\s\-\(\)]+$/;
+    return phoneRegex.test(phone) && phone.replace(/\D/g, '').length >= 10;
+  };
+  const [isPasswordLogin, setIsPasswordLogin] = useState<boolean>(true);
+  const handlePasswordLogin = useCallback(async () => {
+    setIsButtonPressed(true);
+    
+    if (!validateInputs()) {
       return;
     }
 
-    setIsLoading(true);
+    // Basic validation
+    setIsButtonPressed(true);
 
     try {
       const credentials = {
@@ -55,7 +108,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         password: password.trim(),
       };
 
-      const response = await apiService.login(credentials);
+      const response = await authService.login(credentials);
 
       if (response.success && response.data) {
         const { user, token } = response.data;
@@ -66,16 +119,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         // Navigate to main app - the AuthContext will handle the navigation
         navigation.replace('Home');
       } else {
-        Alert.alert('Login Failed', response.error || 'Invalid credentials. Please try again.');
+        Alert.alert(
+          'Login Failed',
+          'The email or password you entered is incorrect. Please try again.'
+        );
       }
+    setIsLoading(true);
+    setIsButtonPressed(false);
     } catch (error) {
-      console.error('Login error:', error);
+      setIsButtonPressed(false);
       Alert.alert(
         'Login Error',
-        'An error occurred during login. Please check your connection and try again.'
+        'Unable to connect. Please check your internet connection and try again.'
       );
     } finally {
       setIsLoading(false);
+      setIsButtonPressed(false);
     }
   }, [identifier, password, signIn, navigation]);
 
@@ -85,14 +144,23 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   }, [navigation]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      
+      {/* Header with Logo */}
       <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
-        <View style={styles.logoContainer}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>SY</Text>
-          </View>
-          <Text style={styles.appName}>SAMYAYOG</Text>
-        </View>
+        <Animated.View 
+          style={{
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }]
+          }}
+        >
+          <Image 
+            source={require('../assets/logo.jpg')} 
+            style={styles.logoImage} 
+            resizeMode="contain" 
+          />
+        </Animated.View>
       </View>
       
       <KeyboardAvoidingView
@@ -100,84 +168,126 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          <View style={styles.content}>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Login to your account</Text>
+          <Animated.View 
+            style={{
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }}
+          >
+            <View style={[styles.card, { backgroundColor: theme.colors.background.surface, ...theme.shadows.float }]}>
+              <Text style={[styles.title, { color: theme.colors.text.primary }]}>Welcome Back</Text>
+              <Text style={[styles.subtitle, { color: theme.colors.text.secondary }]}>Continue your wellness journey</Text>
 
-            <View style={styles.form}>
-              {/* Email/Phone Input */}
-              <View style={styles.inputContainer}>
-                <FloatingLabelInput
-                  label="Email or Phone Number"
-                  value={identifier}
-                  onChangeText={setIdentifier}
-                  keyboardType="default"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-
-              {/* Password Input */}
-              {isPasswordLogin && (
+              <View style={styles.form}>
+                {/* Email/Phone Input */}
                 <View style={styles.inputContainer}>
+                  <FloatingLabelInput
+                    label="Email or Phone Number"
+                    value={identifier}
+                    onChangeText={(text) => {
+                      setIdentifier(text);
+                      if (errors.identifier) {
+                        setErrors(prev => ({ ...prev, identifier: undefined }));
+                      }
+                    }}
+                    keyboardType="default"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    icon="phone"
+                    error={errors.identifier}
+                  />
+                </View>
+
+                {isPasswordLogin && (
+                  <View style={styles.inputContainer}>
                   <FloatingLabelInput
                     label="Password"
                     value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
+                    onChangeText={(text) => {
+                      setPassword(text);
+                      if (errors.password) {
+                        setErrors(prev => ({ ...prev, password: undefined }));
+                      }
+                    }}
                     autoCapitalize="none"
                     autoCorrect={false}
+                    icon="lock"
+                    isPassword={true}
+                    error={errors.password}
                   />
-                </View>
-              )}
+                  </View>
+                )}
 
-              {/* Login Button */}
-              {isPasswordLogin && (
+                {/* Login Button */}
+                {isPasswordLogin && (
+                  <Pressable
+                    style={[
+                      styles.button, 
+                      { backgroundColor: theme.colors.primary },
+                      isLoading && styles.buttonDisabled,
+                      isButtonPressed && { backgroundColor: theme.colors.secondary }
+                    ]}
+                    onPress={handlePasswordLogin}
+                    disabled={isLoading}
+                    onPressIn={() => setIsButtonPressed(true)}
+                    onPressOut={() => setIsButtonPressed(false)}
+                  >
+                    <Text style={styles.buttonText}>
+                      {isLoading ? 'Signing in...' : 'Sign In'}
+                    </Text>
+                  </Pressable>
+                )}
+
+                {/* Toggle Button */}
                 <TouchableOpacity
-                  style={[styles.button, isLoading && styles.buttonDisabled]}
-                  onPress={handlePasswordLogin}
-                  disabled={isLoading}
-                  activeOpacity={0.8}
+                  style={styles.toggleButton}
+                  onPress={handleOTPToggle}
+                  activeOpacity={0.7}
                 >
-                  <Text style={styles.buttonText}>
-                    {isLoading ? 'Logging in...' : 'Login'}
+                  <Text style={[styles.toggleButtonText, { color: theme.colors.primary }]}>
+                    {isPasswordLogin ? 'Use OTP instead' : 'Use email/password'}
                   </Text>
                 </TouchableOpacity>
-              )}
 
-              {/* Toggle Button */}
-              <TouchableOpacity
-                style={styles.toggleButton}
-                onPress={handleOTPToggle}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.toggleButtonText}>
-                  {isPasswordLogin ? 'Login with OTP Instead' : 'Use Email/Password'}
-                </Text>
-              </TouchableOpacity>
+                {/* Forgot Password Link */}
+                {isPasswordLogin && (
+                  <TouchableOpacity style={styles.forgotPasswordButton}>
+                    <Text style={[styles.forgotPasswordText, { color: theme.colors.text.secondary }]}>
+                      Forgot your password?
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
-              {/* Forgot Password Link */}
-              {isPasswordLogin && (
-                <TouchableOpacity style={styles.forgotPasswordButton}>
-                  <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-                </TouchableOpacity>
-              )}
+                {/* Sign Up Link */}
+                <View style={styles.signUpContainer}>
+                  <Text style={[styles.signUpText, { color: theme.colors.text.secondary }]}>
+                    New to Samyayog? 
+                  </Text>
+                  <Pressable 
+                    style={[styles.signUpLink, { color: theme.colors.primary }]}
+                    onPress={() => navigation.navigate('Signup')}
+                    onPressIn={() => setIsButtonPressed(true)}
+                    onPressOut={() => setIsButtonPressed(false)}
+                  >
+                    <Text style={[styles.signUpLink, { color: theme.colors.primary }]}>Create Account</Text>
+                  </Pressable>
+                </View>
+              </View>
             </View>
-          </View>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 };
+
+// ...
 
 type Styles = {
   container: ViewStyle;
   header: ViewStyle;
-  logoContainer: ViewStyle;
-  logoCircle: ViewStyle;
-  logoText: TextStyle;
-  appName: TextStyle;
-  content: ViewStyle;
+  logoImage: ImageStyle;
+  card: ViewStyle;
   title: TextStyle;
   subtitle: TextStyle;
   form: ViewStyle;
@@ -189,61 +299,47 @@ type Styles = {
   toggleButtonText: TextStyle;
   forgotPasswordButton: ViewStyle;
   forgotPasswordText: TextStyle;
+  signUpContainer: ViewStyle;
+  signUpText: TextStyle;
+  signUpLink: TextStyle;
 };
 const styles = StyleSheet.create<Styles>({
   container: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
   },
   header: {
-    backgroundColor: '#008272', // Using primary color directly for now
-    paddingVertical: 40,
-    paddingBottom: 60,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    height: 160,
+    width: '100%',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden',
+    position: 'relative',
+    marginTop: 40,
     alignItems: 'center',
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  logoCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
   },
-  logoText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+  logoImage: {
+    width: 120,
+    height: 120,
+    resizeMode: 'contain',
   },
-  appName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: 1,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
+  card: {
+    marginHorizontal: 24,
+    marginTop: 20,
+    marginBottom: 40,
+    borderRadius: 24,
+    padding: 32,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#6B7280',
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
   },
   form: {
     width: '100%',
@@ -252,9 +348,8 @@ const styles = StyleSheet.create<Styles>({
     marginBottom: 20,
   },
   button: {
-    backgroundColor: '#008272', // Using primary color directly for now
-    borderRadius: 12,
-    paddingVertical: 16,
+    borderRadius: 16,
+    paddingVertical: 18,
     alignItems: 'center',
     marginBottom: 16,
   },
@@ -264,25 +359,40 @@ const styles = StyleSheet.create<Styles>({
     fontWeight: '600',
   },
   buttonDisabled: {
-    backgroundColor: '#D1D5DB',
+    opacity: 0.6,
   },
   toggleButton: {
     alignItems: 'center',
     paddingVertical: 12,
+    marginBottom: 8,
   },
   toggleButtonText: {
-    color: '#008272', // Using primary color directly for now
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     textDecorationLine: 'underline',
   },
   forgotPasswordButton: {
     alignItems: 'center',
-    marginTop: 16,
+    marginBottom: 24,
   },
   forgotPasswordText: {
-    color: '#6B7280',
     fontSize: 14,
+    fontWeight: '400',
+  },
+  signUpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  signUpText: {
+    fontSize: 14,
+    fontWeight: '400',
+    marginRight: 4,
+  },
+  signUpLink: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

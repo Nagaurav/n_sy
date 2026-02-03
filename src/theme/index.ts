@@ -1,4 +1,4 @@
-import { Dimensions } from 'react-native';
+import { Dimensions, Platform } from 'react-native';
 
 export type ColorPalette = {
   primary: string;      // Calming Teal
@@ -11,6 +11,7 @@ export type ColorPalette = {
   };
   background: {
     primary: string;     // Off-White for screen backgrounds
+    secondary: string;   // Light gray for alternative backgrounds (was #F3F4F6)
     surface: string;     // Pure white for cards/modals
     white: string;       // Pure white for text/icons
   };
@@ -65,6 +66,13 @@ export type Shadows = {
     shadowRadius: number;
     elevation: number;
   };
+  large: {
+    shadowColor: string;
+    shadowOffset: { width: number; height: number };
+    shadowOpacity: number;
+    shadowRadius: number;
+    elevation: number;
+  };
   none: {
     shadowColor: string;
     shadowOffset: { width: number; height: number };
@@ -75,34 +83,35 @@ export type Shadows = {
 };
 
 export type Typography = {
+  fontFamily?: string;
   h1: {
     fontSize: number;
-    fontWeight: string;
+    fontWeight: 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
     lineHeight: number;
   };
   h2: {
     fontSize: number;
-    fontWeight: string;
+    fontWeight: 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
     lineHeight: number;
   };
   h3: {
     fontSize: number;
-    fontWeight: string;
+    fontWeight: 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
     lineHeight: number;
   };
   body: {
     fontSize: number;
-    fontWeight: string;
+    fontWeight: 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
     lineHeight: number;
   };
   small: {
     fontSize: number;
-    fontWeight: string;
+    fontWeight: 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
     lineHeight: number;
   };
   caption: {
     fontSize: number;
-    fontWeight: string;
+    fontWeight: 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
     lineHeight: number;
   };
 };
@@ -133,6 +142,7 @@ export const theme: Theme = {
     },
     background: {
       primary: '#F7F9FC',     // Off-White for screen backgrounds
+      secondary: '#F3F4F6',   // Light gray for alternative backgrounds
       surface: '#FFFFFF',     // Pure white for cards/modals
       white: '#FFFFFF',       // Pure white for text/icons
     },
@@ -184,6 +194,13 @@ export const theme: Theme = {
       shadowRadius: 8,
       elevation: 6,
     },
+    large: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.15,
+      shadowRadius: 16,
+      elevation: 10,
+    },
     none: {
       shadowColor: 'transparent',
       shadowOffset: { width: 0, height: 0 },
@@ -193,34 +210,35 @@ export const theme: Theme = {
     },
   },
   typography: {
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
     h1: {
       fontSize: 32,
-      fontWeight: '700',
+      fontWeight: '700' as const,
       lineHeight: 40,
     },
     h2: {
       fontSize: 24,
-      fontWeight: '600',
+      fontWeight: '600' as const,
       lineHeight: 32,
     },
     h3: {
       fontSize: 20,
-      fontWeight: '600',
+      fontWeight: '600' as const,
       lineHeight: 28,
     },
     body: {
       fontSize: 16,
-      fontWeight: '400',
+      fontWeight: '400' as const,
       lineHeight: 24,
     },
     small: {
       fontSize: 14,
-      fontWeight: '400',
+      fontWeight: '400' as const,
       lineHeight: 20,
     },
     caption: {
       fontSize: 12,
-      fontWeight: '400',
+      fontWeight: '400' as const,
       lineHeight: 16,
     },
   },
@@ -244,10 +262,43 @@ export const commonStyles = {
     flex: 1,
     padding: theme.spacing.m,
   },
+  // Standardized header styles
+  header: {
+    backgroundColor: theme.colors.primary,
+    paddingTop: 40, // Will be overridden with StatusBar.currentHeight
+    paddingBottom: theme.spacing.m,
+    paddingHorizontal: theme.spacing.m,
+  },
+  headerContent: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+  headerTitle: {
+    ...theme.typography.h2,
+    color: theme.colors.background.surface,
+    fontWeight: '600' as const,
+  },
+  // Standardized card styles
   card: {
     backgroundColor: theme.colors.background.surface,
     borderRadius: theme.borderRadius.l,
     padding: theme.spacing.m,
+    ...theme.shadows.card,
+  },
+  appointmentCard: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: theme.borderRadius.l,
+    padding: theme.spacing.l,
+    marginBottom: theme.spacing.l,
+    ...theme.shadows.card,
+  },
+  surfaceCard: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.m,
+    marginBottom: theme.spacing.s,
     ...theme.shadows.card,
   },
   floatingCard: {
@@ -256,6 +307,7 @@ export const commonStyles = {
     padding: theme.spacing.m,
     ...theme.shadows.float,
   },
+  // Standardized typography
   heading: {
     ...theme.typography.h2,
     color: theme.colors.text.primary,
@@ -263,9 +315,30 @@ export const commonStyles = {
   },
   subheading: {
     ...theme.typography.h3,
-    color: theme.colors.text.secondary,
+    color: theme.colors.text.primary,
     marginBottom: theme.spacing.m,
   },
+  sectionTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.text.primary,
+    fontWeight: '600' as const,
+    marginBottom: theme.spacing.m,
+  },
+  cardTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.text.primary,
+    fontWeight: '600' as const,
+    marginBottom: theme.spacing.s,
+  },
+  body: {
+    ...theme.typography.body,
+    color: theme.colors.text.primary,
+  },
+  caption: {
+    ...theme.typography.caption,
+    color: theme.colors.text.secondary,
+  },
+  // Standardized button styles
   button: {
     backgroundColor: theme.colors.primary,
     paddingVertical: theme.spacing.m,
@@ -278,7 +351,7 @@ export const commonStyles = {
   buttonText: {
     ...theme.typography.body,
     color: theme.colors.background.surface,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   secondaryButton: {
     backgroundColor: 'transparent',
@@ -293,7 +366,7 @@ export const commonStyles = {
   secondaryButtonText: {
     ...theme.typography.body,
     color: theme.colors.primary,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   input: {
     borderWidth: 1,

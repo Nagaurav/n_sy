@@ -3,8 +3,8 @@ export interface UserHealthProfile {
   id: number;
   blood_group: string; // "O_POSITIVE"
   marital_status: string; // "SINGLE"
-  height: string;
-  weight: string;
+  height: number | null; // 
+  weight: number | null; // 
   emergency_contact_name: string;
   emergency_contact_phone: string;
   is_active: boolean;
@@ -14,7 +14,7 @@ export interface UserHealthProfile {
   updated_at: string;
 }
 
-// Interface for the main user object in the response
+// Interface for the main user object in response
 export interface UserProfileData {
   user_id: number;
   first_name: string;
@@ -24,10 +24,10 @@ export interface UserProfileData {
   dob: string; // ISO Date String
   gender: string;
   city: string;
-  address?: string;
-  pin_code?: string;
-  location_latitude: string | null;
-  location_longitude: string | null;
+  address?: string; // ✅ Correct (Matches your backend update)
+  pin_code?: string; // ✅ Correct (Matches your backend update)
+  location_latitude: number | null; // 👈 Change to number
+  location_longitude: number | null; // 👈 Change to number
   photo_url: string | null;
   created_at: string;
   updated_at: string;

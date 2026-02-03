@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,17 +11,26 @@ import {
   Alert,
   SafeAreaView,
   StatusBar,
+  Animated,
+  Dimensions,
+  Modal,
+  Image,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { HomeStackParamList } from '../types/navigation';
-import apiService from '../services/apiService';
+import { apiService, authService } from '../services';
+import { imageService } from '../services/imageService';
 import type { UserProfileData } from '../types/userProfile';
-import { useAuth } from '../contexts/AuthContext';
-import { FloatingLabelInput } from '../components/FloatingLabelInput';
+import { useAuth } from '../hooks/useAuth';
+import { theme } from '../theme';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
 type EditProfileRouteProp = RouteProp<HomeStackParamList, 'EditProfile'>;
 type EditProfileNavigationProp = StackNavigationProp<HomeStackParamList, 'EditProfile'>;
+
+const { width, height } = Dimensions.get('window');
 
 const EditProfileScreen = () => {
   const navigation = useNavigation<EditProfileNavigationProp>();
@@ -29,6 +38,12 @@ const EditProfileScreen = () => {
   const { currentUser } = route.params;
   const { user, updateUser } = useAuth();
 
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  // Form state
+  const [profileImage, setProfileImage] = useState(currentUser.photo_url || null);
   const [firstName, setFirstName] = useState(currentUser.first_name || '');
   const [lastName, setLastName] = useState(currentUser.last_name || '');
   const [phone, setPhone] = useState(currentUser.phone || '');
@@ -37,45 +52,93 @@ const EditProfileScreen = () => {
   const [pinCode, setPinCode] = useState(currentUser.pin_code || '');
   const [gender, setGender] = useState(currentUser.gender || '');
   const [dob, setDob] = useState(currentUser.dob || '');
-
-  const [bloodGroup, setBloodGroup] = useState(
-    currentUser.user_health?.blood_group || '',
-  );
-  const [maritalStatus, setMaritalStatus] = useState(
-    currentUser.user_health?.marital_status || '',
-  );
-  const [height, setHeight] = useState(
-    (currentUser.user_health?.height as any as string) || '',
-  );
-  const [weight, setWeight] = useState(
-    (currentUser.user_health?.weight as any as string) || '',
-  );
-  const [emergencyContactName, setEmergencyContactName] = useState(
-    currentUser.user_health?.emergency_contact_name || '',
-  );
-  const [emergencyContactPhone, setEmergencyContactPhone] = useState(
-    currentUser.user_health?.emergency_contact_phone || '',
-  );
+  const [bloodGroup, setBloodGroup] = useState(currentUser.user_health?.blood_group || '');
+  const [maritalStatus, setMaritalStatus] = useState(currentUser.user_health?.marital_status || '');
+  const [height, setHeight] = useState(currentUser.user_health?.height?.toString() || '');
+  const [weight, setWeight] = useState(currentUser.user_health?.weight?.toString() || '');
+  const [emergencyContactName, setEmergencyContactName] = useState(currentUser.user_health?.emergency_contact_name || '');
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState(currentUser.user_health?.emergency_contact_phone || '');
   const [isSaving, setIsSaving] = useState(false);
 
-  const [showGenderOptions, setShowGenderOptions] = useState(false);
-  const [showBloodGroupOptions, setShowBloodGroupOptions] = useState(false);
-  const [showMaritalStatusOptions, setShowMaritalStatusOptions] = useState(false);
+  // Image selection handlers
+  const handleSelectImage = () => {
+    Alert.alert(
+      'Update Profile Picture',
+      'Choose an option',
+      [
+        { text: 'Take Photo', onPress: () => openCamera() },
+        { text: 'Select from Gallery', onPress: () => openGallery() },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
 
-  const genderOptions = ['male', 'female', 'other'];
+  const openCamera = async () => {
+    console.log('📷 [EditProfileScreen] Opening camera...');
+    try {
+      const image = await imageService.openCamera();
+      console.log('📷 [EditProfileScreen] Camera result:', image);
+      if (image) {
+        setProfileImage(image.uri);
+        console.log('✅ [EditProfileScreen] Profile image updated from camera:', image.uri);
+      } else {
+        console.log('⚠️ [EditProfileScreen] No image selected from camera');
+      }
+    } catch (error: any) {
+      console.error('❌ [EditProfileScreen] Error opening camera:', error);
+      Alert.alert('Error', `Failed to open camera: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
+  const openGallery = async () => {
+    console.log('🖼️ [EditProfileScreen] Opening gallery...');
+    try {
+      const image = await imageService.openGallery();
+      console.log('🖼️ [EditProfileScreen] Gallery result:', image);
+      if (image) {
+        setProfileImage(image.uri);
+        console.log('✅ [EditProfileScreen] Profile image updated from gallery:', image.uri);
+      } else {
+        console.log('⚠️ [EditProfileScreen] No image selected from gallery');
+      }
+    } catch (error: any) {
+      console.error('❌ [EditProfileScreen] Error opening gallery:', error);
+      Alert.alert('Error', `Failed to open gallery: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
+  // Modal states
+  const [showGenderModal, setShowGenderModal] = useState(false);
+  const [showBloodGroupModal, setShowBloodGroupModal] = useState(false);
+  const [showMaritalStatusModal, setShowMaritalStatusModal] = useState(false);
+
+  // Options
+  const genderOptions = ['Male', 'Female', 'Other'];
   const bloodGroupOptions = [
-    'O_POSITIVE',
-    'O_NEGATIVE',
-    'A_POSITIVE',
-    'A_NEGATIVE',
-    'B_POSITIVE',
-    'B_NEGATIVE',
-    'AB_POSITIVE',
-    'AB_NEGATIVE',
+    'O_POSITIVE', 'O_NEGATIVE', 'A_POSITIVE', 'A_NEGATIVE',
+    'B_POSITIVE', 'B_NEGATIVE', 'AB_POSITIVE', 'AB_NEGATIVE',
   ];
-  const maritalStatusOptions = ['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED'];
+  const maritalStatusOptions = ['Single', 'Married', 'Divorced', 'Widowed'];
 
-  const handleSave = async () => {
+  // Start entrance animation
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    console.log('💾 [EditProfileScreen] Save button pressed');
+    
     if (!firstName.trim() || !lastName.trim()) {
       Alert.alert('Validation Error', 'First Name and Last Name are required.');
       return;
@@ -86,25 +149,47 @@ const EditProfileScreen = () => {
       return;
     }
 
-    // Validate numeric fields if provided
-    const heightTrimmed = height.trim();
-    const weightTrimmed = weight.trim();
+    // Validate numeric fields
+    const heightValue = height.trim() ? parseFloat(height.trim()) : undefined;
+    const weightValue = weight.trim() ? parseFloat(weight.trim()) : undefined;
 
-    const heightValue = heightTrimmed ? parseFloat(heightTrimmed) : undefined;
-    const weightValue = weightTrimmed ? parseFloat(weightTrimmed) : undefined;
-
-    if (heightTrimmed && (heightValue === undefined || Number.isNaN(heightValue) || heightValue <= 0)) {
+    if (height.trim() && (heightValue === undefined || Number.isNaN(heightValue) || heightValue <= 0)) {
       Alert.alert('Validation Error', 'Height must be a positive number.');
       return;
     }
 
-    if (weightTrimmed && (weightValue === undefined || Number.isNaN(weightValue) || weightValue <= 0)) {
+    if (weight.trim() && (weightValue === undefined || Number.isNaN(weightValue) || weightValue <= 0)) {
       Alert.alert('Validation Error', 'Weight must be a positive number.');
       return;
     }
 
     setIsSaving(true);
     try {
+      // Upload profile image if it has changed
+      let photoUrl = currentUser.photo_url;
+      if (profileImage && profileImage !== currentUser.photo_url) {
+        try {
+          // Create image data for upload
+          const imageData = {
+            uri: profileImage,
+            name: 'profile_photo.jpg',
+            type: 'image/jpeg',
+          };
+          
+          const formData = imageService.createFormData(imageData);
+          const uploadResponse = await apiService.uploadProfilePicture(formData);
+          
+          if (uploadResponse.success && uploadResponse.data?.photo_url) {
+            photoUrl = uploadResponse.data.photo_url;
+            console.log('✅ [EditProfileScreen] Profile picture uploaded successfully');
+          }
+        } catch (uploadError) {
+          console.error('❌ [EditProfileScreen] Error uploading profile picture:', uploadError);
+          // Don't fail the entire save process if image upload fails
+          Alert.alert('Warning', 'Profile picture upload failed, but other information will be saved.');
+        }
+      }
+
       const payload: any = {
         // Personal
         first_name: firstName.trim(),
@@ -113,26 +198,26 @@ const EditProfileScreen = () => {
         city: city.trim(),
         address: address.trim() || undefined,
         pin_code: pinCode.trim() || undefined,
-        gender: gender.trim() || undefined,
+        gender: gender.toLowerCase() || undefined,
         dob: dob.trim() || undefined,
+        photo_url: photoUrl, // Include the updated photo URL
         // Health (flat)
         blood_group: bloodGroup.trim() || undefined,
-        marital_status: maritalStatus.trim() || undefined,
+        marital_status: maritalStatus.toUpperCase() || undefined,
         height: heightValue,
         weight: weightValue,
         emergency_contact_name: emergencyContactName.trim() || undefined,
         emergency_contact_phone: emergencyContactPhone.trim() || undefined,
         // Preserve flags from current profile
-        is_active:
-          currentUser.user_health?.is_active ?? true,
-        notifications_enabled:
-          currentUser.user_health?.notifications_enabled ?? true,
-        newsletter_enabled:
-          currentUser.user_health?.newsletter_enabled ?? false,
+        is_active: currentUser.user_health?.is_active ?? true,
+        notifications_enabled: currentUser.user_health?.notifications_enabled ?? true,
+        newsletter_enabled: currentUser.user_health?.newsletter_enabled ?? false,
       };
 
+      console.log('📡 [EditProfileScreen] Updating profile with payload:', payload);
+      
       const userId = user?.user_id || currentUser.user_id;
-      await apiService.updateUserProfile(userId, payload);
+      await authService.updateProfile(String(userId), payload);
 
       // Update local auth state for immediate UI reflection
       await updateUser({
@@ -142,6 +227,7 @@ const EditProfileScreen = () => {
         city: payload.city,
         gender: payload.gender,
         dob: payload.dob,
+        photo_url: photoUrl || undefined,
       });
 
       Alert.alert('Success', 'Profile updated successfully.', [
@@ -151,7 +237,7 @@ const EditProfileScreen = () => {
         },
       ]);
     } catch (error: any) {
-      console.error('Error updating profile:', error);
+      console.error('❌ [EditProfileScreen] Error updating profile:', error);
       Alert.alert(
         'Error',
         error?.response?.data?.message || 'Failed to update profile. Please try again.',
@@ -159,221 +245,349 @@ const EditProfileScreen = () => {
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [firstName, lastName, phone, city, address, pinCode, gender, dob, bloodGroup, maritalStatus, height, weight, emergencyContactName, emergencyContactPhone, currentUser, user, navigation, updateUser, profileImage]);
+
+  const renderOptionModal = (title: string, options: string[], selectedValue: string, onSelect: (value: string) => void, isVisible: boolean, setIsVisible: (visible: boolean) => void) => (
+    <Modal
+      visible={isVisible}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setIsVisible(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{title}</Text>
+            <TouchableOpacity onPress={() => setIsVisible(false)}>
+              <Ionicons name="close" size={24} color={theme.colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.modalOptions}>
+            {options.map((option) => (
+              <TouchableOpacity
+                key={option}
+                style={[
+                  styles.modalOption,
+                  selectedValue === option && styles.modalOptionSelected
+                ]}
+                onPress={() => {
+                  onSelect(option);
+                  setIsVisible(false);
+                }}
+              >
+                <Text style={[
+                  styles.modalOptionText,
+                  selectedValue === option && styles.modalOptionTextSelected
+                ]}>
+                  {option}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#1E88E5" barStyle="light-content" />
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>{'<'} Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Profile</Text>
-      </View>
+      <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
+      
+      {/* Modern Header with Gradient */}
+      <Animated.View
+        style={[
+          styles.headerWrapper,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={[theme.colors.primary, theme.colors.secondary]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
+        >
+          <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
+          
+          <View style={styles.headerContent}>
+            <TouchableOpacity 
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
+            </TouchableOpacity>
+            
+            <View style={styles.titleContainer}>
+              <Text style={styles.headerTitle}>Edit Profile</Text>
+            </View>
+            
+            <View style={styles.placeholderButton} />
+          </View>
+          
+          {/* Decorative elements */}
+          <View style={styles.topCircle} />
+          <View style={styles.bottomWave} />
+        </LinearGradient>
+      </Animated.View>
 
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
       >
-        <ScrollView contentContainerStyle={styles.formContainer} keyboardShouldPersistTaps="handled">
-          {/* Personal Details */}
-          <Text style={styles.sectionTitle}>Personal Details</Text>
-          <View style={styles.fieldGroup}>
-            <FloatingLabelInput
-              label="First Name"
-              value={firstName}
-              onChangeText={setFirstName}
-              autoCapitalize="words"
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Gender</Text>
-            <TouchableOpacity
-              style={styles.dropdown}
-              onPress={() => setShowGenderOptions((prev) => !prev)}
-           >
-              <Text style={styles.dropdownText}>
-                {gender ? gender : 'Select gender'}
-              </Text>
-            </TouchableOpacity>
-            {showGenderOptions && (
-              <View style={styles.dropdownOptionsContainer}>
-                {genderOptions.map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={styles.dropdownOption}
-                    onPress={() => {
-                      setGender(option);
-                      setShowGenderOptions(false);
-                    }}
-                  >
-                    <Text style={styles.dropdownOptionText}>{option}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <FloatingLabelInput
-              label="Date of Birth (YYYY-MM-DD)"
-              value={dob}
-              onChangeText={setDob}
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <FloatingLabelInput
-              label="Last Name"
-              value={lastName}
-              onChangeText={setLastName}
-              autoCapitalize="words"
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <FloatingLabelInput
-              label="Phone"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <FloatingLabelInput
-              label="City"
-              value={city}
-              onChangeText={setCity}
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <FloatingLabelInput
-              label="Address"
-              value={address}
-              onChangeText={setAddress}
-              multiline
-              numberOfLines={3}
-              inputStyle={styles.multilineInput}
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <FloatingLabelInput
-              label="Pincode"
-              value={pinCode}
-              onChangeText={setPinCode}
-              keyboardType="number-pad"
-            />
-          </View>
-
-          {/* Health Profile */}
-          <Text style={styles.sectionTitle}>Health Profile</Text>
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Blood Group</Text>
-            <TouchableOpacity
-              style={styles.dropdown}
-              onPress={() => setShowBloodGroupOptions((prev) => !prev)}
+        <Animated.ScrollView 
+          style={[styles.formContainer, { opacity: fadeAnim }]}
+          contentContainerStyle={styles.formContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Profile Picture Section */}
+          <Animated.View 
+            style={[
+              styles.profileSection, 
+              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+            ]}
+          >
+            <TouchableOpacity 
+              onPress={handleSelectImage}
+              style={styles.profileImageContainer}
+              activeOpacity={0.8}
             >
-              <Text style={styles.dropdownText}>
-                {bloodGroup ? bloodGroup : 'Select blood group'}
-              </Text>
-            </TouchableOpacity>
-            {showBloodGroupOptions && (
-              <View style={styles.dropdownOptionsContainer}>
-                {bloodGroupOptions.map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={styles.dropdownOption}
-                    onPress={() => {
-                      setBloodGroup(option);
-                      setShowBloodGroupOptions(false);
-                    }}
-                  >
-                    <Text style={styles.dropdownOptionText}>{option}</Text>
-                  </TouchableOpacity>
-                ))}
+              {profileImage ? (
+                <Image source={{ uri: profileImage }} style={styles.profileImage} />
+              ) : (
+                <View style={styles.profileImagePlaceholder}>
+                  <Ionicons name="person" size={40} color={theme.colors.text.secondary} />
+                  <Text style={styles.profileImagePlaceholderText}>Add Photo</Text>
+                </View>
+              )}
+              <View style={styles.profileImageEditButton}>
+                <Ionicons name="camera" size={16} color={theme.colors.background.surface} />
               </View>
-            )}
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Marital Status</Text>
-            <TouchableOpacity
-              style={styles.dropdown}
-              onPress={() => setShowMaritalStatusOptions((prev) => !prev)}
-            >
-              <Text style={styles.dropdownText}>
-                {maritalStatus ? maritalStatus : 'Select marital status'}
-              </Text>
             </TouchableOpacity>
-            {showMaritalStatusOptions && (
-              <View style={styles.dropdownOptionsContainer}>
-                {maritalStatusOptions.map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={styles.dropdownOption}
-                    onPress={() => {
-                      setMaritalStatus(option);
-                      setShowMaritalStatusOptions(false);
-                    }}
-                  >
-                    <Text style={styles.dropdownOptionText}>{option}</Text>
-                  </TouchableOpacity>
-                ))}
+            <Text style={styles.profileImageText}>Tap to change profile picture</Text>
+          </Animated.View>
+
+          {/* Personal Details Card */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="person-outline" size={20} color={theme.colors.primary} />
+              <Text style={styles.cardTitle}>Personal Details</Text>
+            </View>
+            
+            <View style={styles.formRow}>
+              <View style={styles.formHalf}>
+                <Text style={styles.inputLabel}>First Name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  autoCapitalize="words"
+                  placeholder="Enter first name"
+                />
               </View>
-            )}
+              
+              <View style={styles.formHalf}>
+                <Text style={styles.inputLabel}>Last Name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={lastName}
+                  onChangeText={setLastName}
+                  autoCapitalize="words"
+                  placeholder="Enter last name"
+                />
+              </View>
+            </View>
+
+            <View style={styles.formRow}>
+              <View style={styles.formHalf}>
+                <Text style={styles.inputLabel}>Gender</Text>
+                <TouchableOpacity
+                  style={styles.selectInput}
+                  onPress={() => setShowGenderModal(true)}
+                >
+                  <Text style={styles.selectInputText}>
+                    {gender || 'Select gender'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color={theme.colors.text.secondary} />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.formHalf}>
+                <Text style={styles.inputLabel}>Date of Birth</Text>
+                <TextInput
+                  style={styles.input}
+                  value={dob}
+                  onChangeText={setDob}
+                  placeholder="YYYY-MM-DD"
+                />
+              </View>
+            </View>
+
+            <View style={styles.formRow}>
+              <View style={styles.formHalf}>
+                <Text style={styles.inputLabel}>Phone</Text>
+                <TextInput
+                  style={styles.input}
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  placeholder="Enter phone number"
+                />
+              </View>
+              
+              <View style={styles.formHalf}>
+                <Text style={styles.inputLabel}>City</Text>
+                <TextInput
+                  style={styles.input}
+                  value={city}
+                  onChangeText={setCity}
+                  placeholder="Enter city"
+                />
+              </View>
+            </View>
+
+            <View style={styles.formFull}>
+              <Text style={styles.inputLabel}>Address</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={address}
+                onChangeText={setAddress}
+                placeholder="Enter address"
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            <View style={styles.formRow}>
+              <View style={styles.formHalf}>
+                <Text style={styles.inputLabel}>PIN Code</Text>
+                <TextInput
+                  style={styles.input}
+                  value={pinCode}
+                  onChangeText={setPinCode}
+                  keyboardType="number-pad"
+                  placeholder="Enter PIN code"
+                />
+              </View>
+              
+              <View style={styles.formHalf} />
+            </View>
           </View>
 
-          <View style={styles.fieldGroup}>
-            <FloatingLabelInput
-              label="Height (cm)"
-              value={height}
-              onChangeText={setHeight}
-              keyboardType="decimal-pad"
-            />
+          {/* Health Details Card */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="heart-outline" size={20} color={theme.colors.primary} />
+              <Text style={styles.cardTitle}>Health Details</Text>
+            </View>
+            
+            <View style={styles.formRow}>
+              <View style={styles.formHalf}>
+                <Text style={styles.inputLabel}>Blood Group</Text>
+                <TouchableOpacity
+                  style={styles.selectInput}
+                  onPress={() => setShowBloodGroupModal(true)}
+                >
+                  <Text style={styles.selectInputText}>
+                    {bloodGroup || 'Select blood group'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color={theme.colors.text.secondary} />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.formHalf}>
+                <Text style={styles.inputLabel}>Marital Status</Text>
+                <TouchableOpacity
+                  style={styles.selectInput}
+                  onPress={() => setShowMaritalStatusModal(true)}
+                >
+                  <Text style={styles.selectInputText}>
+                    {maritalStatus || 'Select marital status'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color={theme.colors.text.secondary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.formRow}>
+              <View style={styles.formHalf}>
+                <Text style={styles.inputLabel}>Height (cm)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={height}
+                  onChangeText={setHeight}
+                  keyboardType="decimal-pad"
+                  placeholder="Enter height"
+                />
+              </View>
+              
+              <View style={styles.formHalf}>
+                <Text style={styles.inputLabel}>Weight (kg)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={weight}
+                  onChangeText={setWeight}
+                  keyboardType="decimal-pad"
+                  placeholder="Enter weight"
+                />
+              </View>
+            </View>
           </View>
 
-          <View style={styles.fieldGroup}>
-            <FloatingLabelInput
-              label="Weight (kg)"
-              value={weight}
-              onChangeText={setWeight}
-              keyboardType="decimal-pad"
-            />
+          {/* Emergency Contact Card */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="call-outline" size={20} color={theme.colors.primary} />
+              <Text style={styles.cardTitle}>Emergency Contact</Text>
+            </View>
+            
+            <View style={styles.formRow}>
+              <View style={styles.formHalf}>
+                <Text style={styles.inputLabel}>Contact Name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={emergencyContactName}
+                  onChangeText={setEmergencyContactName}
+                  placeholder="Enter emergency contact name"
+                />
+              </View>
+              
+              <View style={styles.formHalf}>
+                <Text style={styles.inputLabel}>Contact Phone</Text>
+                <TextInput
+                  style={styles.input}
+                  value={emergencyContactPhone}
+                  onChangeText={setEmergencyContactPhone}
+                  keyboardType="phone-pad"
+                  placeholder="Enter emergency contact phone"
+                />
+              </View>
+            </View>
           </View>
 
-          {/* Emergency Contact */}
-          <Text style={styles.sectionTitle}>Emergency Contact</Text>
-          <View style={styles.fieldGroup}>
-            <FloatingLabelInput
-              label="Emergency Contact Name"
-              value={emergencyContactName}
-              onChangeText={setEmergencyContactName}
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <FloatingLabelInput
-              label="Emergency Contact Phone"
-              value={emergencyContactPhone}
-              onChangeText={setEmergencyContactPhone}
-              keyboardType="phone-pad"
-            />
-          </View>
-
+          {/* Save Button */}
           <TouchableOpacity
             style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
             onPress={handleSave}
             disabled={isSaving}
+            activeOpacity={0.8}
           >
-            <Text style={styles.saveButtonText}>{isSaving ? 'Saving...' : 'Save Changes'}</Text>
+            <Ionicons name="save-outline" size={20} color={theme.colors.background.surface} />
+            <Text style={styles.saveButtonText}>
+              {isSaving ? 'Saving...' : 'Save Changes'}
+            </Text>
           </TouchableOpacity>
-        </ScrollView>
+        </Animated.ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Modals */}
+      {renderOptionModal('Select Gender', genderOptions, gender, setGender, showGenderModal, setShowGenderModal)}
+      {renderOptionModal('Select Blood Group', bloodGroupOptions, bloodGroup, setBloodGroup, showBloodGroupModal, setShowBloodGroupModal)}
+      {renderOptionModal('Select Marital Status', maritalStatusOptions, maritalStatus, setMaritalStatus, showMaritalStatusModal, setShowMaritalStatusModal)}
     </SafeAreaView>
   );
 };
@@ -381,106 +595,283 @@ const EditProfileScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#f8fafc',
   },
   flex: {
     flex: 1,
   },
+  
+  // Modern Header Styles
+  headerWrapper: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
   header: {
-    backgroundColor: '#1E88E5',
+    paddingTop: 40,
+    paddingBottom: 24,
+    paddingHorizontal: 24,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingTop: StatusBar.currentHeight || 40,
+    justifyContent: 'space-between',
+    zIndex: 2,
   },
   backButton: {
-    padding: 8,
-    marginRight: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  backButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+  titleContainer: {
+    flex: 1,
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#FFFFFF',
+    letterSpacing: -0.5,
   },
-  formContainer: {
-    padding: 16,
+  placeholderButton: {
+    width: 44,
+    height: 44,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
+  topCircle: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    top: -40,
+    left: -40,
+  },
+  bottomWave: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderTopLeftRadius: 100,
+    borderTopRightRadius: 100,
+  },
+  
+  // Profile Picture Styles
+  profileSection: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+    alignItems: 'center',
+  },
+  profileImageContainer: {
+    position: 'relative',
     marginBottom: 12,
   },
-  fieldGroup: {
-    marginBottom: 16,
+  profileImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: theme.colors.background.surface,
   },
-  label: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 4,
+  profileImagePlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    borderStyle: 'dashed',
   },
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: '#111827',
-  },
-  multilineInput: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  dropdown: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  dropdownText: {
-    fontSize: 16,
-    color: '#111827',
-  },
-  dropdownOptionsContainer: {
+  profileImagePlaceholderText: {
+    fontSize: 12,
+    color: theme.colors.text.secondary,
     marginTop: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
   },
-  dropdownOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  profileImageEditButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: theme.colors.primary,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.colors.background.surface,
+  },
+  profileImageText: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
+  },
+  
+  // Form Styles
+  formContainer: {
+    flex: 1,
+    padding: 20,
+  },
+  formContent: {
+    paddingBottom: 32,
+  },
+  card: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  dropdownOptionText: {
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginLeft: 8,
+    flex: 1,
+  },
+  formRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  formHalf: {
+    width: '48%',
+  },
+  formFull: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme.colors.text.secondary,
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     fontSize: 16,
-    color: '#111827',
+    color: theme.colors.text.primary,
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  selectInput: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: theme.colors.text.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectInputText: {
+    flex: 1,
+    color: theme.colors.text.primary,
   },
   saveButton: {
-    backgroundColor: '#1E88E5',
-    borderRadius: 12,
-    paddingVertical: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     marginTop: 8,
     marginBottom: 32,
+    gap: 8,
   },
   saveButtonDisabled: {
     opacity: 0.7,
   },
   saveButtonText: {
-    color: '#FFFFFF',
+    color: theme.colors.background.surface,
     fontSize: 16,
+    fontWeight: '600',
+  },
+  
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: 20,
+    width: width * 0.9,
+    maxHeight: height * 0.7,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+  },
+  modalOptions: {
+    maxHeight: height * 0.4,
+  },
+  modalOption: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  modalOptionSelected: {
+    backgroundColor: theme.colors.primary + '20',
+  },
+  modalOptionText: {
+    fontSize: 16,
+    color: theme.colors.text.primary,
+  },
+  modalOptionTextSelected: {
+    color: theme.colors.primary,
     fontWeight: '600',
   },
 });

@@ -25,27 +25,41 @@ export interface Prescription {
   prescriptionId: string;
   prescriptionType: string;
   prescriptionDate: string;
+  professional_id: number;
+  user_id: number;
+  booking_id: number;
+
+  // Patient Information (from API)
+  patientName?: string;
+  patientAge?: number;
+  patientGender?: string;
+  practitionerName?: string;
+  practitionerQualification?: string;
 
   // Relations
-  professional: {
+  professional?: {
     professional_id: number;
     first_name: string;
     last_name: string;
-    speciality_new?: { name: string };
+    speciality_new?: { name: string; type?: string };
     photo_url?: string;
     email?: string;
+    phone_number?: string;
   };
   booking?: {
     id: number;
     booking_date: string;
     status: string;
+    duration?: number;
+    mode?: string;
+    final_amount?: number;
   };
 
   // Medical Data
-  vitals?: {
-    bloodPressure?: string;
-    weight?: string;
-    pulse?: string;
+  vitals?: Array<{
+    type: string;
+    value: string;
+  }> | {
     [key: string]: any;
   };
   medicines: PrescriptionMedicine[];
@@ -56,6 +70,13 @@ export interface Prescription {
   // Follow Up
   followUpDate?: string;
   followUpReason?: string;
+  followUpReminderSet?: boolean;
+
+  // Metadata
+  isActive?: boolean;
+  isDeleted?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface PaginatedPrescriptionsResponse {
