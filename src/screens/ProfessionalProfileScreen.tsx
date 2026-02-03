@@ -374,9 +374,8 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
           <TouchableOpacity 
             onPress={() => navigation.goBack()}
             style={styles.backButton}
-            activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
+            <Ionicons name="arrow-back" size={24} color={appTheme.colors.background.surface} />
           </TouchableOpacity>
           
           <View style={styles.titleContainer}>
@@ -384,13 +383,7 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
             <Text style={styles.headerSubtitle}>View professional details</Text>
           </View>
           
-          <TouchableOpacity 
-            style={styles.headerButton}
-            onPress={handleShare}
-            hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-          >
-            <Ionicons name="share-outline" size={24} color="#fff" />
-          </TouchableOpacity>
+          <View style={styles.placeholderButton} />
         </View>
         
         {/* Decorative elements */}
@@ -687,6 +680,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     opacity: 0.8,
     marginTop: 2,
+  },
+  placeholderButton: {
+    width: 40,
   },
   topCircle: {
     position: 'absolute',

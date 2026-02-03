@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -19,14 +19,14 @@ interface ModernSearchBarProps {
   onBlur?: () => void;
 }
 
-const ModernSearchBar: React.FC<ModernSearchBarProps> = ({
+const ModernSearchBar = forwardRef<any, ModernSearchBarProps>(({
   value,
   onChangeText,
   onSubmit,
   placeholder = 'Search by name, specialization...',
   onFocus,
   onBlur,
-}) => {
+}, ref) => {
   const [isFocused, setIsFocused] = useState(false);
   const [animatedWidth] = useState(new Animated.Value(0));
 
@@ -69,6 +69,7 @@ const ModernSearchBar: React.FC<ModernSearchBarProps> = ({
 
         {/* Text Input */}
         <TextInput
+          ref={ref}
           style={styles.input}
           value={value}
           onChangeText={onChangeText}
@@ -109,7 +110,9 @@ const ModernSearchBar: React.FC<ModernSearchBarProps> = ({
       )}
     </View>
   );
-};
+});
+
+ModernSearchBar.displayName = 'ModernSearchBar';
 
 const styles = StyleSheet.create({
   container: {

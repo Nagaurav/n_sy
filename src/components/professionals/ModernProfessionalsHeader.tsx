@@ -15,6 +15,8 @@ interface ModernProfessionalsHeaderProps {
   onBackPress: () => void;
   onFavoritePress?: () => void;
   showFavorite?: boolean;
+  showSearch?: boolean;
+  onSearchPress?: () => void;
 }
 
 const ModernProfessionalsHeader: React.FC<ModernProfessionalsHeaderProps> = ({
@@ -22,6 +24,8 @@ const ModernProfessionalsHeader: React.FC<ModernProfessionalsHeaderProps> = ({
   onBackPress,
   onFavoritePress,
   showFavorite = true,
+  showSearch = false,
+  onSearchPress,
 }) => (
     <>
       <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
@@ -40,6 +44,13 @@ const ModernProfessionalsHeader: React.FC<ModernProfessionalsHeaderProps> = ({
           {/* Title */}
           <Text style={styles.title}>{title}</Text>
 
+          {/* Search Button */}
+          {showSearch && (
+            <TouchableOpacity style={styles.searchButton} onPress={onSearchPress}>
+              <Ionicons name="search-outline" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+
           {/* Favorite Button */}
           {showFavorite && (
             <TouchableOpacity style={styles.favoriteButton} onPress={onFavoritePress}>
@@ -47,8 +58,8 @@ const ModernProfessionalsHeader: React.FC<ModernProfessionalsHeaderProps> = ({
             </TouchableOpacity>
           )}
 
-          {/* Spacer for alignment when favorite is hidden */}
-          {!showFavorite && <View style={styles.spacer} />}
+          {/* Spacer for alignment when both are hidden */}
+          {!showSearch && !showFavorite && <View style={styles.spacer} />}
         </View>
 
         {/* Decorative Elements */}
@@ -89,6 +100,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     flex: 1,
     letterSpacing: -0.5,
+  },
+  searchButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   favoriteButton: {
     width: 44,

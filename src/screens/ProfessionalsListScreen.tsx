@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -55,6 +55,9 @@ const ProfessionalsListScreen = () => {
   const [hasMoreData, setHasMoreData] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [scrollY] = useState(new Animated.Value(0));
+
+  // Refs
+  const searchInputRef = useRef<any>(null);
 
   // Filters
   const [filters, setFilters] = useState<FilterModalState>({
@@ -250,6 +253,7 @@ const ProfessionalsListScreen = () => {
         <ModernProfessionalsHeader
           title={categoryName || 'PROFESSIONALS'}
           onBackPress={() => navigation.goBack()}
+          showFavorite={false}
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -265,6 +269,7 @@ const ProfessionalsListScreen = () => {
         <ModernProfessionalsHeader
           title={categoryName || 'PROFESSIONALS'}
           onBackPress={() => navigation.goBack()}
+          showFavorite={false}
         />
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
@@ -278,10 +283,17 @@ const ProfessionalsListScreen = () => {
       <ModernProfessionalsHeader
         title={categoryName || 'PROFESSIONALS'}
         onBackPress={() => navigation.goBack()}
+        showFavorite={false}
+        showSearch={true}
+        onSearchPress={() => {
+          // Focus on the search bar
+          searchInputRef.current?.focus();
+        }}
       />
 
       {/* Search Bar */}
       <ModernSearchBar
+        ref={searchInputRef}
         value={currentSearchQuery}
         onChangeText={setCurrentSearchQuery}
         onSubmit={handleSearch}

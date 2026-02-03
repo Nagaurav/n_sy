@@ -64,15 +64,28 @@ const AppointmentsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'consultation' | 'yoga_class'>('all');
+  const [selectedFilter, setSelectedFilter] = useState<'all' | 'upcoming' | 'completed'>('all');
+  const [subFilter, setSubFilter] = useState<'all' | 'consultation' | 'yoga_class'>('all');
 
-  // � Filter function
-  const applyFilter = useCallback((data: UnifiedAppointment[], filter: 'all' | 'consultation' | 'yoga_class') => {
-    if (filter === 'all') {
-      setFilteredAppointments(data);
-    } else {
-      setFilteredAppointments(data.filter(item => item.type === filter));
+  // Enhanced filter function
+  const applyFilter = useCallback((data: UnifiedAppointment[], mainFilter: string, subF: string) => {
+    let filtered = data;
+
+    // Apply main filter
+    if (mainFilter === 'upcoming') {
+      filtered = filtered.filter(item => 
+        item.status === 'CONFIRMED' || item.status === 'PENDING'
+      );
+    } else if (mainFilter === 'completed') {
+      filtered = filtered.filter(item => item.status === 'COMPLETED');
     }
+
+    // Apply sub filter
+    if (subF !== 'all') {
+      filtered = filtered.filter(item => item.type === subF);
+    }
+
+    setFilteredAppointments(filtered);
   }, []);
 
   // �🟢 SINGLE SOURCE OF TRUTH
@@ -90,7 +103,7 @@ const AppointmentsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       if (res.success && res.data) {
         setAppointments(res.data);
         // Apply current filter to new data
-        applyFilter(res.data, selectedFilter);
+        applyFilter(res.data, selectedFilter, subFilter);
       } else {
         setError('Failed to load appointments.');
       }
@@ -104,8 +117,8 @@ const AppointmentsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
   // Handle filter change
   useEffect(() => {
-    applyFilter(appointments, selectedFilter);
-  }, [selectedFilter, appointments, applyFilter]);
+    applyFilter(appointments, selectedFilter, subFilter);
+  }, [selectedFilter, subFilter, appointments, applyFilter]);
 
   // Initial Load
   useEffect(() => {
@@ -225,30 +238,72 @@ const AppointmentsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
       {/* Filter Chips */}
       <View style={styles.filterContainer}>
-        <TouchableOpacity
-          style={[styles.filterChip, selectedFilter === 'all' && styles.filterChipActive]}
-          onPress={() => setSelectedFilter('all')}
-        >
-          <Text style={[styles.filterText, selectedFilter === 'all' && styles.filterTextActive]}>
-            All ({appointments.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterChip, selectedFilter === 'consultation' && styles.filterChipActive]}
-          onPress={() => setSelectedFilter('consultation')}
-        >
-          <Text style={[styles.filterText, selectedFilter === 'consultation' && styles.filterTextActive]}>
-            Consultations ({appointments.filter(item => item.type === 'consultation').length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterChip, selectedFilter === 'yoga_class' && styles.filterChipActive]}
-          onPress={() => setSelectedFilter('yoga_class')}
-        >
-          <Text style={[styles.filterText, selectedFilter === 'yoga_class' && styles.filterTextActive]}>
-            Yoga Classes ({appointments.filter(item => item.type === 'yoga_class').length})
-          </Text>
-        </TouchableOpacity>
+        {/* Main Filters */}
+        <View style={styles.mainFilterRow}>
+          <TouchableOpacity
+            style={[styles.filterChip, selectedFilter === 'all' && styles.filterChipActive]}
+            onPress={() => {
+              setSelectedFilter('all');
+              setSubFilter('all');
+            }}
+          >
+            <Text style={[styles.filterText, selectedFilter === 'all' && styles.filterTextActive]}>
+              All ({appointments.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterChip, selectedFilter === 'upcoming' && styles.filterChipActive]}
+            onPress={() => {
+              setSelectedFilter('upcoming');
+              setSubFilter('all');
+            }}
+          >
+            <Text style={[styles.filterText, selectedFilter === 'upcoming' && styles.filterTextActive]}>
+              Upcoming ({appointments.filter(item => item.status === 'CONFIRMED' || item.status === 'PENDING').length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterChip, selectedFilter === 'completed' && styles.filterChipActive]}
+            onPress={() => {
+              setSelectedFilter('completed');
+              setSubFilter('all');
+            }}
+          >
+            <Text style={[styles.filterText, selectedFilter === 'completed' && styles.filterTextActive]}>
+              Completed ({appointments.filter(item => item.status === 'COMPLETED').length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Sub Filters - Show only when main filter is not 'all' */}
+        {selectedFilter !== 'all' && (
+          <View style={styles.subFilterRow}>
+            <TouchableOpacity
+              style={[styles.subFilterChip, subFilter === 'all' && styles.subFilterChipActive]}
+              onPress={() => setSubFilter('all')}
+            >
+              <Text style={[styles.subFilterText, subFilter === 'all' && styles.subFilterTextActive]}>
+                All Types
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.subFilterChip, subFilter === 'consultation' && styles.subFilterChipActive]}
+              onPress={() => setSubFilter('consultation')}
+            >
+              <Text style={[styles.subFilterText, subFilter === 'consultation' && styles.subFilterTextActive]}>
+                Consultations
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.subFilterChip, subFilter === 'yoga_class' && styles.subFilterChipActive]}
+              onPress={() => setSubFilter('yoga_class')}
+            >
+              <Text style={[styles.subFilterText, subFilter === 'yoga_class' && styles.subFilterTextActive]}>
+                Yoga Classes
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
@@ -360,14 +415,26 @@ const styles = StyleSheet.create({
   
   // Filter Styles
   filterContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingHorizontal: 16, 
-    paddingVertical: 16, 
     backgroundColor: theme.colors.background.surface,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    paddingHorizontal: 16,
+  },
+  mainFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  subFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingBottom: 16,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
   },
   filterChip: { 
     flexDirection: 'row',
@@ -380,7 +447,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e9ecef',
     height: 36,
-    marginRight: 8,
+    marginRight: 24,
+    minWidth: 80,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -396,6 +464,34 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  subFilterChip: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18, 
+    paddingVertical: 8, 
+    borderRadius: 18, 
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    height: 36,
+    marginRight: 24,
+    minWidth: 90,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  subFilterChipActive: { 
+    backgroundColor: theme.colors.secondary || '#6c757d',
+    borderColor: theme.colors.secondary || '#6c757d',
+    shadowColor: theme.colors.secondary || '#6c757d',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+  },
   filterText: { 
     fontSize: 13, 
     fontWeight: '600', 
@@ -405,6 +501,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   filterTextActive: { 
+    color: '#fff',
+    fontWeight: '700',
+  },
+  subFilterText: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    color: '#6c757d',
+    textAlign: 'center',
+    lineHeight: 18,
+    letterSpacing: 0.2,
+  },
+  subFilterTextActive: { 
     color: '#fff',
     fontWeight: '700',
   }
