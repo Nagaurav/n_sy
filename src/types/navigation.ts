@@ -64,11 +64,13 @@ export type HomeStackParamList = {
     paymentUrl: string;
     bookingId: string;
     paymentId: string;
+    transactionId?: string; // Added transactionId as optional
     amount: number;
     customerId: string;
     customerEmail: string;
     customerPhone: string;
     merchantId?: string;
+    bookingType?: 'consultation' | 'yoga' | 'yoga_class'; // Added booking type for sync endpoint selection
   };
   BookingSuccess: {
     bookingId: string;

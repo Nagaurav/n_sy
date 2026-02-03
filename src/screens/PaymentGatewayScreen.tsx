@@ -40,7 +40,45 @@ interface PaymentStatusResponse {
 const PaymentGatewayScreen = () => {
   const navigation = useNavigation<PaymentGatewayNavigationProp>();
   const route = useRoute<PaymentGatewayRouteProp>();
-  const { paymentUrl, bookingId, paymentId } = route.params;
+  const { paymentUrl, bookingId, paymentId, transactionId, bookingType = 'consultation' } = route.params;
+  
+  // Extract IDs from URL if not provided in params (fallback mechanism)
+  const extractIdFromUrl = (url: string, paramName: string) => {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.searchParams.get(paramName);
+    } catch {
+      return null;
+    }
+  };
+  
+  const fallbackBookingId = bookingId || extractIdFromUrl(paymentUrl, 'booking_id') || extractIdFromUrl(paymentUrl, 'bookingId');
+  const fallbackTransactionId = transactionId || extractIdFromUrl(paymentUrl, 'transaction_id') || extractIdFromUrl(paymentUrl, 'transactionId');
+  
+  // Debug: Log received parameters
+  console.log('🔍 [PaymentGateway] Received params:', {
+    paymentUrl: paymentUrl ? 'Present' : 'Missing',
+    bookingId: bookingId || 'MISSING',
+    paymentId: paymentId || 'Missing',
+    transactionId: transactionId || 'Missing',
+    bookingType: bookingType || 'consultation',
+    fallbackBookingId: fallbackBookingId || 'NOT_FOUND_IN_URL',
+    fallbackTransactionId: fallbackTransactionId || 'NOT_FOUND_IN_URL',
+    allParams: route.params,
+    paymentUrlPreview: paymentUrl ? paymentUrl.substring(0, 100) + '...' : 'NO_URL'
+  });
+  
+  // Log URL extraction details
+  console.log('🔍 [PaymentGateway] URL extraction details:', {
+    originalBookingId: bookingId,
+    originalTransactionId: transactionId,
+    urlBookingId: extractIdFromUrl(paymentUrl, 'booking_id'),
+    urlBookingIdAlt: extractIdFromUrl(paymentUrl, 'bookingId'),
+    urlTransactionId: extractIdFromUrl(paymentUrl, 'transaction_id'),
+    urlTransactionIdAlt: extractIdFromUrl(paymentUrl, 'transactionId'),
+    finalFallbackBookingId: fallbackBookingId,
+    finalFallbackTransactionId: fallbackTransactionId
+  });
   
   const webViewRef = useRef<WebView>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -137,17 +175,24 @@ const PaymentGatewayScreen = () => {
 
   // Verify payment status with backend
   const verifyPaymentStatus = async (currentRetry = 0) => {
-    if (!bookingId) {
-      setError('Invalid booking reference');
+    // For yoga bookings, use transactionId; for consultations, use bookingId
+    const referenceId = bookingType === 'yoga_class' 
+      ? (transactionId || bookingId) // Yoga expects transactionId
+      : (bookingId || transactionId); // Consultation expects bookingId
+
+    if (!referenceId) {
+      console.error('❌ [PaymentGateway] No reference ID found for verification');
+      setError('Session reference lost. Please check your appointments.');
       setIsVerifying(false);
       return;
     }
+    
+    const idType = bookingType === 'yoga_class' ? 'transactionId' : 'bookingId';
+    console.log(`✅ [PaymentGateway] Verifying for ${bookingType} using ${idType}: ${referenceId} (attempt ${currentRetry + 1}/${maxRetries})`);
 
     try {
-      console.log(`Calling getBookingPaymentStatus for booking: ${bookingId} (attempt ${currentRetry + 1}/${maxRetries})`);
-
-      // Call the booking payment status endpoint (returns backend wrapper)
-      const wrapped = await apiService.getBookingPaymentStatus(bookingId);
+      // Update your API call to use the referenceId and bookingType
+      const wrapped = await apiService.getBookingPaymentStatus(referenceId, bookingType);
 
       console.log('Payment status response:', wrapped);
 
@@ -178,84 +223,85 @@ const PaymentGatewayScreen = () => {
         if (status === 'SUCCESS' || status === 'COMPLETED') {
           console.log(' Payment successful, performing manual sync before navigation');
           
-          try {
-            // Perform manual sync to ensure status is updated from PENDING to SUCCESS
-            console.log(`📡 Manual sync for booking: ${bookingId}, payment: ${paymentId}`);
-            const syncResponse = await apiService.syncPaymentStatus(paymentId || bookingId);
-            console.log('📊 Manual sync response:', syncResponse.data);
-            
-            // Check if sync was successful
-            const isSuccess = 
-              syncResponse.data?.msg?.includes('SUCCESS') || 
-              syncResponse.data?.msg?.includes('updated to SUCCESS') ||
-              syncResponse.data?.current_status === 'SUCCESS' ||
-              syncResponse.data?.status === 'SUCCESS';
-            
-            if (isSuccess) {
-              console.log('✅ Payment sync successful - status updated to SUCCESS');
-            } else {
-              console.log('⚠️ Payment sync completed but status still pending - webhook will handle final update');
+          // Add safety guard - only attempt sync if we have a valid transactionId
+          if (transactionId && transactionId !== 'Missing' && transactionId !== 'Missing') {
+            try {
+              // Perform manual sync to ensure status is updated from PENDING to SUCCESS
+              console.log(`📡 Performing manual sync for TXN: ${transactionId}`);
+              const syncResponse = await apiService.syncPaymentStatus(transactionId, bookingType);
+              console.log('📊 Manual sync response:', syncResponse.data);
+              
+              // Check if sync was successful
+              const isSuccess = 
+                syncResponse.data?.msg?.includes('SUCCESS') || 
+                syncResponse.data?.msg?.includes('updated to SUCCESS') ||
+                syncResponse.data?.current_status === 'SUCCESS' ||
+                syncResponse.data?.status === 'SUCCESS';
+              
+              if (isSuccess) {
+                console.log('✅ Payment sync successful - status updated to SUCCESS');
+              } else {
+                console.log('⚠️ Payment sync completed but status still pending - webhook will handle final update');
+              }
+            } catch (syncError) {
+              console.warn('⚠️ Manual sync failed, but continuing to success screen:', syncError);
+              // Don't block navigation if sync fails
             }
-          } catch (syncError) {
-            console.warn('⚠️ Manual sync failed, but continuing to success screen:', syncError);
-            // Don't block navigation if sync fails
+          } else {
+            console.log('⚠️ Skipping manual sync - no valid transactionId available');
           }
-          
+
           console.log('🎉 Navigating to success screen');
           navigation.replace('BookingSuccess', {
             bookingId,
             paymentId,
-            amount: amount || 0,
-            bookingDetails: bookingDetails || {},
-            status: 'success',
-            message: 'Payment completed successfully'
+            amount: response.data?.amount || 0,
+            status: status,
+            message: 'Payment completed successfully',
+            bookingDetails: response.data?.bookingDetails,
           });
-        } else if (status === 'FAILED' || status === 'CANCELLED') {
-          console.log('❌ Payment failed, navigating to failure screen');
-          navigation.replace('BookingFailed', {
-            bookingId,
-            error: response.error || 'Payment was not completed successfully.'
-          });
-        } else {
-          // Handle pending or other statuses with retry logic
-          console.log(`⏳ Status is ${status} (attempt ${currentRetry + 1}/${maxRetries})`);
-          
-          // 🚀 ADD THIS: Force backend to check with PhonePe immediately
-          // instead of waiting for webhook.
-          if (paymentId) {
-              try {
-                  console.log(`📡 Force syncing status with PhonePe for payment: ${paymentId}...`);
-                  await apiService.syncPaymentStatus(paymentId);
-              } catch (err) {
-                  console.log(`⚠️ Force sync failed for payment: ${paymentId}, but continuing retry loop`);
-              }
+        } else if (status === 'PENDING') {
+          console.log(` Status is PENDING (attempt ${currentRetry + 1}/10)`);
+
+          // 1. Force the backend to sync with PhonePe using the transactionId
+          if (transactionId && transactionId !== 'Missing') {
+            try {
+              console.log(` Forcing backend sync for: ${transactionId}`);
+              await apiService.syncPaymentStatus(transactionId, bookingType); 
+            } catch (err) {
+              console.log("Manual sync request failed, waiting for next poll...");
+            }
           }
 
-          console.log(`⏳ Payment status: ${status} (attempt ${currentRetry + 1}/${maxRetries})`);
-          
-          if (currentRetry < maxRetries - 1) {
-            // Update retry count and message
-            const newRetryCount = currentRetry + 1;
-            setRetryCount(newRetryCount);
-            setVerifyingText(`Verifying Payment... (${newRetryCount}/${maxRetries})`);
-            
-            // Schedule next retry
+          // 2. RETRY loop: Wait 3 seconds and check again
+          if (currentRetry < 9) {
             setTimeout(() => {
-              verifyPaymentStatus(newRetryCount);
-            }, retryInterval);
+              verifyPaymentStatus(currentRetry + 1);
+            }, 3000); 
+            return; // Exit current execution to wait for the timeout
           } else {
-            // Max retries reached, navigate to failed screen
-            console.log('⏰ Max retries reached, navigating to failed screen');
+            // Only fail if it's still pending after 10 attempts (30 seconds)
             navigation.replace('BookingFailed', {
               bookingId,
-              error: `Verification timed out. Status: ${status}`
+              error: 'Payment verification is taking longer than expected. Please check your appointments list.'
             });
+            return;
           }
+        } else {
+          // Payment not successful, navigate to failed screen
+          console.log(' Payment not successful, navigating to failed screen');
+          navigation.replace('BookingFailed', {
+            bookingId,
+            error: `Payment not successful. Status: ${status || 'UNKNOWN'}`
+          });
         }
       } else {
-        // No data in response, treat as failure
-        console.log('❌ No payment data received in response:', response);
-        throw new Error(response.error || 'No payment status data received');
+        // No data in response, navigate to failed screen
+        console.log('⏰ No data in response, navigating to failed screen');
+        navigation.replace('BookingFailed', {
+          bookingId,
+          error: 'No payment data received'
+        });
       }
     } catch (err: any) {
       console.error(`Payment verification error (attempt ${currentRetry + 1}/${maxRetries}):`, err);
@@ -278,11 +324,6 @@ const PaymentGatewayScreen = () => {
         });
       }
     }
-  };
-
-  const handleError = () => {
-    setError('Failed to load payment page. Please check your internet connection and try again.');
-    setIsLoading(false);
   };
 
   const handleLoadStart = (syntheticEvent: any) => {
@@ -311,6 +352,11 @@ const PaymentGatewayScreen = () => {
       url: nativeEvent.url,
       title: nativeEvent.title || 'No title'
     });
+    setIsLoading(false);
+  };
+
+  const handleError = () => {
+    setError('Failed to load payment page. Please check your internet connection and try again.');
     setIsLoading(false);
   };
 

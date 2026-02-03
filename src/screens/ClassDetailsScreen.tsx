@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,15 @@ import {
   Dimensions,
   Alert,
   Share,
+  Animated,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
+import { useTheme } from '../contexts/ThemeContext';
 import { theme } from '../theme';
 import { YogaClass } from '../types/yogaClasses';
+import { formatDisplayDate, formatDisplayTime, formatSlotTimeRange } from '../utils/dateUtils';
 
 type ClassDetailsRouteProp = RouteProp<{ params: { classData: YogaClass } }, 'params'>;
 
@@ -26,9 +29,30 @@ const ClassDetailsScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<ClassDetailsRouteProp>();
   const { classData } = route.params;
+  const { theme: appTheme } = useTheme();
+
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [selectedMode, setSelectedMode] = useState<string | null>(null);
+
+  // Start animations when component mounts
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   // Get available delivery modes
   const getAvailableModes = useCallback(() => {
@@ -145,8 +169,8 @@ const ClassDetailsScreen = () => {
         date: new Date().toISOString(), // Starts "Now" or logic based on start_date
         time: `${formatTime(classData.start_time)} - ${formatTime(classData.end_time)}`,
         
-        // Logic Data
-        deliveryMode: selectedMode // e.g. 'GROUP_ONLINE'
+        // Logic Data - Convert to uppercase to match backend enum
+        deliveryMode: selectedMode?.toUpperCase() // e.g. 'GROUP_ONLINE', 'HOME_VISIT'
       }
     });
     
@@ -163,106 +187,162 @@ const ClassDetailsScreen = () => {
       
       {/* Modern Header */}
       <LinearGradient
-        colors={[theme.colors.primary, theme.colors.secondary]}
+        colors={[appTheme.colors.primary, appTheme.colors.secondary]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.headerContainer}
+        style={styles.header}
       >
         <View style={styles.headerContent}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color={appTheme.colors.background.surface} />
           </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>CLASS DETAILS</Text>
-
-          <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-            <Ionicons name="share-outline" size={24} color="#FFFFFF" />
+          
+          <View style={styles.titleContainer}>
+            <Text style={styles.headerTitle}>Class Details</Text>
+            <Text style={styles.headerSubtitle}>Yoga Program Information</Text>
+          </View>
+          
+          <TouchableOpacity 
+            onPress={handleShare}
+            style={styles.shareButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="share-outline" size={24} color={appTheme.colors.background.surface} />
           </TouchableOpacity>
         </View>
-
-        {/* Decorative Elements */}
-        <View style={styles.decorativeCircle1} />
-        <View style={styles.decorativeCircle2} />
+        
+        {/* Decorative elements */}
         <View style={styles.topCircle} />
         <View style={styles.bottomWave} />
       </LinearGradient>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Hero Image */}
-        <ImageBackground source={{ uri: imageUrl }} style={styles.heroImage} imageStyle={styles.heroImageBorder}>
-          <View style={styles.heroOverlay}>
-            <View style={styles.priceBadge}>
-              <Text style={styles.priceText}>₹{getEffectivePrice()}/month</Text>
-            </View>
-            
-            {classData.is_disease_specific && classData.disease && (
-              <View style={styles.categoryBadge}>
-                <Text style={styles.categoryBadgeText}>{classData.disease}</Text>
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Hero Image */}
+          <ImageBackground source={{ uri: imageUrl }} style={styles.heroImage} imageStyle={styles.heroImageBorder}>
+            <View style={styles.heroOverlay}>
+              <View style={styles.priceBadge}>
+                <Text style={styles.priceText}>₹{getEffectivePrice()}/month</Text>
               </View>
-            )}
-          </View>
-        </ImageBackground>
+              
+              {classData.is_disease_specific && classData.disease && (
+                <View style={styles.categoryBadge}>
+                  <Text style={styles.categoryBadgeText}>{classData.disease}</Text>
+                </View>
+              )}
+            </View>
+          </ImageBackground>
 
-        {/* Class Info Card */}
-        <View style={styles.infoCard}>
-          <Text style={styles.classTitle}>{classData.title}</Text>
-          
-          <View style={styles.metaContainer}>
-            <View style={styles.metaItem}>
-              <Ionicons name="time-outline" size={16} color="#666" />
-              <Text style={styles.metaText}>{classData.duration.replace('_', ' ')}</Text>
+          {/* Class Info Card */}
+          <Animated.View style={[
+            styles.infoCard,
+            appTheme.shadows.card,
+            { borderLeftColor: appTheme.colors.primary, borderLeftWidth: 5 }
+          ]}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.classTitle}>{classData.title}</Text>
+              <View style={[styles.typeBadge, { backgroundColor: appTheme.colors.primary + '20' }]}>
+                <Ionicons name="fitness" size={14} color={appTheme.colors.primary} />
+                <Text style={[styles.typeText, { color: appTheme.colors.primary }]}>YOGA</Text>
+              </View>
             </View>
             
-            <View style={styles.metaItem}>
-              <Ionicons name="calendar-outline" size={16} color="#666" />
-              <Text style={styles.metaText}>{classData.days}</Text>
-            </View>
-            
-            {classData.city && (
+            <View style={styles.metaContainer}>
               <View style={styles.metaItem}>
-                <Ionicons name="location-outline" size={16} color="#666" />
-                <Text style={styles.metaText}>{classData.city}</Text>
+                <Ionicons name="time-outline" size={16} color={appTheme.colors.primary} />
+                <Text style={styles.metaText}>{classData.duration.replace('_', ' ')}</Text>
               </View>
-            )}
-            
-            {classData.location && (
+              
               <View style={styles.metaItem}>
-                <Ionicons name="map-outline" size={16} color="#666" />
-                <Text style={styles.metaText}>{classData.location}</Text>
+                <Ionicons name="calendar-outline" size={16} color={appTheme.colors.primary} />
+                <Text style={styles.metaText}>{classData.days}</Text>
               </View>
-            )}
-          </View>
+              
+              {classData.city && (
+                <View style={styles.metaItem}>
+                  <Ionicons name="location-outline" size={16} color={appTheme.colors.primary} />
+                  <Text style={styles.metaText}>{classData.city}</Text>
+                </View>
+              )}
+            </View>
+          </Animated.View>
 
-          <View style={styles.sectionDivider} />
-
-          {/* Schedule Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Schedule</Text>
+          {/* Schedule Card */}
+          <Animated.View style={[
+            styles.infoCard,
+            appTheme.shadows.card,
+            { borderLeftColor: appTheme.colors.secondary, borderLeftWidth: 5 }
+          ]}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.sectionTitle}>Schedule Information</Text>
+              <View style={[styles.typeBadge, { backgroundColor: appTheme.colors.secondary + '20' }]}>
+                <Ionicons name="calendar-outline" size={14} color={appTheme.colors.secondary} />
+                <Text style={[styles.typeText, { color: appTheme.colors.secondary }]}>SCHEDULE</Text>
+              </View>
+            </View>
+            
             <View style={styles.scheduleRow}>
               <View style={styles.scheduleItem}>
-                <Ionicons name="calendar-outline" size={20} color="#4CAF50" />
+                <Ionicons name="calendar-outline" size={20} color={appTheme.colors.secondary} />
                 <Text style={styles.scheduleLabel}>Days</Text>
                 <Text style={styles.scheduleValue}>{classData.days}</Text>
               </View>
               
               <View style={styles.scheduleItem}>
-                <Ionicons name="time-outline" size={20} color="#4CAF50" />
+                <Ionicons name="time-outline" size={20} color={appTheme.colors.secondary} />
                 <Text style={styles.scheduleLabel}>Time</Text>
                 <Text style={styles.scheduleValue}>
-                  {formatTime(classData.start_time)} - {formatTime(classData.end_time)}
+                  {formatSlotTimeRange(classData.start_time, classData.end_time)}
                 </Text>
               </View>
             </View>
-          </View>
+          </Animated.View>
 
-          <View style={styles.sectionDivider} />
+          {/* Description Card */}
+          <Animated.View style={[
+            styles.descriptionCard,
+            appTheme.shadows.card,
+            { borderLeftColor: appTheme.colors.secondary, borderLeftWidth: 5 }
+          ]}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.sectionTitle}>About This Class</Text>
+              <View style={[styles.typeBadge, { backgroundColor: appTheme.colors.secondary + '20' }]}>
+                <Ionicons name="information-circle-outline" size={14} color={appTheme.colors.secondary} />
+                <Text style={[styles.typeText, { color: appTheme.colors.secondary }]}>INFO</Text>
+              </View>
+            </View>
+            
+            <Text style={styles.descriptionText}>{classData.description}</Text>
+            
+            {classData.languages && (
+              <View style={styles.languagesContainer}>
+                <Ionicons name="language-outline" size={16} color={appTheme.colors.primary} />
+                <Text style={styles.metaText}>Languages: {classData.languages}</Text>
+              </View>
+            )}
+          </Animated.View>
 
-          {/* Available Modes */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Available Modes</Text>
-            <View style={styles.modesContainer}>
-              {getAvailableModes().length > 0 ? (
-                getAvailableModes().map((mode, index) => (
+          {/* Available Modes Card */}
+          <Animated.View style={[
+            styles.modesCard,
+            appTheme.shadows.card,
+            { borderLeftColor: appTheme.colors.primary, borderLeftWidth: 5 }
+          ]}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.modesTitle}>Available Modes</Text>
+              <View style={[styles.typeBadge, { backgroundColor: appTheme.colors.primary + '20' }]}>
+                <Ionicons name="fitness" size={14} color={appTheme.colors.primary} />
+                <Text style={[styles.typeText, { color: appTheme.colors.primary }]}>MODES</Text>
+              </View>
+            </View>
+            
+            {getAvailableModes().length > 0 ? (
+              <View style={styles.modesGrid}>
+                {getAvailableModes().map((mode, index) => (
                   <TouchableOpacity
                     key={index}
                     style={[
@@ -270,179 +350,143 @@ const ClassDetailsScreen = () => {
                       selectedMode === mode.key && styles.modeCardSelected
                     ]}
                     onPress={() => setSelectedMode(mode.key)}
+                    activeOpacity={0.7}
                   >
-                    <Ionicons 
-                      name={
-                        mode.key === 'group_online' ? 'people' :
-                        mode.key === 'group_offline' ? 'location' :
-                        mode.key === 'one_to_one_online' ? 'videocam' :
-                        mode.key === 'one_to_one_offline' ? 'person' :
-                        'home'
-                      } 
-                      size={20} 
-                      color={selectedMode === mode.key ? '#4CAF50' : '#999'} 
-                      style={styles.modeIcon}
-                    />
                     <Text style={[
-                      styles.modeTitle,
-                      selectedMode === mode.key && styles.modeTitleSelected
+                      styles.modeCardTitle,
+                      selectedMode === mode.key && { color: appTheme.colors.primary }
                     ]}>{mode.label}</Text>
                     <Text style={[
-                      styles.modePrice,
-                      selectedMode === mode.key && styles.modePriceSelected
+                      styles.modeCardPrice,
+                      selectedMode === mode.key && { color: appTheme.colors.primary }
                     ]}>₹{mode.price}/month</Text>
                   </TouchableOpacity>
-                ))
-              ) : (
-                <View style={styles.noModesContainer}>
-                  <Ionicons name="information-circle-outline" size={24} color="#999" />
-                  <Text style={styles.noModesText}>No delivery modes available</Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          <View style={styles.sectionDivider} />
-
-          {/* Description */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>About This Class</Text>
-            <Text style={styles.description}>{classData.description}</Text>
-            
-            {classData.languages && (
-              <View style={styles.languagesContainer}>
-                <Ionicons name="language-outline" size={16} color="#666" />
-                <Text style={styles.languagesText}>Languages: {classData.languages}</Text>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.noModesContainer}>
+                <Text style={styles.noModesText}>No modes available</Text>
               </View>
             )}
-          </View>
-        </View>
+          </Animated.View>
 
-        {/* Bottom Padding */}
-        <View style={styles.bottomPadding} />
-      </ScrollView>
-
-      {/* Fixed Footer */}
-      <View style={styles.footer}>
-        <TouchableOpacity 
-          style={[styles.enrollButton, isEnrolling && styles.enrollButtonDisabled]} 
-          onPress={handleBookPress}
-          disabled={isEnrolling}
-        >
-          {isEnrolling ? (
-            <Text style={styles.enrollButtonText}>Processing...</Text>
-          ) : (
-            <>
-              <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" style={styles.buttonIcon} />
-              <Text style={styles.enrollButtonText}>Enroll Now</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
+          {/* Enroll Button */}
+          <TouchableOpacity
+            style={[
+              styles.enrollButton,
+              !selectedMode && styles.enrollButtonDisabled
+            ]}
+            onPress={handleBookPress}
+            disabled={!selectedMode || isEnrolling}
+            activeOpacity={0.8}
+          >
+            <Ionicons 
+              name="checkmark-circle-outline" 
+              size={20} 
+              color="#fff" 
+              style={styles.buttonIcon}
+            />
+            <Text style={styles.enrollButtonText}>
+              {isEnrolling ? 'Enrolling...' : 'Enroll Now'}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </Animated.View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
+  container: { 
+    flex: 1, 
+    backgroundColor: theme.colors.background.primary 
   },
-  headerContainer: {
-    paddingTop: 40,
+  header: { 
+    paddingTop: 50,
     paddingBottom: 24,
-    paddingHorizontal: 24,
-    position: 'relative',
-    overflow: 'hidden',
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    zIndex: 2,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    padding: 8,
+    borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    textAlign: 'center',
+  titleContainer: {
     flex: 1,
-    letterSpacing: -0.5,
+    alignItems: 'center',
+  },
+  headerTitle: { 
+    color: theme.colors.background.surface, 
+    fontSize: 20, 
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  headerSubtitle: {
+    color: theme.colors.background.surface,
+    fontSize: 14,
+    opacity: 0.8,
+    marginTop: 2,
   },
   shareButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  decorativeCircle1: {
-    position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    top: -30,
-    right: -30,
-  },
-  decorativeCircle2: {
-    position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    bottom: -20,
-    left: 20,
   },
   topCircle: {
     position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    top: -40,
-    left: -40,
+    top: -50,
+    right: -50,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   bottomWave: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 30,
+    bottom: -20,
+    left: -50,
+    right: -50,
+    height: 40,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderTopLeftRadius: 100,
-    borderTopRightRadius: 100,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
   content: {
     flex: 1,
   },
   heroImage: {
     width: '100%',
-    height: 250,
+    height: 200,
   },
   heroImageBorder: {
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   heroOverlay: {
     flex: 1,
     justifyContent: 'space-between',
-    padding: 24,
+    padding: 20,
   },
   priceBadge: {
-    backgroundColor: 'rgba(76, 175, 80, 0.9)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
     alignSelf: 'flex-start',
   },
   priceText: {
@@ -451,232 +495,181 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   categoryBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 24,
+    backgroundColor: '#FF6B6B',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
     alignSelf: 'flex-start',
   },
   categoryBadgeText: {
-    color: '#4CAF50',
+    color: '#fff',
     fontSize: 12,
     fontWeight: '600',
   },
   infoCard: {
-    backgroundColor: '#fff',
-    margin: -20,
-    marginTop: -40,
-    marginHorizontal: 20,
-    borderRadius: 20,
+    backgroundColor: theme.colors.background.surface,
+    margin: 16,
+    borderRadius: theme.borderRadius.l,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  typeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
   },
   classTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#1a1a1a',
-    marginBottom: 12,
-    lineHeight: 32,
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+    flex: 1,
   },
   metaContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 16,
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 20,
+    marginRight: 16,
     marginBottom: 8,
-    backgroundColor: '#f8f9fa',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
   },
   metaText: {
-    marginLeft: 6,
-    fontSize: 13,
-    color: '#555',
-    fontWeight: '500',
-  },
-  sectionDivider: {
-    height: 1,
-    backgroundColor: '#f0f0f0',
-    marginVertical: 16,
-  },
-  section: {
-    marginBottom: 16,
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    marginLeft: 4,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 12,
-    letterSpacing: -0.2,
+    color: theme.colors.text.primary,
+    marginBottom: 16,
   },
   scheduleRow: {
-    gap: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   scheduleItem: {
-    backgroundColor: '#f0fdf4',
-    padding: 16,
-    borderRadius: 12,
-    flexDirection: 'row',
+    flex: 1,
     alignItems: 'center',
   },
   scheduleLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 12,
-    flex: 1,
+    fontSize: 12,
+    color: theme.colors.text.secondary,
+    marginTop: 4,
   },
   scheduleValue: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1a1a1a',
-    marginLeft: 12,
+    color: theme.colors.text.primary,
+    marginTop: 2,
   },
-  modesContainer: {
+  descriptionCard: {
+    backgroundColor: theme.colors.background.surface,
+    margin: 16,
+    marginTop: 0,
+    borderRadius: theme.borderRadius.l,
+    padding: 16,
+    borderLeftColor: theme.colors.secondary,
+    borderLeftWidth: 5,
+  },
+  descriptionText: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: theme.colors.text.secondary,
+  },
+  modesCard: {
+    backgroundColor: theme.colors.background.surface,
+    margin: 16,
+    marginTop: 0,
+    borderRadius: theme.borderRadius.l,
+    padding: 16,
+    borderLeftColor: theme.colors.primary,
+    borderLeftWidth: 5,
+  },
+  modesTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.primary,
+    marginBottom: 16,
+  },
+  modesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
     justifyContent: 'space-between',
   },
   modeCard: {
-    backgroundColor: '#f8f9fa',
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-    borderRadius: 12,
+    width: '48%',
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: theme.borderRadius.m,
     padding: 16,
-    minWidth: 140,
-    maxWidth: '48%',
-    alignItems: 'center',
-    flex: 1,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   modeCardSelected: {
-    backgroundColor: '#f0fdf4',
-    borderColor: '#4CAF50',
-    borderWidth: 2,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary + '10',
   },
-  modeIcon: {
-    marginBottom: 12,
-  },
-  modeTitle: {
-    fontSize: 13,
-    color: '#666',
-    fontWeight: '500',
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  modeTitleSelected: {
-    color: '#1a1a1a',
-    fontWeight: '600',
-  },
-  modePrice: {
-    fontSize: 16,
-    color: '#4CAF50',
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  modePriceSelected: {
-    color: '#2e7d32',
-    fontWeight: '800',
-  },
-  noModesContainer: {
-    alignItems: 'center',
-    padding: 32,
-  },
-  noModesText: {
+  modeCardTitle: {
     fontSize: 14,
-    color: '#999',
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 8,
     textAlign: 'center',
-    marginTop: 8,
   },
-  description: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: '#666',
-    marginBottom: 12,
+  modeCardPrice: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.primary,
+    textAlign: 'center',
   },
   languagesContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
+    marginTop: 12,
   },
-  languagesText: {
+  noModesContainer: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  noModesText: {
     fontSize: 14,
-    color: '#666',
-    marginLeft: 6,
-    fontWeight: '500',
-  },
-  infoGrid: {
-    gap: 16,
-  },
-  infoItem: {
-    backgroundColor: '#f8f9fa',
-    padding: 16,
-    borderRadius: 12,
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  infoValue: {
-    fontSize: 14,
-    color: '#1a1a1a',
-    fontWeight: '600',
-  },
-  bottomPadding: {
-    height: 100,
-  },
-  footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingBottom: 32,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
   },
   enrollButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: theme.colors.primary,
+    margin: 16,
+    marginTop: 0,
     paddingVertical: 16,
-    borderRadius: 16,
-    flexDirection: 'row',
+    borderRadius: theme.borderRadius.l,
     alignItems: 'center',
+    flexDirection: 'row',
     justifyContent: 'center',
-    shadowColor: '#4CAF50',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
   },
   enrollButtonDisabled: {
-    backgroundColor: '#ccc',
-    shadowOpacity: 0,
-    elevation: 0,
+    backgroundColor: theme.colors.text.secondary,
   },
   buttonIcon: {
     marginRight: 8,
   },
   enrollButtonText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: 0.3,
   },
 });
 

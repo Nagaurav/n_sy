@@ -212,19 +212,68 @@ export const bookingService = {
         mode: params.deliveryMode || 'GROUP_ONLINE',
         coupon_code: params.couponCode
       };
-      // Matches Backend: src/user_controllers/routes/yoga-booking/yoga-booking-api.ts
-      return apiClient.post('/user/yoga-booking/book', payload);
+      
+      // First create the yoga booking
+      const bookingResponse = await apiClient.post('/user/yoga-booking/book', payload);
+      
+      // Then get the payment URL for the created booking
+      if (bookingResponse.data?.data?.id) {
+        const bookingId = bookingResponse.data.data.id;
+        console.log(`🔗 Getting payment URL for yoga booking: ${bookingId}`);
+        
+        const paymentResponse = await apiClient.get(`/user/yoga-booking/${bookingId}/payment-url`);
+        
+        if (paymentResponse.data?.payment_url) {
+          // Merge the payment URL into the booking response
+          return {
+            success: true,
+            data: {
+              ...bookingResponse.data,
+              payment_url: paymentResponse.data.payment_url,
+              transaction_id: paymentResponse.data.transaction_id || paymentResponse.data.payment_id
+            }
+          };
+        }
+      }
+      
+      // Return booking response even if payment URL fails
+      return bookingResponse;
     }
 
     // 👨‍⚕️ CONSULTATION FLOW (Default)
     const payload = {
       user_id: Number(params.userId),
       professional_id: Number(params.professionalId),
-      duration: 30, // Default duration
+      duration: params.duration || 30, // Use actual duration from params
       coupon_code: params.couponCode,
       slot_id: Number(params.slotId)
     };
-    return apiClient.post('/user/consultation-booking/create', payload);
+    
+    // First create the booking
+    const bookingResponse = await apiClient.post('/user/consultation-booking/create', payload);
+    
+    // Then get the payment URL for the created booking
+    if (bookingResponse.data?.data?.booking_id) {
+      const bookingId = bookingResponse.data.data.booking_id;
+      console.log(`🔗 Getting payment URL for consultation booking: ${bookingId}`);
+      
+      const paymentResponse = await apiClient.get(`/user/consultation-booking/${bookingId}/payment-url`);
+      
+      if (paymentResponse.data?.payment_url) {
+        // Merge the payment URL into the booking response
+        return {
+          success: true,
+          data: {
+            ...bookingResponse.data,
+            payment_url: paymentResponse.data.payment_url,
+            transaction_id: paymentResponse.data.transaction_id || paymentResponse.data.payment_id
+          }
+        };
+      }
+    }
+    
+    // Return booking response even if payment URL fails
+    return bookingResponse;
   },
 
   // ✅ 2. Unified List Fetching (Merge 2 APIs)

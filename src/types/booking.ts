@@ -209,6 +209,7 @@ export interface BookingPaymentParams {
   professionalId: string | number;
   serviceType: 'consultation' | 'yoga_class'; // 🟢 The Switch
   amount: number;
+  duration?: number; // Duration in minutes for consultations
   couponCode?: string;
   
   // 🟢 Optionals based on type

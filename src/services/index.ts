@@ -83,72 +83,100 @@ export const apiService = {
   
   // Payment methods (legacy compatibility)
   // ✅ UPDATED METHOD
-  getBookingPaymentStatus: async (bookingId: string) => {
-    // Use the booking details endpoint to get payment status
-    const response = await bookingService.getBookingDetails(bookingId);
-    
-    if (response.success && response.data) {
-      let bookingData = response.data;
-
-      // 🛠️ FIX 1: Unwrap double-nested data (if response.data.data exists)
-      if (bookingData.data && !bookingData.booking_status) {
-        bookingData = bookingData.data;
-      }
-      
-      // 🔍 Debug: Log the unwrapped data to be sure
-      console.log('🔍 [getBookingPaymentStatus] Unwrapped Booking Data:', {
-         id: bookingData.booking_id,
-         paymentStatus: bookingData.payment?.status,
-         bookingStatus: bookingData.booking_status
-      });
-
-      // 🛠️ FIX 2: Prioritize 'payment.status', then 'booking_status'
-      let status = 
-          bookingData.payment?.status || 
-          bookingData.payment_status || 
-          bookingData.booking_status || 
-          bookingData.status || 
-          'UNKNOWN';
-
-      // 🛑 CRITICAL FIX: DO NOT convert PENDING to CONFIRMED.
-      // If it is PENDING, we want the UI to know so it triggers sync.
-      if (status === 'CONFIRMED') {
-        status = 'SUCCESS';
-      } 
-      // ❌ REMOVED: else if (status === 'PENDING') status = 'CONFIRMED';
-
-      // 🛠️ FIX 4: Correctly extract amount (it might be in amounts.final or payment.amount)
-      const amount = 
-          bookingData.payment?.amount || 
-          bookingData.amounts?.final || 
-          bookingData.final_amount || 
-          bookingData.amount || 
-          0;
-
-      return {
-        success: true,
-        data: {
-          status: status,
-          amount: amount,
-          bookingDetails: bookingData
-        }
-      };
-    }
-    
-    return {
-      success: false,
-      error: response.error || 'Failed to get payment status'
-    };
-  },
-  
-  // ✅ NEW: Manual sync endpoint to force status update from PENDING to SUCCESS
-  syncPaymentStatus: async (paymentId: string) => {
+  getBookingPaymentStatus: async (id: string, type: string = 'consultation') => {
     try {
       // Import apiClient directly to avoid circular dependency
       const { apiClient } = await import('./apiClient');
       
-      // Use apiClient directly to call the sync endpoint
-      const response = await apiClient.post(`/user/consultation-booking/sync-payment/${paymentId}`, {});
+      // Exact paths based on backend route files
+      const path = type === 'yoga_class' 
+        ? `/user/yoga-booking/payment-status/${id}` // Use transactionId with payment-status endpoint
+        : `/user/consultation-booking/status/${id}`;
+      
+      console.log(`📡 Getting payment status for ${type} booking: ${id} via ${path}`);
+      
+      const response = await apiClient.get(path);
+      
+      if (response.success && response.data) {
+        let bookingData = response.data;
+
+        // 🛠️ FIX 1: Unwrap double-nested data (if response.data.data exists)
+        if (bookingData.data && !bookingData.booking_status) {
+          bookingData = bookingData.data;
+        }
+        
+        // 🔍 Debug: Log the unwrapped data to be sure
+        console.log('🔍 [getBookingPaymentStatus] Unwrapped Booking Data:', {
+           id: bookingData.booking_id,
+           paymentStatus: bookingData.payment?.status,
+           bookingStatus: bookingData.booking_status
+        });
+
+        // 🛠️ FIX 2: Prioritize 'payment.status', then 'booking_status'
+        let status = 
+            bookingData.payment?.status || 
+            bookingData.payment_status || 
+            bookingData.booking_status || 
+            bookingData.status || 
+            'UNKNOWN';
+
+        // 🛑 CRITICAL FIX: DO NOT convert PENDING to CONFIRMED.
+        // If it is PENDING, we want the UI to know so it triggers sync.
+        if (status === 'CONFIRMED') {
+          status = 'SUCCESS';
+        } 
+        // ❌ REMOVED: else if (status === 'PENDING') status = 'CONFIRMED';
+
+        // 🛠️ FIX 4: Correctly extract amount (it might be in amounts.final or payment.amount)
+        const amount = 
+            bookingData.payment?.amount || 
+            bookingData.amounts?.final || 
+            bookingData.final_amount || 
+            bookingData.amount || 
+            0;
+
+        return {
+          success: true,
+          data: {
+            status: status,
+            amount: amount,
+            bookingDetails: bookingData
+          }
+        };
+      }
+      
+      return {
+        success: false,
+        error: response.error || 'Failed to get payment status'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Failed to get payment status'
+      };
+    }
+  },
+  
+  // ✅ NEW: Manual sync endpoint to force status update from PENDING to SUCCESS
+  syncPaymentStatus: async (transactionId: string, bookingType: 'consultation' | 'yoga' | 'yoga_class' = 'consultation') => {
+    try {
+      // Import apiClient directly to avoid circular dependency
+      const { apiClient } = await import('./apiClient');
+      
+      // Map yoga_class to yoga for endpoint selection
+      const normalizedBookingType = bookingType === 'yoga_class' ? 'yoga' : bookingType;
+      
+      // Determine the correct endpoint based on booking type
+      const endpoint = normalizedBookingType === 'yoga' 
+        ? `/user/yoga-booking/payment-status/${transactionId}`
+        : `/user/consultation-booking/sync-payment/${transactionId}`;
+      
+      console.log(`📡 Syncing payment status for ${normalizedBookingType} booking: ${transactionId} via ${endpoint}`);
+      
+      // Use different HTTP methods based on booking type
+      const response = normalizedBookingType === 'yoga' 
+        ? await apiClient.get(endpoint)
+        : await apiClient.post(endpoint, {});
       
       if (response.data) {
         return {
