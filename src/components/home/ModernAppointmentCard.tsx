@@ -9,11 +9,13 @@ const { width } = Dimensions.get('window');
 export interface NextAppointment {
   id: string;
   professional_name: string;
-  speciality: string;
+  speciality?: string;
+  speciality_new?: { name: string };
   date: string;
   time: string;
   mode: 'online' | 'offline';
   session_link?: string;
+  booking_status?: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
   status?: 'scheduled' | 'completed' | 'cancelled';
   created_at?: string;
   updated_at?: string;
@@ -35,7 +37,15 @@ const ModernAppointmentCard: React.FC<ModernAppointmentCardProps> = ({
   error = null,
 }) => {
   const formatAppointmentDateTime = (date: string, time: string) => {
-    const appointmentDate = new Date(`${date}T${time}`);
+    // Extract the start time from the range (e.g., "09:00 - 09:15" -> "09:00")
+    const startTime = time?.split(' - ')[0] || time;
+    const appointmentDate = new Date(`${date}T${startTime}`);
+    
+    // Check if date is valid
+    if (isNaN(appointmentDate.getTime())) {
+      return `${date} at ${time}`;
+    }
+    
     return appointmentDate.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
@@ -45,12 +55,24 @@ const ModernAppointmentCard: React.FC<ModernAppointmentCardProps> = ({
     });
   };
 
-  const getStatusColor = (status?: string) => {
-    switch (status) {
-      case 'completed': return '#10B981';
-      case 'cancelled': return '#EF4444';
-      case 'scheduled': return '#F59E0B';
-      default: return '#6B7280';
+  const getStatusColor = (status?: string, booking_status?: string) => {
+    // Handle both status and booking_status fields
+    const currentStatus = status || booking_status;
+    
+    switch (currentStatus) {
+      case 'completed':
+      case 'COMPLETED': 
+        return '#10B981';
+      case 'cancelled':
+      case 'CANCELLED': 
+        return '#EF4444';
+      case 'scheduled':
+      case 'CONFIRMED': 
+        return '#F59E0B';
+      case 'PENDING': 
+        return '#8B5CF6';
+      default: 
+        return '#6B7280';
     }
   };
 
@@ -82,7 +104,7 @@ const ModernAppointmentCard: React.FC<ModernAppointmentCardProps> = ({
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <View style={styles.statusIndicator}>
-              <View style={[styles.statusDot, { backgroundColor: getStatusColor(appointment.status) }]} />
+              <View style={[styles.statusDot, { backgroundColor: getStatusColor(appointment.status, appointment.booking_status) }]} />
             </View>
             <Text style={styles.statusText}>Upcoming Session</Text>
           </View>
@@ -105,7 +127,9 @@ const ModernAppointmentCard: React.FC<ModernAppointmentCardProps> = ({
             </View>
             <View style={styles.professionalInfo}>
               <Text style={styles.professionalName}>{appointment.professional_name}</Text>
-              <Text style={styles.speciality}>{appointment.speciality}</Text>
+              <Text style={styles.speciality}>
+                {appointment.speciality_new?.name || appointment.speciality || 'Wellness Professional'}
+              </Text>
             </View>
           </View>
 
