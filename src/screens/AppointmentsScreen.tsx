@@ -23,6 +23,37 @@ import { theme } from '../theme';
 const AppointmentsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { user, isLoading: authLoading } = useAuth();
   const { theme: themeHook } = useTheme();
+  const theme = themeHook || require('../theme').theme;
+
+  // Helper function to format time with AM/PM
+  const formatTimeWithAMPM = (timeString: string): string => {
+    if (!timeString) return '';
+    
+    // Handle time formats like "09:00 - 09:15" or "14:30"
+    const timeParts = timeString.split(' - ');
+    
+    const formatSingleTime = (time: string): string => {
+      // Remove any extra spaces and split
+      const cleanTime = time.trim();
+      const [hours, minutes] = cleanTime.split(':').map(Number);
+      
+      if (isNaN(hours) || isNaN(minutes)) return cleanTime;
+      
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+      
+      return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+    };
+    
+    if (timeParts.length === 2) {
+      // Format time range like "09:00 - 09:15"
+      return `${formatSingleTime(timeParts[0])} - ${formatSingleTime(timeParts[1])}`;
+    } else {
+      // Format single time like "14:30"
+      return formatSingleTime(timeString);
+    }
+  };
+
   const appTheme = themeHook || theme;
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -108,6 +139,25 @@ const AppointmentsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           <View style={[styles.typeBadge, { backgroundColor: color + '20' }]}>
             <Ionicons name={isYoga ? 'fitness' : 'medkit'} size={14} color={color} />
             <Text style={[styles.typeText, { color }]}>{isYoga ? 'Yoga' : 'Consult'}</Text>
+          </View>
+        </View>
+        
+        {/* Date and Time Section */}
+        <View style={styles.cardContent}>
+          <View style={styles.detailRow}>
+            <Ionicons name="calendar" size={16} color="#6B7280" />
+            <Text style={styles.detailText}>
+              <Text style={styles.detailLabel}>Date: </Text>
+              {new Date(item.date).toLocaleDateString()}
+            </Text>
+          </View>
+          
+          <View style={styles.detailRowLast}>
+            <Ionicons name="time" size={16} color="#6B7280" />
+            <Text style={styles.detailText}>
+              <Text style={styles.detailLabel}>Time: </Text>
+              {formatTimeWithAMPM(item.time)}
+            </Text>
           </View>
         </View>
         
@@ -298,6 +348,11 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
   title: { fontSize: 16, fontWeight: 'bold', color: theme.colors.text.primary },
   sub: { fontSize: 14, color: theme.colors.text.secondary },
+  cardContent: { marginBottom: 12 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  detailRowLast: { flexDirection: 'row', alignItems: 'center', marginBottom: 0 },
+  detailText: { fontSize: 14, color: theme.colors.text.secondary, marginLeft: 8 },
+  detailLabel: { fontWeight: '600', color: theme.colors.text.primary },
   typeBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   typeText: { fontSize: 10, fontWeight: '700', marginLeft: 4, textTransform: 'uppercase' },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#eee' },

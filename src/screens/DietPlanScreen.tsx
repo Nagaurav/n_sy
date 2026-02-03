@@ -25,6 +25,7 @@ import { dietService } from '../services/dietService';
 import { useTheme } from '../contexts/ThemeContext';
 import { theme } from '../theme';
 import { commonStyles } from '../theme';
+import { downloadPDFEnhanced, showEnhancedPDFResult } from '../utils/enhancedPDFDownload';
 
 // 🟢 1. Define Correct Interfaces based on your Backend/Prisma Schema
 interface DietMeal {
@@ -112,32 +113,16 @@ const DietPlanScreen = () => {
     }
   }, [bookingId]);
 
-  // Handle PDF Download - Proper PDF generation and download
+  // Handle PDF Download - Enhanced with better permission handling and download location
   const handleDownloadPDF = async () => {
     console.log('PDF download button pressed!');
     if (!dietPlan) {
       console.log('No diet plan data available');
+      Alert.alert('Error', 'No diet plan data available to generate PDF.');
       return;
     }
     
     try {
-      // Request storage permissions for Android (only if needed)
-      if (Platform.OS === 'android') {
-        try {
-          const granted = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
-          );
-          console.log('Permission granted:', granted);
-          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-            Alert.alert('Permission Required', 'Storage permission is required to download PDF files. Please enable it in your phone settings.');
-            return;
-          }
-        } catch (permissionError) {
-          console.log('Permission check failed, proceeding anyway:', permissionError);
-          // On newer Android versions, this might fail but PDF generation still works
-        }
-      }
-
       // Show loading indicator
       Alert.alert('Generating PDF', 'Please wait while we generate and download your diet plan PDF...');
 
@@ -306,57 +291,24 @@ const DietPlanScreen = () => {
         </html>
       `;
 
-      // Generate PDF with Downloads directory for better accessibility
-      const options = {
-        html: htmlContent,
-        fileName: `DietPlan_${dietPlan.plan_name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}`,
-        directory: Platform.OS === 'android' ? 'Download' : 'Documents', // Use Download folder on Android
-      };
-
-      const file = await RNHTMLtoPDF.generatePDF(options);
+      // Generate PDF using the enhanced utility with reliable Downloads folder saving
+      const fileName = `DietPlan_${dietPlan.plan_name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
       
-      console.log('PDF Generated:', file.filePath);
-
-      if (!file.filePath) throw new Error("File path is empty");
-
-      // Handle file path for sharing
-      const filePath = Platform.OS === 'android' && !file.filePath.startsWith('file://')
-        ? `file://${file.filePath}` 
-        : file.filePath;
-
-      // Show success message with download location info
-      Alert.alert(
-        '✅ PDF Downloaded Successfully!',
-        Platform.OS === 'android' 
-          ? `Your diet plan PDF has been saved to your Downloads folder.\n\nFile: ${options.fileName}.pdf\n\nWould you like to open or share it?`
-          : `Your diet plan PDF has been saved to your Documents folder.\n\nFile: ${options.fileName}.pdf\n\nWould you like to open or share it?`,
-        [
-          { text: 'OK', style: 'cancel' },
-          {
-            text: 'Open / Share',
-            onPress: async () => {
-              try {
-                await Share.open({
-                  url: filePath,
-                  type: 'application/pdf',
-                  title: `Diet Plan - ${dietPlan.plan_name}`,
-                  failOnCancel: false,
-                });
-              } catch (shareError) {
-                console.log('Share dismissed');
-              }
-            },
-          },
-        ]
+      const result = await downloadPDFEnhanced(
+        { html: htmlContent, fileName },
+        RNHTMLtoPDF
       );
 
-    } catch (error) {
+      // Show enhanced user feedback with detailed location information
+      showEnhancedPDFResult(result, fileName);
+      
+    } catch (error: any) {
       console.error('PDF generation error:', error);
-      Alert.alert('Error', 'Failed to generate PDF. Please check storage permissions and try again.');
+      showEnhancedPDFResult({ success: false, error: error.message || 'Failed to generate PDF' }, '');
     }
   };
 
-  // Initialize
+  // Initialize animations and fetch data
   useEffect(() => {
     if (isAuthReady) {
       fetchDietPlan();
@@ -367,100 +319,6 @@ const DietPlanScreen = () => {
       ]).start();
     }
   }, [isAuthReady, fetchDietPlan]);
-
-  // Render Meal Item with Modern Design
-  const renderMealItem = (meal: DietMeal, index: number) => {
-    return (
-      <Animated.View
-        key={meal.id}
-        style={[
-          styles.mealItemNew,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: Animated.multiply(fadeAnim, -20 * (1 - index * 0.1)) }],
-          },
-        ]}
-      >
-        {/* Meal Header with Gradient Background */}
-        <LinearGradient
-          colors={['#008272', '#00A896']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.mealHeaderGradient}
-        >
-          {/* Day Badge */}
-          {meal.day && (
-            <View style={styles.dayBadgeNew}>
-              <Text style={styles.dayTextNew}>{meal.day}</Text>
-            </View>
-          )}
-          
-          {/* Meal Title and Time */}
-          <View style={styles.mealHeaderContent}>
-            <View style={styles.mealTitleContainer}>
-              <View style={styles.mealIconContainer}>
-                <Ionicons 
-                  name="restaurant-outline" 
-                  size={18} 
-                  color="#FFFFFF" 
-                />
-              </View>
-              <View style={styles.mealTitleInfo}>
-                <Text style={styles.mealNameNew}>
-                  {meal.meal_type || meal.name}
-                </Text>
-                <View style={styles.timeContainer}>
-                  <Ionicons name="time-outline" size={12} color="#FFFFFF" />
-                  <Text style={styles.mealTimeNew}>{meal.time}</Text>
-                </View>
-              </View>
-            </View>
-            
-            {/* Calorie Badge */}
-            {meal.calories && meal.calories > 0 && (
-              <View style={styles.calorieBadgeNew}>
-                <Ionicons name="flame-outline" size={14} color="#FFFFFF" />
-                <Text style={styles.calorieTextNew}>
-                  {meal.calories}
-                </Text>
-              </View>
-            )}
-          </View>
-        </LinearGradient>
-
-        {/* Meal Content */}
-        <View style={styles.mealContent}>
-          {/* Food Items Section */}
-          <View style={styles.foodSection}>
-            <View style={styles.sectionHeaderRow}>
-              <Ionicons name="nutrition-outline" size={16} color="#008272" />
-              <Text style={styles.foodSectionTitle}>Food Items</Text>
-            </View>
-            <View style={styles.foodItemsContainer}>
-              <Text style={styles.mealDescriptionNew}>
-                {meal.food_items || meal.description}
-              </Text>
-            </View>
-          </View>
-
-          {/* Notes Section */}
-          {meal.notes && (
-            <View style={styles.notesSection}>
-              <View style={styles.notesHeader}>
-                <Ionicons name="information-circle-outline" size={14} color="#F59E0B" />
-                <Text style={styles.notesTitle}>Notes</Text>
-              </View>
-              <View style={styles.notesContent}>
-                <Text style={styles.noteTextNew}>
-                  {meal.notes}
-                </Text>
-              </View>
-            </View>
-          )}
-        </View>
-      </Animated.View>
-    );
-  };
 
   if (error && !dietPlan) {
     return (

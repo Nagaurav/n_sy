@@ -27,6 +27,7 @@ import type { HomeStackParamList } from '../types/navigation';
 import type { Prescription } from '../types/medical';
 import { useTheme } from '../contexts/ThemeContext';
 import { theme } from '../theme';
+import { downloadPDFEnhanced, showEnhancedPDFResult } from '../utils/enhancedPDFDownload';
 
 const { width } = Dimensions.get('window');
 
@@ -141,27 +142,11 @@ const PrescriptionDetailScreen: React.FC = () => {
     console.log('PDF download for prescription', prescriptionId);
     if (!prescription) {
       console.log('No prescription data available');
+      Alert.alert('Error', 'No prescription data available to generate PDF.');
       return;
     }
     
     try {
-      // Request storage permissions for Android (only if needed)
-      if (Platform.OS === 'android') {
-        try {
-          const granted = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
-          );
-          console.log('Permission granted:', granted);
-          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-            Alert.alert('Permission Required', 'Storage permission is required to download PDF files. Please enable it in your phone settings.');
-            return;
-          }
-        } catch (permissionError) {
-          console.log('Permission check failed, proceeding anyway:', permissionError);
-          // On newer Android versions, this might fail but PDF generation still works
-        }
-      }
-
       // Show loading indicator
       Alert.alert('Generating PDF', 'Please wait while we generate and download your prescription PDF...');
 
@@ -220,26 +205,31 @@ const PrescriptionDetailScreen: React.FC = () => {
               font-weight: bold;
               color: #555;
             }
-            .item {
+            .medicine-item {
               margin-bottom: 20px;
               padding: 15px;
               border-left: 4px solid #2196F3;
               background-color: white;
               border-radius: 4px;
             }
-            .item-header {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin-bottom: 10px;
-            }
-            .item-title {
+            .medicine-name {
               font-weight: bold;
               color: #2196F3;
               font-size: 16px;
+              margin-bottom: 5px;
             }
-            .item-details {
+            .dosage {
+              color: #666;
+              font-size: 14px;
+              margin-bottom: 5px;
+            }
+            .instructions {
               margin-top: 10px;
+              padding: 10px;
+              background-color: #fff3cd;
+              border-left: 3px solid #ffc107;
+              font-style: italic;
+              color: #856404;
             }
             .footer {
               margin-top: 40px;
@@ -254,53 +244,37 @@ const PrescriptionDetailScreen: React.FC = () => {
         <body>
           <div class="header">
             <div class="title">PRESCRIPTION</div>
-            <div class="subtitle">ID: #${prescription.id || prescriptionId}</div>
-            <div class="subtitle">${prescription.prescriptionDate ? new Date(prescription.prescriptionDate).toLocaleDateString() : 'Date N/A'}</div>
+            <div class="subtitle">Dr. ${prescription.practitionerName || (prescription.professional?.first_name && prescription.professional?.last_name ? `Dr. ${prescription.professional.first_name} ${prescription.professional.last_name}` : 'Doctor')}</div>
+            <div class="subtitle">Patient: ${prescription.patientName || 'Patient'}</div>
+            <div class="subtitle">Date: ${prescription.prescriptionDate ? new Date(prescription.prescriptionDate).toLocaleDateString() : prescription.created_at ? new Date(prescription.created_at).toLocaleDateString() : 'Date N/A'}</div>
           </div>
 
           <div class="section">
-            <div class="section-title">Patient Information</div>
+            <div class="section-title">Prescription Details</div>
             <div class="info-row">
-              <span class="info-label">Name:</span>
-              <span>${prescription.patientName || 'N/A'}</span>
+              <span class="info-label">Prescription ID:</span>
+              <span>${prescription.id || prescriptionId}</span>
             </div>
             <div class="info-row">
-              <span class="info-label">Age:</span>
-              <span>${prescription.patientAge ? `${prescription.patientAge} years` : 'N/A'}</span>
+              <span class="info-label">Date Issued:</span>
+              <span>${prescription.prescriptionDate ? new Date(prescription.prescriptionDate).toLocaleDateString() : prescription.created_at ? new Date(prescription.created_at).toLocaleDateString() : 'Date N/A'}</span>
             </div>
+            ${prescription.followUpDate ? `
             <div class="info-row">
-              <span class="info-label">Gender:</span>
-              <span>${prescription.patientGender || 'N/A'}</span>
+              <span class="info-label">Follow Up Date:</span>
+              <span>${new Date(prescription.followUpDate).toLocaleDateString()}</span>
             </div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">Doctor Information</div>
-            <div class="info-row">
-              <span class="info-label">Doctor:</span>
-              <span>${prescription.professional?.first_name && prescription.professional?.last_name ? 
-                `Dr. ${prescription.professional.first_name} ${prescription.professional.last_name}` : 
-                prescription.practitionerName || 'N/A'
-              }</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Qualification:</span>
-              <span>${prescription.professional?.speciality_new?.name || prescription.practitionerQualification || 'N/A'}</span>
-            </div>
+            ` : ''}
           </div>
 
           ${prescription.diagnoses && prescription.diagnoses.length > 0 ? `
           <div class="section">
             <div class="section-title">Diagnosis</div>
-            ${prescription.diagnoses.map(diag => `
-              <div class="item">
-                <div class="item-header">
-                  <div class="item-title">${diag.condition}</div>
-                </div>
-                <div class="item-details">
-                  ${diag.severity ? `<div>Severity: ${diag.severity}</div>` : ''}
-                  ${diag.duration ? `<div>Duration: ${diag.duration}</div>` : ''}
-                </div>
+            ${prescription.diagnoses.map((diagnosis: any) => `
+              <div style="margin-bottom: 10px;">
+                <strong>${diagnosis.condition}</strong>
+                ${diagnosis.severity ? ` (${diagnosis.severity})` : ''}
+                ${diagnosis.duration ? ` - Duration: ${diagnosis.duration}` : ''}
               </div>
             `).join('')}
           </div>
@@ -309,17 +283,13 @@ const PrescriptionDetailScreen: React.FC = () => {
           ${prescription.medicines && prescription.medicines.length > 0 ? `
           <div class="section">
             <div class="section-title">Medicines</div>
-            ${prescription.medicines.map(med => `
-              <div class="item">
-                <div class="item-header">
-                  <div class="item-title">${med.name}</div>
-                </div>
-                <div class="item-details">
-                  <div><strong>Dosage:</strong> ${med.dosage}</div>
-                  <div><strong>Frequency:</strong> ${med.frequency}</div>
-                  <div><strong>Duration:</strong> ${med.duration}</div>
-                  ${med.instructions ? `<div><strong>Instructions:</strong> ${med.instructions}</div>` : ''}
-                </div>
+            ${prescription.medicines.map((medicine: any) => `
+              <div class="medicine-item">
+                <div class="medicine-name">${medicine.name || 'Medicine'}</div>
+                <div class="dosage">Dosage: ${medicine.dosage || 'N/A'}</div>
+                <div class="dosage">Frequency: ${medicine.frequency || 'N/A'}</div>
+                <div class="dosage">Duration: ${medicine.duration || 'N/A'}</div>
+                ${medicine.instructions ? `<div class="instructions"><strong>Instructions:</strong> ${medicine.instructions}</div>` : ''}
               </div>
             `).join('')}
           </div>
@@ -363,53 +333,20 @@ const PrescriptionDetailScreen: React.FC = () => {
         </html>
       `;
 
-      // Generate PDF with Downloads directory for better accessibility
-      const options = {
-        html: htmlContent,
-        fileName: `Prescription_${prescription.id || prescriptionId}_${new Date().toISOString().split('T')[0]}`,
-        directory: Platform.OS === 'android' ? 'Download' : 'Documents', // Use Download folder on Android
-      };
-
-      const file = await RNHTMLtoPDF.generatePDF(options);
+      // Generate PDF using the enhanced utility with reliable Downloads folder saving
+      const fileName = `Prescription_${prescription.id || prescriptionId}_${new Date().toISOString().split('T')[0]}.pdf`;
       
-      console.log('PDF Generated:', file.filePath);
-
-      if (!file.filePath) throw new Error("File path is empty");
-
-      // Handle file path for sharing
-      const filePath = Platform.OS === 'android' && !file.filePath.startsWith('file://')
-        ? `file://${file.filePath}` 
-        : file.filePath;
-
-      // Show success message with download location info
-      Alert.alert(
-        '✅ PDF Downloaded Successfully!',
-        Platform.OS === 'android' 
-          ? `Your prescription PDF has been saved to your Downloads folder.\n\nFile: ${options.fileName}.pdf\n\nWould you like to open or share it?`
-          : `Your prescription PDF has been saved to your Documents folder.\n\nFile: ${options.fileName}.pdf\n\nWould you like to open or share it?`,
-        [
-          { text: 'OK', style: 'cancel' },
-          {
-            text: 'Open / Share',
-            onPress: async () => {
-              try {
-                await Share.open({
-                  url: filePath,
-                  type: 'application/pdf',
-                  title: `Prescription - ${prescription.id || prescriptionId}`,
-                  failOnCancel: false,
-                });
-              } catch (shareError) {
-                console.log('Share dismissed');
-              }
-            },
-          },
-        ]
+      const result = await downloadPDFEnhanced(
+        { html: htmlContent, fileName },
+        RNHTMLtoPDF
       );
 
-    } catch (error) {
+      // Show enhanced user feedback with detailed location information
+      showEnhancedPDFResult(result, fileName);
+      
+    } catch (error: any) {
       console.error('PDF generation error:', error);
-      Alert.alert('Error', 'Failed to generate PDF. Please check storage permissions and try again.');
+      showEnhancedPDFResult({ success: false, error: error.message || 'Failed to generate PDF' }, '');
     }
   }, [prescription, prescriptionId]);
 

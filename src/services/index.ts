@@ -237,4 +237,37 @@ export const apiService = {
   // Profile methods (legacy compatibility)
   getUserProfile: authService.getCurrentUser,
   updateUserProfile: authService.updateProfile,
+  
+  // Profile picture upload
+  uploadProfilePicture: async (formData: FormData) => {
+    try {
+      // Import apiClient directly to avoid circular dependency
+      const { apiClient } = await import('./apiClient');
+      
+      console.log('📤 Uploading profile picture...');
+      
+      const response = await apiClient.post('/user/profile/upload-photo', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      if (response.success && response.data) {
+        return {
+          success: true,
+          data: response.data
+        };
+      }
+      
+      return {
+        success: false,
+        error: response.error || 'Failed to upload profile picture'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Failed to upload profile picture'
+      };
+    }
+  },
 };

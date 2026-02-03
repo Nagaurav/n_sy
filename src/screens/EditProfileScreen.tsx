@@ -14,12 +14,14 @@ import {
   Animated,
   Dimensions,
   Modal,
+  Image,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { HomeStackParamList } from '../types/navigation';
 import { apiService, authService } from '../services';
+import { imageService } from '../services/imageService';
 import type { UserProfileData } from '../types/userProfile';
 import { useAuth } from '../hooks/useAuth';
 import { theme } from '../theme';
@@ -41,6 +43,7 @@ const EditProfileScreen = () => {
   const slideAnim = useRef(new Animated.Value(30)).current;
 
   // Form state
+  const [profileImage, setProfileImage] = useState(currentUser.photo_url || null);
   const [firstName, setFirstName] = useState(currentUser.first_name || '');
   const [lastName, setLastName] = useState(currentUser.last_name || '');
   const [phone, setPhone] = useState(currentUser.phone || '');
@@ -56,6 +59,53 @@ const EditProfileScreen = () => {
   const [emergencyContactName, setEmergencyContactName] = useState(currentUser.user_health?.emergency_contact_name || '');
   const [emergencyContactPhone, setEmergencyContactPhone] = useState(currentUser.user_health?.emergency_contact_phone || '');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Image selection handlers
+  const handleSelectImage = () => {
+    Alert.alert(
+      'Update Profile Picture',
+      'Choose an option',
+      [
+        { text: 'Take Photo', onPress: () => openCamera() },
+        { text: 'Select from Gallery', onPress: () => openGallery() },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const openCamera = async () => {
+    console.log('📷 [EditProfileScreen] Opening camera...');
+    try {
+      const image = await imageService.openCamera();
+      console.log('📷 [EditProfileScreen] Camera result:', image);
+      if (image) {
+        setProfileImage(image.uri);
+        console.log('✅ [EditProfileScreen] Profile image updated from camera:', image.uri);
+      } else {
+        console.log('⚠️ [EditProfileScreen] No image selected from camera');
+      }
+    } catch (error: any) {
+      console.error('❌ [EditProfileScreen] Error opening camera:', error);
+      Alert.alert('Error', `Failed to open camera: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
+  const openGallery = async () => {
+    console.log('🖼️ [EditProfileScreen] Opening gallery...');
+    try {
+      const image = await imageService.openGallery();
+      console.log('🖼️ [EditProfileScreen] Gallery result:', image);
+      if (image) {
+        setProfileImage(image.uri);
+        console.log('✅ [EditProfileScreen] Profile image updated from gallery:', image.uri);
+      } else {
+        console.log('⚠️ [EditProfileScreen] No image selected from gallery');
+      }
+    } catch (error: any) {
+      console.error('❌ [EditProfileScreen] Error opening gallery:', error);
+      Alert.alert('Error', `Failed to open gallery: ${error?.message || 'Unknown error'}`);
+    }
+  };
 
   // Modal states
   const [showGenderModal, setShowGenderModal] = useState(false);
@@ -115,6 +165,31 @@ const EditProfileScreen = () => {
 
     setIsSaving(true);
     try {
+      // Upload profile image if it has changed
+      let photoUrl = currentUser.photo_url;
+      if (profileImage && profileImage !== currentUser.photo_url) {
+        try {
+          // Create image data for upload
+          const imageData = {
+            uri: profileImage,
+            name: 'profile_photo.jpg',
+            type: 'image/jpeg',
+          };
+          
+          const formData = imageService.createFormData(imageData);
+          const uploadResponse = await apiService.uploadProfilePicture(formData);
+          
+          if (uploadResponse.success && uploadResponse.data?.photo_url) {
+            photoUrl = uploadResponse.data.photo_url;
+            console.log('✅ [EditProfileScreen] Profile picture uploaded successfully');
+          }
+        } catch (uploadError) {
+          console.error('❌ [EditProfileScreen] Error uploading profile picture:', uploadError);
+          // Don't fail the entire save process if image upload fails
+          Alert.alert('Warning', 'Profile picture upload failed, but other information will be saved.');
+        }
+      }
+
       const payload: any = {
         // Personal
         first_name: firstName.trim(),
@@ -125,6 +200,7 @@ const EditProfileScreen = () => {
         pin_code: pinCode.trim() || undefined,
         gender: gender.toLowerCase() || undefined,
         dob: dob.trim() || undefined,
+        photo_url: photoUrl, // Include the updated photo URL
         // Health (flat)
         blood_group: bloodGroup.trim() || undefined,
         marital_status: maritalStatus.toUpperCase() || undefined,
@@ -151,6 +227,7 @@ const EditProfileScreen = () => {
         city: payload.city,
         gender: payload.gender,
         dob: payload.dob,
+        photo_url: photoUrl || undefined,
       });
 
       Alert.alert('Success', 'Profile updated successfully.', [
@@ -168,7 +245,7 @@ const EditProfileScreen = () => {
     } finally {
       setIsSaving(false);
     }
-  }, [firstName, lastName, phone, city, address, pinCode, gender, dob, bloodGroup, maritalStatus, height, weight, emergencyContactName, emergencyContactPhone, currentUser, user, navigation, updateUser]);
+  }, [firstName, lastName, phone, city, address, pinCode, gender, dob, bloodGroup, maritalStatus, height, weight, emergencyContactName, emergencyContactPhone, currentUser, user, navigation, updateUser, profileImage]);
 
   const renderOptionModal = (title: string, options: string[], selectedValue: string, onSelect: (value: string) => void, isVisible: boolean, setIsVisible: (visible: boolean) => void) => (
     <Modal
@@ -267,6 +344,33 @@ const EditProfileScreen = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Profile Picture Section */}
+          <Animated.View 
+            style={[
+              styles.profileSection, 
+              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+            ]}
+          >
+            <TouchableOpacity 
+              onPress={handleSelectImage}
+              style={styles.profileImageContainer}
+              activeOpacity={0.8}
+            >
+              {profileImage ? (
+                <Image source={{ uri: profileImage }} style={styles.profileImage} />
+              ) : (
+                <View style={styles.profileImagePlaceholder}>
+                  <Ionicons name="person" size={40} color={theme.colors.text.secondary} />
+                  <Text style={styles.profileImagePlaceholderText}>Add Photo</Text>
+                </View>
+              )}
+              <View style={styles.profileImageEditButton}>
+                <Ionicons name="camera" size={16} color={theme.colors.background.surface} />
+              </View>
+            </TouchableOpacity>
+            <Text style={styles.profileImageText}>Tap to change profile picture</Text>
+          </Animated.View>
+
           {/* Personal Details Card */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
@@ -555,6 +659,65 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderTopLeftRadius: 100,
     borderTopRightRadius: 100,
+  },
+  
+  // Profile Picture Styles
+  profileSection: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+    alignItems: 'center',
+  },
+  profileImageContainer: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  profileImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: theme.colors.background.surface,
+  },
+  profileImagePlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    borderStyle: 'dashed',
+  },
+  profileImagePlaceholderText: {
+    fontSize: 12,
+    color: theme.colors.text.secondary,
+    marginTop: 4,
+  },
+  profileImageEditButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: theme.colors.primary,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.colors.background.surface,
+  },
+  profileImageText: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
   },
   
   // Form Styles
