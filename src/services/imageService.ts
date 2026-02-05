@@ -1,4 +1,5 @@
-import { launchCamera, launchImageLibrary, MediaType, ImagePickerResponse } from 'react-native-image-picker';
+import { launchCamera, launchImageLibrary, MediaType, ImagePickerResponse, PhotoQuality } from 'react-native-image-picker';
+import { Platform } from 'react-native';
 
 export interface ImagePickerResult {
   uri: string;
@@ -13,9 +14,12 @@ export const imageService = {
     return new Promise((resolve) => {
       const options = {
         mediaType: 'photo' as MediaType,
-        quality: 0.8,
+        quality: 0.8 as PhotoQuality,
         maxWidth: 500,
         maxHeight: 500,
+        // iOS specific options
+        includeBase64: false,
+        includeExtra: true,
       };
 
       launchCamera(options, (response: ImagePickerResponse) => {
@@ -26,8 +30,17 @@ export const imageService = {
 
         if (response.assets && response.assets[0]) {
           const asset = response.assets[0];
+          // Handle iOS file URI format
+          let imageUri = asset.uri || '';
+          
+          // iOS: Check if URI starts with 'file://' and convert if needed
+          if (Platform.OS === 'ios' && imageUri.startsWith('file://')) {
+            // iOS file:// URI needs to be handled properly
+            imageUri = imageUri.replace('file://', '');
+          }
+          
           resolve({
-            uri: asset.uri || '',
+            uri: imageUri,
             name: asset.fileName || 'profile_photo.jpg',
             type: asset.type || 'image/jpeg',
             size: asset.fileSize,
@@ -44,9 +57,12 @@ export const imageService = {
     return new Promise((resolve) => {
       const options = {
         mediaType: 'photo' as MediaType,
-        quality: 0.8,
+        quality: 0.8 as PhotoQuality,
         maxWidth: 500,
         maxHeight: 500,
+        // iOS specific options
+        includeBase64: false,
+        includeExtra: true,
       };
 
       launchImageLibrary(options, (response: ImagePickerResponse) => {
@@ -57,8 +73,17 @@ export const imageService = {
 
         if (response.assets && response.assets[0]) {
           const asset = response.assets[0];
+          // Handle iOS file URI format
+          let imageUri = asset.uri || '';
+          
+          // iOS: Check if URI starts with 'file://' and convert if needed
+          if (Platform.OS === 'ios' && imageUri.startsWith('file://')) {
+            // iOS file:// URI needs to be handled properly
+            imageUri = imageUri.replace('file://', '');
+          }
+          
           resolve({
-            uri: asset.uri || '',
+            uri: imageUri,
             name: asset.fileName || 'profile_photo.jpg',
             type: asset.type || 'image/jpeg',
             size: asset.fileSize,

@@ -156,31 +156,31 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
 
           <TouchableOpacity
             style={[styles.menuItem, getDrawerItemStyle(props.state.index === 2)]}
-            onPress={() => props.navigation.navigate('Profile')}
-            activeOpacity={0.7}
-          >
-            <Ionicons 
-              name="person-outline" 
-              size={24} 
-              color={getDrawerIconColor(props.state.index === 2)} 
-            />
-            <Text style={[styles.menuItemText, getDrawerItemTextStyle(props.state.index === 2) as any]}>
-              My Profile
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.menuItem, getDrawerItemStyle(props.state.index === 3)]}
             onPress={() => props.navigation.navigate('Articles')}
             activeOpacity={0.7}
           >
             <Ionicons 
               name="newspaper-outline" 
               size={24} 
+              color={getDrawerIconColor(props.state.index === 2)} 
+            />
+            <Text style={[styles.menuItemText, getDrawerItemTextStyle(props.state.index === 2) as any]}>
+              Wellness Articles
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.menuItem, getDrawerItemStyle(props.state.index === 3)]}
+            onPress={() => props.navigation.navigate('Settings')}
+            activeOpacity={0.7}
+          >
+            <Ionicons 
+              name="settings-outline" 
+              size={24} 
               color={getDrawerIconColor(props.state.index === 3)} 
             />
             <Text style={[styles.menuItemText, getDrawerItemTextStyle(props.state.index === 3) as any]}>
-              Wellness Articles
+              Settings
             </Text>
           </TouchableOpacity>
 
@@ -188,20 +188,18 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
 
           <TouchableOpacity
             style={[styles.menuItem, getDrawerItemStyle(props.state.index === 4)]}
-            onPress={() => props.navigation.navigate('Settings')}
+            onPress={() => props.navigation.navigate('FAQ')}
             activeOpacity={0.7}
           >
             <Ionicons 
-              name="settings-outline" 
+              name="help-buoy-outline" 
               size={24} 
               color={getDrawerIconColor(props.state.index === 4)} 
             />
             <Text style={[styles.menuItemText, getDrawerItemTextStyle(props.state.index === 4) as any]}>
-              Settings
+              FAQ
             </Text>
           </TouchableOpacity>
-
-          <View style={[styles.divider, { backgroundColor: theme.colors.text.secondary }]} />
 
           <TouchableOpacity
             style={[styles.menuItem, getDrawerItemStyle(props.state.index === 5)]}
@@ -215,21 +213,6 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
             />
             <Text style={[styles.menuItemText, getDrawerItemTextStyle(props.state.index === 5) as any]}>
               Support
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.menuItem, getDrawerItemStyle(props.state.index === 6)]}
-            onPress={() => props.navigation.navigate('FAQ')}
-            activeOpacity={0.7}
-          >
-            <Ionicons 
-              name="help-buoy-outline" 
-              size={24} 
-              color={getDrawerIconColor(props.state.index === 6)} 
-            />
-            <Text style={[styles.menuItemText, getDrawerItemTextStyle(props.state.index === 6) as any]}>
-              FAQ
             </Text>
           </TouchableOpacity>
         </View>

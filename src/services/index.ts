@@ -246,22 +246,22 @@ export const apiService = {
       
       console.log('📤 Uploading profile picture...');
       
-      const response = await apiClient.post('/user/profile/upload-photo', formData, {
+      const response = await apiClient.post('/user/upload/profile-photo', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
       
-      if (response.success && response.data) {
+      if (response.success && response.data?.success) {
         return {
           success: true,
-          data: response.data
+          data: response.data.data,
         };
       }
       
       return {
         success: false,
-        error: response.error || 'Failed to upload profile picture'
+        error: response.data?.message || 'Failed to upload profile picture'
       };
     } catch (error: any) {
       return {

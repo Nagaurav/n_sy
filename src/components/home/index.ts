@@ -7,9 +7,14 @@ export { default as GreetingSection } from './GreetingSection';
 export type { NextAppointment } from './AppointmentCard';
 
 // Modern UI Components
-export { default as ProfessionalStatsCard } from './ProfessionalStatsCard';
 export { default as ModernQuickActionCard } from './ModernQuickActionCard';
 export { default as ModernWellnessTipCard } from './ModernWellnessTipCard';
 export { default as ModernAppointmentCard } from './ModernAppointmentCard';
 export { default as ModernHomeHeader } from './ModernHomeHeader';
 export { default as ModernGreetingSection } from './ModernGreetingSection';
+
+// Professional UI Components
+export { default as ProfessionalHomeHeader } from './ProfessionalHomeHeader';
+export { default as ProfessionalGreetingSection } from './ProfessionalGreetingSection';
+export { ProfessionalStatsContainer, ProfessionalStatsCard } from './ProfessionalStatsContainer';
+export { ProfessionalQuickActions, ProfessionalQuickAction } from './ProfessionalQuickActions';

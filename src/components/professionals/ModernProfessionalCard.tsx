@@ -27,7 +27,7 @@ const ModernProfessionalCard: React.FC<ModernProfessionalCardProps> = ({
   onProfilePress,
 }) => {
   const fullName = `${professional.first_name} ${professional.last_name}`.trim() || 'Unknown Professional';
-  const speciality = professional.speciality_new?.name || professional.speciality || professional.speciality || 
+  const speciality = professional.speciality_new?.name || professional.speciality || professional.specialization || 
     (professional.role === 'yoga_teacher' ? 'Yoga Teacher' : 
      professional.role === 'yoga_instructor' ? 'Yoga Instructor' : 
      professional.role === 'yoga_therapist' ? 'Yoga Therapist' : 
@@ -36,13 +36,14 @@ const ModernProfessionalCard: React.FC<ModernProfessionalCardProps> = ({
      professional.role === 'personal_trainer' ? 'Personal Trainer' : 
      professional.role === 'therapist' ? 'Therapist' : '');
   const location = [professional.city, professional.state].filter(Boolean).join(', ') || 'Location not specified';
-  const rating = professional.rating || 0;
-  const experience = professional.experience_years;
   const isVerified = professional.is_verified;
   const isAvailable = professional.is_available;
   const avatar = professional.profile_picture || professional.photo_url;
-  const reviewCount = professional.review_count;
   const hasValidAvatar = avatar && avatar.trim() !== '';
+  
+  // Available fields from API
+  const languages = professional.language || 'Languages not specified';
+  const about = professional.about;
 
   const cardColor = professional.role === 'nutritionist' ? '#4CAF50' : '#2196F3';
   const roleIcon = professional.role === 'nutritionist' ? 'nutrition' : 
@@ -85,16 +86,16 @@ const ModernProfessionalCard: React.FC<ModernProfessionalCardProps> = ({
               <Ionicons name="location-outline" size={14} color="#6B7280" />
               <Text style={styles.infoText}>{location}</Text>
             </View>
-            {experience && (
+            {languages && languages !== 'Languages not specified' && (
               <View style={styles.infoRow}>
-                <Ionicons name="briefcase-outline" size={14} color="#6B7280" />
-                <Text style={styles.infoText}>{experience} years experience</Text>
+                <Ionicons name="language-outline" size={14} color="#6B7280" />
+                <Text style={styles.infoText} numberOfLines={1}>{languages}</Text>
               </View>
             )}
-            {rating > 0 && (
+            {about && (
               <View style={styles.infoRow}>
-                <Ionicons name="star" size={14} color="#F59E0B" />
-                <Text style={styles.infoText}>{rating.toFixed(1)} {reviewCount && `(${reviewCount})`}</Text>
+                <Ionicons name="information-circle-outline" size={14} color="#6B7280" />
+                <Text style={styles.infoText} numberOfLines={2}>{about}</Text>
               </View>
             )}
           </View>
@@ -210,10 +211,10 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   infoText: {
-    fontSize: 12,
+    fontSize: 11,
     color: theme.colors.text.secondary,
     marginLeft: 6,
     flex: 1,

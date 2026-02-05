@@ -19,7 +19,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import PhoneNumberScreen from './src/screens/PhoneNumberScreen';
 import OTPScreen from './src/screens/OTPScreen';
 import SignupScreen from './src/screens/SignupScreen';
-import ModernHomeScreen from './src/screens/ModernHomeScreen';
+import ProfessionalHomeScreen from './src/screens/ProfessionalHomeScreen';
 import SelectTimeScreen from './src/screens/SelectTimeScreen';
 import BookingConfirmationScreen from './src/screens/BookingConfirmationScreen';
 import PaymentGatewayScreen from './src/screens/PaymentGatewayScreen';
@@ -108,7 +108,7 @@ const HomeStackNavigator = () => {
         cardStyle: { backgroundColor: '#FFFFFF' } 
       }}
     >
-      <HomeStack.Screen name="Home" component={ModernHomeScreen} />
+      <HomeStack.Screen name="Home" component={ProfessionalHomeScreen} />
       <HomeStack.Screen name="ProfessionalsList" component={ProfessionalsListScreen} />
       <HomeStack.Screen name="ProfessionalProfile" component={ProfessionalProfileScreen} />
       <HomeStack.Screen name="ClassesList" component={ClassesListScreen} />
