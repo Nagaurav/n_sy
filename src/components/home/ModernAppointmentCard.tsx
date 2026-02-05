@@ -204,6 +204,8 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.l,
     position: 'relative',
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
     ...theme.shadows.card,
   },
   header: {

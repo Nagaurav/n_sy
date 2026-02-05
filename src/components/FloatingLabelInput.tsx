@@ -12,7 +12,7 @@ import {
   Image,
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
 interface FloatingLabelInputProps extends TextInputProps {
   label: string;
@@ -86,23 +86,11 @@ export const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
     
     switch (icon) {
       case 'mail':
-        return <Icon name="email" size={iconSize} color={iconColor} />;
+        return <Ionicons name="mail-outline" size={iconSize} color={iconColor} />;
       case 'phone':
-        return (
-          <Image 
-            source={require('../assets/icons/mobile-phone.png')} 
-            style={[styles.customIcon, { tintColor: iconColor }]} 
-            resizeMode="contain"
-          />
-        );
+        return <Ionicons name="call-outline" size={iconSize} color={iconColor} />;
       case 'lock':
-        return (
-          <Image 
-            source={require('../assets/icons/padlock.png')} 
-            style={[styles.customIcon, { tintColor: iconColor }]} 
-            resizeMode="contain"
-          />
-        );
+        return <Ionicons name="lock-closed-outline" size={iconSize} color={iconColor} />;
       default:
         return null;
     }

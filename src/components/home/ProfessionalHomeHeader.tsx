@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import { theme } from '../../theme';
+import NotificationDropdown from './NotificationDropdown';
 
 interface ProfessionalHomeHeaderProps {
   onMenuPress?: () => void;
@@ -11,6 +12,7 @@ interface ProfessionalHomeHeaderProps {
 
 const ProfessionalHomeHeader: React.FC<ProfessionalHomeHeaderProps> = ({ onMenuPress }) => {
   const navigation = useNavigation();
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const handleMenuPress = () => {
     if (onMenuPress) {
@@ -18,6 +20,10 @@ const ProfessionalHomeHeader: React.FC<ProfessionalHomeHeaderProps> = ({ onMenuP
     } else {
       navigation.dispatch(DrawerActions.openDrawer());
     }
+  };
+
+  const handleNotificationPress = () => {
+    setShowNotifications(!showNotifications);
   };
 
   return (
@@ -42,9 +48,11 @@ const ProfessionalHomeHeader: React.FC<ProfessionalHomeHeaderProps> = ({ onMenuP
           <Text style={styles.appTitle}>SAMYAYOG</Text>
         </View>
         
-        <TouchableOpacity style={styles.notificationButton} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.notificationButton} onPress={handleNotificationPress} activeOpacity={0.7}>
           <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
         </TouchableOpacity>
+        
+        <NotificationDropdown visible={showNotifications} onClose={() => setShowNotifications(false)} />
       </View>
     </LinearGradient>
   );

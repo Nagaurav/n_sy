@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.m,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#F5F2ED',
+    borderColor: theme.colors.feedback.success,
     ...theme.shadows.card,
   },
   noAppointmentText: {

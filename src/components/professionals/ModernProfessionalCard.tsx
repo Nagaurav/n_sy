@@ -125,14 +125,14 @@ const ModernProfessionalCard: React.FC<ModernProfessionalCardProps> = ({
         
         <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: '#f8f9fa', borderColor: '#e9ecef' }]}
+            style={[styles.actionButton, { backgroundColor: '#f8f9fa', borderColor: theme.colors.feedback.success }]}
             onPress={() => onProfilePress(professional)}
           >
             <Ionicons name="person-outline" size={16} color="#6B7280" />
             <Text style={[styles.actionButtonText, { color: '#6B7280' }]}>Profile</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: cardColor + '20', borderColor: cardColor }]}
+            style={[styles.actionButton, { backgroundColor: cardColor + '20', borderColor: theme.colors.feedback.success }]}
             onPress={() => onBookPress(professional)}
           >
             <Ionicons name="calendar-outline" size={16} color={cardColor} />

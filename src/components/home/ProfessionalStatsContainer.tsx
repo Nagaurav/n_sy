@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { theme } from '../../theme';
+import { theme, commonStyles } from '../../theme';
 
 const { width } = Dimensions.get('window');
 
@@ -70,11 +70,13 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    padding: theme.spacing.m,
+    backgroundColor: theme.colors.background.surface,
     borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.m,
     alignItems: 'center',
     marginHorizontal: theme.spacing.xs,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
     ...theme.shadows.card,
   },
   value: {
