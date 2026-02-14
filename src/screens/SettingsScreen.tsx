@@ -70,11 +70,47 @@ const SettingsScreen = () => {
     );
   };
 
+  const handlePrivacySecurity = () => {
+    Alert.alert('Privacy & Security', 'Privacy and security settings will be available soon.');
+  };
+
+  const handleChangePassword = () => {
+    Alert.alert('Change Password', 'Password change feature will be available soon.');
+  };
+
+  const handleTermsConditions = () => {
+    Alert.alert('Terms & Conditions', 'Terms and conditions will be available soon.');
+  };
+
+  const handlePrivacyPolicy = () => {
+    Alert.alert('Privacy Policy', 'Privacy policy will be available soon.');
+  };
+
+  const handleAbout = () => {
+    Alert.alert('About', 'SamyaYog App\nVersion 1.0.0\nYour wellness companion');
+  };
+
+  const handleEditProfile = () => {
+    navigation.navigate('EditProfile' as any);
+  };
+
+  const handleBiometricToggle = (value: boolean) => {
+    if (value) {
+      Alert.alert('Biometric Authentication', 'Biometric authentication will be available in a future update.');
+    }
+    setBiometricEnabled(value);
+  };
+
+  const handleDarkModeToggle = (value: boolean) => {
+    Alert.alert('Dark Mode', 'Dark mode will be available in a future update.');
+    setDarkModeEnabled(false); // Keep false until implemented
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
+      <StatusBar backgroundColor="#008272" barStyle="light-content" />
       
-      {/* Modern Header with Gradient */}
+      {/* Header matching ProfessionalHomeScreen */}
       <Animated.View
         style={[
           styles.headerWrapper,
@@ -85,33 +121,26 @@ const SettingsScreen = () => {
         ]}
       >
         <LinearGradient
-          colors={[appTheme.colors.primary, appTheme.colors.secondary]}
+          colors={['#008272', '#4C7360', '#2F5233']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.header}
         >
-          <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
-          
           <View style={styles.headerContent}>
             <TouchableOpacity 
               onPress={() => navigation.goBack()}
-              style={styles.backButton}
+              style={styles.menuButton}
               activeOpacity={0.7}
             >
-              <Ionicons name="arrow-back" size={24} color={appTheme.colors.background.surface} />
+              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             
             <View style={styles.titleContainer}>
-              <Text style={styles.headerTitle}>Settings</Text>
-              <Text style={styles.headerSubtitle}>Manage your preferences</Text>
+              <Text style={styles.headerTitle}>SETTINGS</Text>
             </View>
             
             <View style={styles.placeholder} />
           </View>
-          
-          {/* Decorative elements */}
-          <View style={styles.topCircle} />
-          <View style={styles.bottomWave} />
         </LinearGradient>
       </Animated.View>
 
@@ -203,7 +232,7 @@ const SettingsScreen = () => {
               </View>
               <Switch
                 value={darkModeEnabled}
-                onValueChange={setDarkModeEnabled}
+                onValueChange={handleDarkModeToggle}
                 trackColor={{ false: appTheme.colors.background.secondary, true: appTheme.colors.accent }}
                 thumbColor={appTheme.colors.background.surface}
               />
@@ -236,13 +265,13 @@ const SettingsScreen = () => {
               </View>
               <Switch
                 value={biometricEnabled}
-                onValueChange={setBiometricEnabled}
+                onValueChange={handleBiometricToggle}
                 trackColor={{ false: appTheme.colors.background.secondary, true: appTheme.colors.feedback.success }}
                 thumbColor={appTheme.colors.background.surface}
               />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.settingRow}>
+            <TouchableOpacity style={styles.settingRow} onPress={handlePrivacySecurity}>
               <View style={styles.settingInfo}>
                 <View style={[styles.iconContainer, { backgroundColor: appTheme.colors.primary + '20' }]}>
                   <Ionicons name="lock-closed-outline" size={20} color={appTheme.colors.primary} />
@@ -255,7 +284,7 @@ const SettingsScreen = () => {
               <Ionicons name="chevron-forward" size={20} color={appTheme.colors.text.secondary} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.settingRow}>
+            <TouchableOpacity style={styles.settingRow} onPress={handleChangePassword}>
               <View style={styles.settingInfo}>
                 <View style={[styles.iconContainer, { backgroundColor: appTheme.colors.primary + '20' }]}>
                   <Ionicons name="key-outline" size={20} color={appTheme.colors.primary} />
@@ -301,7 +330,7 @@ const SettingsScreen = () => {
               />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.settingRow}>
+            <TouchableOpacity style={styles.settingRow} onPress={handleTermsConditions}>
               <View style={styles.settingInfo}>
                 <View style={[styles.iconContainer, { backgroundColor: appTheme.colors.primary + '20' }]}>
                   <Ionicons name="document-text-outline" size={20} color={appTheme.colors.primary} />
@@ -314,7 +343,7 @@ const SettingsScreen = () => {
               <Ionicons name="chevron-forward" size={20} color={appTheme.colors.text.secondary} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.settingRow}>
+            <TouchableOpacity style={styles.settingRow} onPress={handlePrivacyPolicy}>
               <View style={styles.settingInfo}>
                 <View style={[styles.iconContainer, { backgroundColor: appTheme.colors.primary + '20' }]}>
                   <Ionicons name="shield-checkmark-outline" size={20} color={appTheme.colors.primary} />
@@ -327,7 +356,7 @@ const SettingsScreen = () => {
               <Ionicons name="chevron-forward" size={20} color={appTheme.colors.text.secondary} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.settingRow}>
+            <TouchableOpacity style={styles.settingRow} onPress={handleAbout}>
               <View style={styles.settingInfo}>
                 <View style={[styles.iconContainer, { backgroundColor: appTheme.colors.primary + '20' }]}>
                   <Ionicons name="information-circle-outline" size={20} color={appTheme.colors.primary} />
@@ -355,7 +384,7 @@ const SettingsScreen = () => {
           <Text style={styles.sectionTitle}>Account Actions</Text>
           
           <View style={styles.settingsCard}>
-            <TouchableOpacity style={styles.settingRow}>
+            <TouchableOpacity style={styles.settingRow} onPress={handleEditProfile}>
               <View style={styles.settingInfo}>
                 <View style={[styles.iconContainer, { backgroundColor: appTheme.colors.feedback.warning + '20' }]}>
                   <Ionicons name="person-outline" size={20} color={appTheme.colors.feedback.warning} />
@@ -395,37 +424,30 @@ const SettingsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background.primary,
+    backgroundColor: '#F5F2ED',
   },
   
-  // Header Styles
+  // Header Styles - matching ProfessionalHomeHeader
   headerWrapper: {
     position: 'relative',
     overflow: 'hidden',
   },
   header: {
-    paddingTop: 40,
-    paddingBottom: theme.spacing.l,
-    paddingHorizontal: 24,
-    position: 'relative',
-    overflow: 'hidden',
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    zIndex: 2,
   },
-  backButton: {
+  menuButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: theme.borderRadius.s,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  placeholder: {
-    width: 44,
   },
   titleContainer: {
     flex: 1,
@@ -433,36 +455,12 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontWeight: '500',
     letterSpacing: 1,
   },
-  // Decorative elements
-  topCircle: {
-    position: 'absolute',
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    top: -60,
-    left: -40,
-  },
-  bottomWave: {
-    position: 'absolute',
-    bottom: -30,
-    left: 0,
-    right: 0,
-    height: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderTopLeftRadius: 100,
-    borderTopRightRadius: 100,
+  placeholder: {
+    width: 44,
   },
   
   // Content Styles
@@ -489,6 +487,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.l,
     padding: theme.spacing.s,
     marginBottom: theme.spacing.m,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
     ...theme.shadows.card,
   },
   settingRow: {

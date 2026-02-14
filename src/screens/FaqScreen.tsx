@@ -147,9 +147,9 @@ const FaqScreen = () => {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
+        <StatusBar backgroundColor="#008272" barStyle="light-content" />
         
-        {/* Modern Header with Gradient */}
+        {/* Header matching ProfessionalHomeScreen */}
         <Animated.View
           style={[
             styles.headerWrapper,
@@ -160,33 +160,26 @@ const FaqScreen = () => {
           ]}
         >
           <LinearGradient
-            colors={[appTheme.colors.primary, appTheme.colors.secondary]}
+            colors={['#008272', '#4C7360', '#2F5233']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.header}
           >
-            <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
-            
             <View style={styles.headerContent}>
               <TouchableOpacity 
                 onPress={openDrawer}
                 style={styles.menuButton}
                 activeOpacity={0.7}
               >
-                <Ionicons name="menu" size={24} color={appTheme.colors.background.surface} />
+                <Ionicons name="menu" size={24} color="#FFFFFF" />
               </TouchableOpacity>
               
               <View style={styles.titleContainer}>
                 <Text style={styles.headerTitle}>FAQ</Text>
-                <Text style={styles.headerSubtitle}>Find answers to common questions</Text>
               </View>
               
               <View style={styles.placeholder} />
             </View>
-            
-            {/* Decorative elements */}
-            <View style={styles.topCircle} />
-            <View style={styles.bottomWave} />
           </LinearGradient>
         </Animated.View>
 
@@ -200,9 +193,9 @@ const FaqScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
+      <StatusBar backgroundColor="#008272" barStyle="light-content" />
       
-      {/* Modern Header with Gradient */}
+      {/* Header matching ProfessionalHomeScreen */}
       <Animated.View
         style={[
           styles.headerWrapper,
@@ -213,33 +206,26 @@ const FaqScreen = () => {
         ]}
       >
         <LinearGradient
-          colors={[appTheme.colors.primary, appTheme.colors.secondary]}
+          colors={['#008272', '#4C7360', '#2F5233']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.header}
         >
-          <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
-          
           <View style={styles.headerContent}>
             <TouchableOpacity 
               onPress={openDrawer}
               style={styles.menuButton}
               activeOpacity={0.7}
             >
-              <Ionicons name="menu" size={24} color={appTheme.colors.background.surface} />
+              <Ionicons name="menu" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             
             <View style={styles.titleContainer}>
               <Text style={styles.headerTitle}>FAQ</Text>
-              <Text style={styles.headerSubtitle}>Find answers to common questions</Text>
             </View>
             
             <View style={styles.placeholder} />
           </View>
-          
-          {/* Decorative elements */}
-          <View style={styles.topCircle} />
-          <View style={styles.bottomWave} />
         </LinearGradient>
       </Animated.View>
 
@@ -339,37 +325,30 @@ const FaqScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background.primary,
+    backgroundColor: '#F5F2ED',
   },
   
-  // Header Styles
+  // Header Styles - matching ProfessionalHomeHeader
   headerWrapper: {
     position: 'relative',
     overflow: 'hidden',
   },
   header: {
-    paddingTop: 40,
-    paddingBottom: theme.spacing.l,
-    paddingHorizontal: 24,
-    position: 'relative',
-    overflow: 'hidden',
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    zIndex: 2,
   },
   menuButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: theme.borderRadius.s,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  placeholder: {
-    width: 44,
   },
   titleContainer: {
     flex: 1,
@@ -377,36 +356,12 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontWeight: '500',
     letterSpacing: 1,
   },
-  // Decorative elements
-  topCircle: {
-    position: 'absolute',
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    top: -60,
-    left: -40,
-  },
-  bottomWave: {
-    position: 'absolute',
-    bottom: -30,
-    left: 0,
-    right: 0,
-    height: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderTopLeftRadius: 100,
-    borderTopRightRadius: 100,
+  placeholder: {
+    width: 44,
   },
   
   // Content Styles
@@ -534,6 +489,9 @@ const styles = StyleSheet.create({
   faqCard: {
     marginBottom: theme.spacing.m,
     marginHorizontal: theme.spacing.s,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    ...theme.shadows.card,
   },
   faqAnswer: {
     ...theme.typography.small,

@@ -129,12 +129,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.surface,
     marginRight: theme.spacing.s,
     borderWidth: 1,
-    borderColor: theme.colors.colors?.border || '#E5E7EB',
+    borderColor: theme.colors.feedback.success,
     ...theme.shadows.card,
   },
   chipActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
+    backgroundColor: '#008272',
+    borderColor: '#008272',
   },
   chipText: {
     fontSize: 14,

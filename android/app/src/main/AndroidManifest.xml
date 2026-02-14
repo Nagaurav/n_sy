@@ -13,6 +13,17 @@
     
     <!-- Required for Android 13+ -->
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    
+    <!-- Permissions for biometric authentication -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
+    
+    <!-- Permissions for notifications -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    
+    <!-- Permission for phone calls (if needed for consultations) -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
 
     <application
       android:name=".MainApplication"

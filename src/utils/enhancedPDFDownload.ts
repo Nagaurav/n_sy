@@ -150,7 +150,18 @@ export const downloadPDFEnhanced = async (
             path: targetFilePath
           });
           
-          await showDownloadCompleteNotification(options.fileName, targetFilePath);
+          // 🔄 Trigger media scan to make file visible in Android Downloads
+          if (Platform.OS === 'android') {
+            try {
+              await RNFS.scanFile(targetFilePath);
+              console.log('📱 Media scan completed - file should now be visible in Downloads');
+            } catch (scanError) {
+              console.log('⚠️ Media scan failed, but file is saved:', scanError);
+            }
+          }
+          
+          // Note: showDownloadCompleteNotification is called by showEnhancedPDFResult
+          // to avoid duplicate popups, we'll only call the final result notification
           
           return {
             success: true,
@@ -163,8 +174,8 @@ export const downloadPDFEnhanced = async (
       } catch (moveError: any) {
         console.log('⚠️  Could not move file to public Downloads, using original location:', moveError.message);
         
-        // Fallback to original location
-        await showDownloadCompleteNotification(options.fileName, file.filePath);
+        // Fallback to original location - don't show duplicate notification
+        // showEnhancedPDFResult will handle the user feedback
         
         return {
           success: true,
@@ -176,7 +187,7 @@ export const downloadPDFEnhanced = async (
       // File is already in the right place
       console.log('✅ File already in Downloads folder:', file.filePath);
       
-      await showDownloadCompleteNotification(options.fileName, file.filePath);
+      // Don't show duplicate notification - showEnhancedPDFResult will handle it
       
       return {
         success: true,
@@ -210,7 +221,7 @@ export const showEnhancedPDFResult = (
     if (isPublicDownloads) {
       Alert.alert(
         '✅ PDF Downloaded Successfully!',
-        `Your PDF has been saved to the Downloads folder.\n\n📁 Location: Downloads\n📄 File: ${fileName}\n\nYou can find it in your file manager app under "Downloads".`,
+        `Your PDF has been saved to your phone's Downloads folder.\n\n📁 Location: Downloads\n📄 File: ${fileName}\n\n💡 To find it:\n1. Open your File Manager app\n2. Go to "Downloads" folder\n3. Look for "${fileName}"\n\nIf you don't see it immediately, try refreshing the folder or check again in a few moments.`,
         [{ text: 'Got it!' }]
       );
     } else if (result.warning) {

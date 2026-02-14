@@ -1,181 +1,147 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  TouchableOpacity,
-  StatusBar,
-  Animated,
-  SafeAreaView,
   RefreshControl,
-  Platform,
+  SafeAreaView,
+  StatusBar,
+  TouchableOpacity,
+  Animated,
   Dimensions,
-  Alert,
-  PermissionsAndroid,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
-import Ionicons from 'react-native-vector-icons/Ionicons';
-import Share from 'react-native-share';
-const RNHTMLtoPDF = require('react-native-html-to-pdf');
-import { useAuth } from '../hooks/useAuth';
-import { dietService } from '../services/dietService';
-import { useTheme } from '../contexts/ThemeContext';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RouteProp } from '@react-navigation/native';
+import type { HomeStackParamList } from '../types/navigation';
 import { theme } from '../theme';
-import { commonStyles } from '../theme';
+import { useAuth } from '../hooks/useAuth';
+import { useTheme } from '../contexts/ThemeContext';
+import { apiService } from '../services';
+import { dietService } from '../services/dietService';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { downloadPDFEnhanced, showEnhancedPDFResult } from '../utils/enhancedPDFDownload';
+const RNHTMLtoPDF = require('react-native-html-to-pdf');
 
-// 🟢 1. Define Correct Interfaces based on your Backend/Prisma Schema
-interface DietMeal {
-  id: number;
-  diet_plan_id?: number;
-  day?: string;         // Optional for backward compatibility
-  meal_type?: string;   // Backend sends 'meal_type', fallback to name
-  name?: string;        // Fallback for MealItem compatibility
-  time: string;
-  food_items?: string;  // Backend sends 'food_items', fallback to description
-  description?: string; // Fallback for MealItem compatibility
-  calories?: number;
-  notes?: string;
-  created_at?: string;
-}
+const { width: screenWidth } = Dimensions.get('window');
 
-interface DietPlan {
-  id: number;
-  plan_name: string;
-  start_date: string;
-  end_date: string;
-  instructions?: string;
-  daily_calorie_target?: number; // Added 'daily_calorie_target'
-  is_active: boolean;
-  meals: DietMeal[];
-  professional?: {
-    first_name: string;
-    last_name: string;
-    speciality_new?: {
-      name: string;
-    };
-  };
-}
+// Import the proper DietPlan and MealItem types
+import type { DietPlan, MealItem } from '../types/diet';
 
-interface DietPlanScreenProps {
-  // Add any props if needed in the future
-}
+type DietPlanRouteProp = RouteProp<HomeStackParamList, 'DietPlan'>;
+type NavigationProp = StackNavigationProp<HomeStackParamList, 'DietPlan'>;
 
-const DietPlanScreen = () => {
-  const route = useRoute<any>();
-  const navigation = useNavigation();
+const DietPlanScreen: React.FC = () => {
+  const route = useRoute<DietPlanRouteProp>();
+  const navigation = useNavigation<NavigationProp>();
+  const { user, isAuthReady } = useAuth();
   const { bookingId } = route.params;
-  const { isAuthReady } = useAuth();
-  const { theme: appTheme } = useTheme();
-  const theme = appTheme || require('../theme').theme;
-  const { width } = Dimensions.get('window');
-
-  // Animation values
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-  const scaleAnim = useRef(new Animated.Value(0.95)).current;
-
-  // State management
+  
   const [dietPlan, setDietPlan] = useState<DietPlan | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAllMeals, setShowAllMeals] = useState(false);
+  
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
 
-  // Fetch diet plan data
   const fetchDietPlan = useCallback(async () => {
-    if (!bookingId) return;
+    if (!bookingId) {
+      setError('No booking ID provided');
+      setLoading(false);
+      setIsRefreshing(false);
+      return;
+    }
 
     try {
       setError(null);
-      setIsLoading(true);
-
-      // Backend API call
+      console.log('[DietPlan] Fetching diet plan for bookingId:', bookingId);
+      
+      // Use dietService to get diet plan by booking ID
       const response = await dietService.getDietPlanByBooking(bookingId);
       
-      // Handle response structure
-      let data = response.data?.data || response.data;
+      console.log('[DietPlan] API response:', response);
       
-      if (data) {
-        setDietPlan(data as DietPlan);
+      if (response?.success && response?.data?.data) {
+        setDietPlan(response.data.data);
+        console.log('[DietPlan] Diet plan loaded successfully');
       } else {
-        setError('No diet plan assigned yet.');
+        setError('No diet plan found for this booking. Please contact your nutritionist to get a personalized diet plan.');
+        setDietPlan(null);
       }
     } catch (err: any) {
-      console.error('Fetch error:', err);
-      setError('Failed to load diet plan.');
+      console.error('[DietPlan] Error fetching diet plan:', err);
+      setError(err.message || 'Failed to load diet plan');
+      setDietPlan(null);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
       setIsRefreshing(false);
     }
   }, [bookingId]);
 
-  // Handle PDF Download - Enhanced with better permission handling and download location
   const handleDownloadPDF = async () => {
-    console.log('PDF download button pressed!');
     if (!dietPlan) {
-      console.log('No diet plan data available');
-      Alert.alert('Error', 'No diet plan data available to generate PDF.');
+      setError('No diet plan available to download');
       return;
     }
-    
-    try {
-      // Show loading indicator
-      Alert.alert('Generating PDF', 'Please wait while we generate and download your diet plan PDF...');
 
-      // Generate HTML content for PDF
+    try {
       const htmlContent = `
         <!DOCTYPE html>
         <html>
         <head>
           <meta charset="utf-8">
-          <title>Diet Plan - ${dietPlan.plan_name}</title>
+          <title>Diet Plan</title>
           <style>
             body {
               font-family: Arial, sans-serif;
-              margin: 20px;
-              color: #333;
               line-height: 1.6;
+              color: #333;
+              max-width: 800px;
+              margin: 0 auto;
+              padding: 20px;
             }
             .header {
               text-align: center;
-              border-bottom: 3px solid #008272;
-              padding-bottom: 20px;
               margin-bottom: 30px;
+              padding: 20px;
+              background: linear-gradient(135deg, #008272, #4C7360, #2F5233);
+              color: white;
+              border-radius: 10px;
             }
             .title {
-              color: #008272;
               font-size: 28px;
               font-weight: bold;
               margin-bottom: 10px;
             }
             .subtitle {
-              color: #666;
-              font-size: 16px;
+              font-size: 18px;
               margin-bottom: 5px;
             }
             .section {
-              margin-bottom: 30px;
+              margin-bottom: 25px;
               padding: 20px;
-              border: 1px solid #e0e0e0;
-              border-radius: 8px;
               background-color: #f9f9f9;
+              border-radius: 8px;
+              border-left: 4px solid #008272;
             }
             .section-title {
-              color: #008272;
               font-size: 20px;
               font-weight: bold;
               margin-bottom: 15px;
-              border-bottom: 2px solid #008272;
-              padding-bottom: 5px;
+              color: #008272;
             }
             .info-row {
-              margin-bottom: 10px;
               display: flex;
               justify-content: space-between;
+              margin-bottom: 10px;
+              padding: 5px 0;
             }
             .info-label {
               font-weight: bold;
@@ -184,9 +150,9 @@ const DietPlanScreen = () => {
             .meal-item {
               margin-bottom: 20px;
               padding: 15px;
-              border-left: 4px solid #008272;
               background-color: white;
-              border-radius: 4px;
+              border-radius: 8px;
+              border: 1px solid #ddd;
             }
             .meal-header {
               display: flex;
@@ -246,13 +212,7 @@ const DietPlanScreen = () => {
               <span class="info-label">Duration:</span>
               <span>${new Date(dietPlan.start_date).toLocaleDateString()} - ${new Date(dietPlan.end_date).toLocaleDateString()}</span>
             </div>
-            ${dietPlan.daily_calorie_target ? `
-            <div class="info-row">
-              <span class="info-label">Daily Target:</span>
-              <span>${dietPlan.daily_calorie_target} Calories</span>
-            </div>
-            ` : ''}
-            <div class="info-row">
+                        <div class="info-row">
               <span class="info-label">Status:</span>
               <span>${dietPlan.is_active ? 'Active' : 'Inactive'}</span>
             </div>
@@ -267,21 +227,20 @@ const DietPlanScreen = () => {
 
           <div class="section">
             <div class="section-title">Meal Schedule</div>
-            ${dietPlan.meals.map(meal => `
+            ${dietPlan.meals?.map(meal => `
               <div class="meal-item">
                 <div class="meal-header">
                   <div>
-                    <div class="meal-name">${meal.meal_type || meal.name || 'Meal'}</div>
-                    <div class="meal-time">${meal.day || ''} • ${meal.time}</div>
+                    <div class="meal-name">${meal.name || 'Meal'}</div>
+                    <div class="meal-time">${meal.time}</div>
                   </div>
                   ${meal.calories ? `<span class="calories">${meal.calories} cal</span>` : ''}
                 </div>
                 <div class="meal-details">
-                  <div><strong>Food Items:</strong> ${meal.food_items || meal.description || 'N/A'}</div>
-                  ${meal.notes ? `<div class="notes"><strong>Note:</strong> ${meal.notes}</div>` : ''}
-                </div>
+                  <div><strong>Food Items:</strong> ${meal.description || 'N/A'}</div>
+                                  </div>
               </div>
-            `).join('')}
+            `).join('') || '<p>No meals scheduled</p>'}
           </div>
 
           <div class="footer">
@@ -320,12 +279,23 @@ const DietPlanScreen = () => {
     }
   }, [isAuthReady, fetchDietPlan]);
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#008272" />
+          <Text style={styles.loadingText}>Loading diet plan...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (error && !dietPlan) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <View style={styles.errorCard}>
-            <Ionicons name="nutrition-outline" size={48} color={appTheme.colors.primary} />
+            <Ionicons name="nutrition-outline" size={48} color="#008272" />
             <Text style={styles.errorTitle}>No Diet Plan Found</Text>
             <Text style={styles.errorMessage}>{error}</Text>
             <TouchableOpacity
@@ -348,9 +318,9 @@ const DietPlanScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={appTheme.colors.primary} />
+      <StatusBar backgroundColor="#008272" barStyle="light-content" />
       <LinearGradient 
-        colors={[appTheme.colors.primary, appTheme.colors.secondary]}
+        colors={['#008272', '#4C7360', '#2F5233']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.header}
@@ -358,29 +328,24 @@ const DietPlanScreen = () => {
         <View style={styles.headerContent}>
           <TouchableOpacity 
             onPress={() => navigation.goBack()}
-            style={styles.backButton}
+            style={styles.menuButton}
             activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           
           <View style={styles.titleContainer}>
-            <Text style={styles.headerTitle}>Diet Plan</Text>
-            <Text style={styles.headerSubtitle}>Your personalized nutrition plan</Text>
+            <Text style={styles.headerTitle}>DIET</Text>
           </View>
           
           <TouchableOpacity 
             onPress={handleDownloadPDF}
-            style={styles.shareButton}
+            style={styles.menuButton}
             activeOpacity={0.7}
           >
-            <Ionicons name="share-outline" size={24} color={theme.colors.background.surface} />
+            <Ionicons name="download-outline" size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
-        
-        {/* Decorative elements */}
-        <View style={styles.topCircle} />
-        <View style={styles.bottomWave} />
       </LinearGradient>
 
       <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
@@ -396,8 +361,8 @@ const DietPlanScreen = () => {
             <RefreshControl 
               refreshing={isRefreshing} 
               onRefresh={() => { setIsRefreshing(true); fetchDietPlan(); }}
-              colors={[appTheme.colors.primary]}
-              tintColor={appTheme.colors.primary}
+              colors={['#008272']}
+              tintColor="#008272"
             />
           }
           keyboardShouldPersistTaps="handled"
@@ -471,20 +436,11 @@ const DietPlanScreen = () => {
                 </Text>
               </View>
 
-              {dietPlan?.daily_calorie_target && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="flame" size={16} color="#F59E0B" />
-                  <Text style={styles.detailText}>
-                    <Text style={styles.detailLabel}>Daily Target: </Text>
-                    {dietPlan?.daily_calorie_target} Calories
-                  </Text>
-                </View>
-              )}
-            </View>
+                          </View>
             
             <View style={styles.cardFooter}>
               <Text style={[styles.statusText, { color: '#2196F3' }]}>
-                {dietPlan?.daily_calorie_target ? `${dietPlan?.daily_calorie_target} cal/day` : 'No target set'}
+                {'No target set'}
               </Text>
             </View>
           </Animated.View>
@@ -528,7 +484,7 @@ const DietPlanScreen = () => {
               </View>
               <View style={[styles.typeBadge, { backgroundColor: '#4CAF50' + '20' }]}>
                 <Ionicons name="restaurant-outline" size={14} color="#4CAF50" />
-                <Text style={[styles.typeText, { color: '#4CAF50' }]}>{dietPlan?.meals?.length || 0}</Text>
+                <Text style={[styles.typeText, { color: '#4CAF50' }]}>MEALS</Text>
               </View>
             </View>
             
@@ -537,7 +493,7 @@ const DietPlanScreen = () => {
               <View style={styles.statItem}>
                 <Ionicons name="flame" size={16} color="#FF7043" />
                 <Text style={styles.statLabel}>Daily Calories</Text>
-                <Text style={styles.statValue}>{dietPlan?.daily_calorie_target || 'N/A'}</Text>
+                <Text style={styles.statValue}>{'N/A'}</Text>
               </View>
               <View style={styles.statItem}>
                 <Ionicons name="time" size={16} color="#2196F3" />
@@ -588,7 +544,7 @@ const DietPlanScreen = () => {
               </View>
               
               <View style={styles.cardContent}>
-                {dietPlan?.meals?.map((meal: DietMeal, index: number) => (
+                {dietPlan?.meals?.map((meal: MealItem, index: number) => (
                   <View key={meal.id} style={styles.mealDetailCard}>
                     <View style={styles.mealDetailHeader}>
                       <View style={styles.mealDetailIcon}>
@@ -596,10 +552,10 @@ const DietPlanScreen = () => {
                       </View>
                       <View style={styles.mealDetailInfo}>
                         <Text style={styles.mealDetailName}>
-                          {meal.meal_type || meal.name || 'Meal'}
+                          {meal.name || 'Meal'}
                         </Text>
                         <Text style={styles.mealDetailTime}>
-                          {meal.day && `${meal.day} • `}{meal.time}
+                          {meal.time}
                         </Text>
                       </View>
                       {meal.calories && (
@@ -612,16 +568,10 @@ const DietPlanScreen = () => {
                     <View style={styles.mealDetailContent}>
                       <Text style={styles.mealDetailLabel}>Food Items:</Text>
                       <Text style={styles.mealDetailDescription}>
-                        {meal.food_items || meal.description || 'N/A'}
+                        {meal.description || 'N/A'}
                       </Text>
                       
-                      {meal.notes && (
-                        <View style={styles.mealDetailNotes}>
-                          <Text style={styles.mealDetailNotesLabel}>Notes:</Text>
-                          <Text style={styles.mealDetailNotesText}>{meal.notes}</Text>
-                        </View>
-                      )}
-                    </View>
+                                          </View>
                   </View>
                 ))}
               </View>
@@ -643,8 +593,10 @@ const DietPlanScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background.primary },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#F5F2ED' 
+  },
   
   // Loading and Error States
   loadingContainer: {
@@ -708,103 +660,62 @@ const styles = StyleSheet.create({
   
   // Header Styles
   header: { 
-    paddingTop: 40,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  backButton: {
-    padding: 8,
-    borderRadius: 20,
+  menuButton: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.borderRadius.s,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   titleContainer: {
     flex: 1,
     alignItems: 'center',
   },
   headerTitle: { 
-    color: theme.colors.background.surface, 
+    color: '#FFFFFF', 
     fontSize: 20, 
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 1,
   },
-  headerSubtitle: {
-    color: theme.colors.background.surface,
-    fontSize: 14,
-    opacity: 0.8,
-    marginTop: 2,
-  },
-  shareButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-  },
-  topCircle: {
-    position: 'absolute',
-    top: -50,
-    right: -50,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  bottomWave: {
-    position: 'absolute',
-    bottom: -20,
-    left: -50,
-    right: -50,
-    height: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-
+  
   // Card Styles
   card: {
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: theme.borderRadius.l,
-    padding: 20,
-    marginBottom: 16,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.l,
+    marginBottom: theme.spacing.m,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    ...theme.shadows.card,
   },
-  row: { flexDirection: 'row', alignItems: 'center' },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15
+  cardHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'flex-start', 
+    marginBottom: 12 
   },
-  docName: { fontSize: 16, fontWeight: '700', color: theme.colors.text.primary },
-  docSpec: { fontSize: 14, color: theme.colors.text.secondary, marginTop: 2 },
-  badge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginTop: 6
+  cardFooter: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    marginTop: 12, 
+    paddingTop: 12, 
+    borderTopWidth: 1, 
+    borderTopColor: '#eee' 
   },
-
-  // Appointment Card Pattern Styles
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#eee' },
-  statusText: { fontSize: 12, fontWeight: 'bold' },
+  statusText: { 
+    fontSize: 12, 
+    fontWeight: 'bold' 
+  },
   title: {
     fontSize: 16,
     fontWeight: 'bold',
@@ -845,6 +756,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: theme.colors.text.secondary,
   },
+  instructionsText: {
+    fontSize: 14,
+    color: theme.colors.text.primary,
+    lineHeight: 20,
+  },
   mealStatsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -852,10 +768,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
-  },
-  mealsContainer: {
-    marginTop: 8,
-    paddingBottom: 16,
   },
   statItem: {
     flex: 1,
@@ -896,58 +808,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F5E8',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
   },
   mealDetailInfo: {
     flex: 1,
+    marginLeft: 12,
   },
   mealDetailName: {
     fontSize: 16,
     fontWeight: '600',
     color: theme.colors.text.primary,
-    marginBottom: 2,
   },
   mealDetailTime: {
     fontSize: 14,
     color: theme.colors.text.secondary,
-  },
-  mealDetailContent: {
-    marginTop: 8,
-  },
-  mealDetailLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme.colors.text.secondary,
-    marginBottom: 4,
-    textTransform: 'uppercase',
-  },
-  mealDetailDescription: {
-    fontSize: 14,
-    color: theme.colors.text.primary,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  mealDetailNotes: {
-    backgroundColor: '#FFF8E1',
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#FFC107',
-  },
-  mealDetailNotesLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#F57C00',
-    marginBottom: 4,
-  },
-  mealDetailNotesText: {
-    fontSize: 13,
-    color: '#5D4037',
-    fontStyle: 'italic',
+    marginTop: 2,
   },
   mealDetailCalorieBadge: {
-    backgroundColor: '#FFE0B2',
+    backgroundColor: '#FF7043',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -955,368 +832,40 @@ const styles = StyleSheet.create({
   mealDetailCalorieText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#E65100',
-  },
-  
-  // Detail Rows - Professional Design (Legacy)
-  detailIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(0, 130, 114, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 4,
-  },
-  detailContent: {
-    flex: 1,
-    justifyContent: 'flex-start',
-    alignItems: 'flex-start',
-  },
-  detailValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1A202C',
-    lineHeight: 24,
-  },
-  
-  // Instructions Text - Professional Design
-  instructionsText: {
-    fontSize: 16,
-    lineHeight: 26,
-    color: '#475569',
-    backgroundColor: 'rgba(0, 130, 114, 0.03)',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 130, 114, 0.1)',
-  },
-  
-  // Section Header - Professional Design
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 16,
-    alignSelf: 'stretch',
-  },
-  sectionHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 12,
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1A202C',
-    lineHeight: 30,
-  },
-  mealCountBadge: {
-    backgroundColor: 'rgba(0, 130, 114, 0.1)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 130, 114, 0.2)',
-  },
-  mealCountText: {
-    width: '100%',
-  },
-  mealInfo: {
-    flex: 1,
-    alignItems: 'flex-start',
-  },
-  dayBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginBottom: 12,
-    backgroundColor: '#008272',
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  dayText: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
-  mealTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    marginBottom: 8,
-    gap: 12,
-    width: '100%',
+  mealDetailContent: {
+    marginTop: 8,
   },
-  mealIcon: {
-    color: '#008272',
-  },
-  mealName: {
-    fontSize: 18,
-    fontWeight: '700',
-    flex: 1,
-    color: '#1A202C',
-    lineHeight: 24,
-  },
-  mealTime: {
+  mealDetailLabel: {
     fontSize: 14,
-    fontWeight: '500',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    justifyContent: 'flex-start',
-    color: '#64748B',
-  },
-  
-  // Calorie Badge - Professional Design
-  calorieBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 112, 67, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 112, 67, 0.2)',
-    gap: 6,
-  },
-  calorieText: {
-    fontSize: 12,
     fontWeight: '600',
-    color: '#FF7043',
-  },
-  
-  // Food Container - Professional Design
-  foodContainer: {
-    marginBottom: 16,
-    alignItems: 'flex-start',
-  },
-  foodLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    color: '#64748B',
-  },
-  mealDescription: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#475569',
-    backgroundColor: 'rgba(0, 130, 114, 0.03)',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 130, 114, 0.1)',
-  },
-  
-  // Notes Container - Professional Design
-  notesContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
-    backgroundColor: 'rgba(255, 193, 7, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 193, 7, 0.2)',
-  },
-  noteText: {
-    flex: 1,
-    fontSize: 14,
-    fontStyle: 'italic',
-    lineHeight: 20,
-    color: '#92400E',
-  },
-  
-  // Meal Item Styles - Using consistent card styling
-  mealItem: {
-    backgroundColor: theme.colors.background.primary,
-    borderRadius: 6,
-    padding: 16,
-    marginBottom: 16,
-    borderLeftWidth: 3,
-    borderLeftColor: '#4CAF50',
-  },
-  mealHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    width: '100%',
-  },
-  
-  // Empty State - Using consistent styling
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 32,
-  },
-  emptyStateText: {
-    marginTop: 16,
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
     color: theme.colors.text.secondary,
-    lineHeight: 24,
-  },
-
-  // New Modern Meal Card Styles
-  mealItemNew: {
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: 16,
-    marginBottom: 20,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    overflow: 'hidden',
-  },
-  mealHeaderGradient: {
-    padding: 12,
-    paddingTop: 16,
-  },
-  dayBadgeNew: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginBottom: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  dayTextNew: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  mealHeaderContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  mealTitleContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  mealIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  mealTitleInfo: {
-    flex: 1,
-  },
-  mealNameNew: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
     marginBottom: 4,
-    lineHeight: 24,
   },
-  timeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  mealDetailDescription: {
+    fontSize: 14,
+    color: theme.colors.text.primary,
+    lineHeight: 20,
   },
-  mealTimeNew: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.9)',
+  mealDetailNotes: {
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: '#FFF3CD',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FFC107',
   },
-  calorieBadgeNew: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    gap: 4,
-  },
-  calorieTextNew: {
+  mealDetailNotesLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#856404',
+    marginBottom: 4,
   },
-  mealContent: {
-    padding: 12,
-  },
-  foodSection: {
-    marginBottom: 6,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  foodSectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#008272',
-  },
-  foodItemsContainer: {
-    backgroundColor: theme.colors.background.primary,
-    borderRadius: 12,
-    padding: 12,
-    borderLeftWidth: 3,
-    borderLeftColor: '#008272',
-  },
-  mealDescriptionNew: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: theme.colors.text.primary,
-  },
-  notesSection: {
-    backgroundColor: '#FFF8E1',
-    borderRadius: 12,
-    padding: 12,
-    borderLeftWidth: 3,
-    borderLeftColor: '#F59E0B',
-  },
-  notesHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 6,
-  },
-  notesTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#F59E0B',
-  },
-  notesContent: {
-    paddingLeft: 20,
-  },
-  noteTextNew: {
-    fontSize: 13,
+  mealDetailNotesText: {
+    fontSize: 12,
+    color: '#856404',
     fontStyle: 'italic',
-    lineHeight: 18,
-    color: '#92400E',
   },
 });
 

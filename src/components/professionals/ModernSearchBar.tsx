@@ -63,7 +63,7 @@ const ModernSearchBar = forwardRef<any, ModernSearchBarProps>(({
         <Ionicons 
           name="search" 
           size={20} 
-          color={isFocused ? theme.colors.primary : '#9CA3AF'} 
+          color={isFocused ? '#008272' : '#9CA3AF'} 
           style={styles.searchIcon} 
         />
 
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   searchContainerFocused: {
-    borderColor: theme.colors.primary,
+    borderColor: '#008272',
     ...theme.shadows.large,
   },
   searchIcon: {

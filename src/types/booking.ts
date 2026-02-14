@@ -230,6 +230,7 @@ export interface UnifiedAppointment {
   time: string; // Time slot or schedule time
   title: string;
   subtitle: string;
+  mode?: 'online' | 'offline'; // Session mode
   imageUrl?: string;
   professional?: any;
   yoga_plan?: any; // Extra details for Yoga

@@ -23,8 +23,6 @@ import type { Professional } from '../types/professional';
 import {
   ModernProfessionalCard,
   ModernProfessionalsHeader,
-  ModernSearchBar,
-  ModernFilterChips,
   ModernEmptyState,
 } from '../components/professionals';
 
@@ -58,6 +56,7 @@ const ProfessionalsListScreen = () => {
 
   // Refs
   const searchInputRef = useRef<any>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Filters
   const [filters, setFilters] = useState<FilterModalState>({
@@ -84,6 +83,13 @@ const ProfessionalsListScreen = () => {
 
   useEffect(() => {
     fetchProfessionals();
+    
+    // Cleanup function to clear timeout
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
   }, [categoryId, searchQuery, bookingType]);
 
   const fetchProfessionals = async (resetList = true, pageNum = 1) => {
@@ -125,12 +131,45 @@ const ProfessionalsListScreen = () => {
       console.log('[ModernProfessionalsList] Filter params:', filterParams);
 
       const response = await apiService.searchProfessionalsWithFilters(filterParams);
-
+      
+      console.log('[ProfessionalsList] Full API Response:', response);
+      console.log('[ProfessionalsList] Response data:', response.data);
+      
       const rawData = response.data?.data;
       const professionalsList = Array.isArray(rawData) ? rawData : rawData?.professionals || [];
+      
+      console.log('[ProfessionalsList] Raw data:', rawData);
+      console.log('[ProfessionalsList] Extracted professionalsList:', professionalsList);
 
       // Client-side Price Filtering
       let filteredList = professionalsList;
+      
+      // Debug: Check if search is working at API level
+      if (currentSearchQuery && currentSearchQuery.trim()) {
+        console.log('[ProfessionalsList] Checking search results for query:', currentSearchQuery);
+        console.log('[ProfessionalsList] Professionals before search filter:', professionalsList.map(p => ({
+          id: p.id,
+          name: `${p.first_name} ${p.last_name}`,
+          speciality: p.speciality_new?.name || p.speciality
+        })));
+        
+        // Check if any professionals match the search
+        const searchMatches = professionalsList.filter((pro: any) => {
+          const fullName = `${pro.first_name} ${pro.last_name}`.toLowerCase();
+          const speciality = (pro.speciality_new?.name || pro.speciality || '').toLowerCase();
+          const query = currentSearchQuery.toLowerCase();
+          
+          return fullName.includes(query) || speciality.includes(query);
+        });
+        
+        console.log('[ProfessionalsList] Search matches found:', searchMatches.length);
+        console.log('[ProfessionalsList] Matched professionals:', searchMatches.map(p => ({
+          id: p.id,
+          name: `${p.first_name} ${p.last_name}`,
+          speciality: p.speciality_new?.name || p.speciality
+        })));
+      }
+      
       if (filters.min_price > 0 || filters.max_price < 1000) {
         filteredList = professionalsList.filter((pro: any) => {
           const proPrice = pro.price || 0;
@@ -139,10 +178,15 @@ const ProfessionalsListScreen = () => {
       }
 
       if (response.success) {
+        console.log('[ProfessionalsList] API Response Success');
+        console.log('[ProfessionalsList] Raw professionalsList:', professionalsList);
+        console.log('[ProfessionalsList] Filtered list:', filteredList);
+        console.log('[ProfessionalsList] Setting professionals:', resetList ? filteredList : [...professionals, ...filteredList]);
         setProfessionals(resetList ? filteredList : [...professionals, ...filteredList]);
         setHasMoreData(professionalsList.length === 10);
         setPage(pageNum);
       } else {
+        console.log('[ProfessionalsList] API Response Failed:', response.error);
         setError(response.error || 'Failed to load professionals');
       }
     } catch (err) {
@@ -166,12 +210,26 @@ const ProfessionalsListScreen = () => {
   }, []);
 
   const handleSearch = (query: string) => {
+    console.log('[ProfessionalsList] Search called with query:', query);
     setCurrentSearchQuery(query);
+    
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    // Always trigger search for real-time filtering with debouncing
     if (!query.trim()) {
-      fetchProfessionals();
+      console.log('[ProfessionalsList] Empty query, fetching all professionals');
+      fetchProfessionals(true, 1);
       return;
     }
-    fetchProfessionals(true, 1);
+    
+    // Debounce search to prevent excessive API calls
+    searchTimeoutRef.current = setTimeout(() => {
+      console.log('[ProfessionalsList] Debounced searching with query:', query);
+      fetchProfessionals(true, 1);
+    }, 500); // 500ms delay
   };
 
   const handleFilterPress = (filterType: 'all' | 'online' | 'inPerson' | 'more') => {
@@ -218,6 +276,7 @@ const ProfessionalsListScreen = () => {
   };
 
   const handleClearSearch = () => {
+    console.log('[ProfessionalsList] Clearing search');
     setCurrentSearchQuery('');
     fetchProfessionals();
   };
@@ -285,29 +344,9 @@ const ProfessionalsListScreen = () => {
         onBackPress={() => navigation.goBack()}
         showFavorite={false}
         showSearch={true}
-        onSearchPress={() => {
-          // Focus on the search bar
-          searchInputRef.current?.focus();
-        }}
-      />
-
-      {/* Search Bar */}
-      <ModernSearchBar
-        ref={searchInputRef}
-        value={currentSearchQuery}
-        onChangeText={setCurrentSearchQuery}
-        onSubmit={handleSearch}
-      />
-
-      {/* Filter Chips */}
-      <ModernFilterChips
-        filters={{
-          isOnline: filters.is_online,
-          hasActiveFilters: getActiveFilterCount() > 0,
-        }}
-        onFilterPress={handleFilterPress}
-        onMoreFiltersPress={() => console.log('More filters')}
-        activeCount={getActiveFilterCount()}
+        searchValue={currentSearchQuery}
+        onSearchChange={setCurrentSearchQuery}
+        onSearchSubmit={handleSearch}
       />
 
       {/* Professionals List */}
@@ -336,7 +375,7 @@ const ProfessionalsListScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background.primary,
+    backgroundColor: '#F5F2ED',
   },
   loadingContainer: {
     flex: 1,
@@ -364,6 +403,7 @@ const styles = StyleSheet.create({
   listContainer: {
     paddingHorizontal: theme.spacing.l,
     paddingBottom: theme.spacing.xl,
+    paddingTop: theme.spacing.m,
   },
   loadingMoreContainer: {
     padding: theme.spacing.m,
