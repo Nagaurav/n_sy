@@ -11,11 +11,13 @@ import {
   Animated,
   SafeAreaView,
   Alert,
+  Image,
 } from 'react-native';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import LinearGradient from 'react-native-linear-gradient';
 import { useRoute, RouteProp, useNavigation, useIsFocused } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
-import { GiftedChat, IMessage, Bubble, InputToolbar, Send, SystemMessage } from 'react-native-gifted-chat';
+import { GiftedChat, IMessage, Bubble, InputToolbar, Send, SystemMessage, Day } from 'react-native-gifted-chat';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { dietService } from '../services/dietService';
@@ -31,6 +33,29 @@ import { theme } from '../theme';
 interface ChatScreenParams {
   appointmentId: string;
   title?: string;
+}
+
+// Enhanced message interface with status and reactions
+interface EnhancedMessage extends IMessage {
+  read?: boolean;
+  delivered?: boolean;
+  reactions?: { emoji: string; count: number; users: string[] }[];
+  replyTo?: {
+    messageId: string;
+    text: string;
+    userName: string;
+  };
+  isVoiceMessage?: boolean;
+  voiceDuration?: number;
+  imageUrl?: string;
+  documentUrl?: string;
+}
+
+// Professional avatar interface
+interface ProfessionalAvatar {
+  url?: string;
+  initials?: string;
+  backgroundColor?: string;
 }
 
 type ChatScreenRouteProp = RouteProp<Record<'ChatScreen', ChatScreenParams>, 'ChatScreen'>;
@@ -52,13 +77,26 @@ const ChatScreen: React.FC = () => {
   const professionalId = currentAppointment?.professional_id;
 
   // State
-  const [messages, setMessages] = useState<IMessage[]>([]);
+  const [messages, setMessages] = useState<EnhancedMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(1);
   const [actualChatId, setActualChatId] = useState<string | null>(null);
   const [socketReady, setSocketReady] = useState(false);
+  
+  // Enhanced state for new features
+  const [professionalAvatar, setProfessionalAvatar] = useState<ProfessionalAvatar>({});
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [selectedMessage, setSelectedMessage] = useState<EnhancedMessage | null>(null);
+  const [showActionSheet, setShowActionSheet] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<EnhancedMessage | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -108,64 +146,75 @@ const ChatScreen: React.FC = () => {
     }
   }, [getCanonicalUserId]); 
 
+  // --- Utility Functions ---
+  const formatMessageTime = useCallback((date: Date) => {
+    const now = new Date();
+    const messageDate = new Date(date);
+    
+    // If same day, show time only
+    if (messageDate.toDateString() === now.toDateString()) {
+      return messageDate.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        hour12: true 
+      });
+    }
+    
+    // If different day, show date and time
+    return messageDate.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  }, []);
+
+  const formatDay = useCallback((date: Date) => {
+    const now = new Date();
+    const messageDate = new Date(date);
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    if (messageDate.toDateString() === now.toDateString()) {
+      return 'Today';
+    } else if (messageDate.toDateString() === yesterday.toDateString()) {
+      return 'Yesterday';
+    } else {
+      return messageDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: messageDate.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+      });
+    }
+  }, []);
+
+  const generateAvatarColors = useCallback((name: string) => {
+    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
+    const index = name.charCodeAt(0) % colors.length;
+    return colors[index];
+  }, []);
+
+  const initializeProfessionalAvatar = useCallback(() => {
+    // For now, use initials - can be enhanced later with actual profile photos
+    const initials = professionalName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    setProfessionalAvatar({
+      initials,
+      backgroundColor: generateAvatarColors(professionalName)
+    });
+  }, [professionalName, generateAvatarColors]);
+
+  useEffect(() => {
+    initializeProfessionalAvatar();
+  }, [initializeProfessionalAvatar]);
+
   // --- Header Setup ---
   useEffect(() => {
     if (title) navigation.setOptions({ headerTitle: title } as any);
   }, [title, navigation]);
 
-  // --- Prescription Navigation ---
-  const handlePrescriptionPress = useCallback(async () => {
-    // 🔍 Debug Log
-    console.log("👉 Checking Prescription for Booking ID:", appointmentId); 
-    if (!appointmentId) {
-      Alert.alert("Error", "No Appointment ID found for this chat.");
-      return;
-    }
 
-    console.log('🧭 [ChatScreen] Navigating to PrescriptionDetail with appointmentId:', appointmentId);
-    
-    try {
-      // Debug: Check navigation structure
-      const navState = navigation.getState();
-      console.log('🧭 [ChatScreen] Navigation state:', navState);
-      console.log('🧭 [ChatScreen] Available routes:', navState.routes?.map((r: any) => r.name));
-      
-      // Use the recommended approach for nested navigation
-      // Navigate through the hierarchy: RootStack -> MainDrawer -> HomeStack -> PrescriptionDetail
-      const rootNav = navigation as any;
-      
-      // Navigate to MainDrawer first, then to HomeStack, then to PrescriptionDetail
-      rootNav.navigate('MainDrawer', {
-        screen: 'HomeStack',
-        params: {
-          screen: 'PrescriptionDetail',
-          params: {
-            prescriptionId: appointmentId
-          }
-        }
-      });
-    } catch (error) {
-      console.error('🧭 [ChatScreen] Navigation error:', error);
-      Alert.alert("Navigation Error", "Could not navigate to prescription details.");
-    }
-  }, [appointmentId, navigation]);
-
-  // --- Diet Plan Navigation ---
-  const handleDietPlanPress = useCallback(async () => {
-    console.log("👉 Checking Diet Plan for Booking ID:", appointmentId);
-
-    if (!appointmentId) {
-      Alert.alert("Error", "No Appointment ID found.");
-      return;
-    }
-
-    // Always navigate to diet plan screen, let it handle the data loading
-    console.log('🧭 [ChatScreen] Navigating to DietPlan with bookingId:', appointmentId);
-    
-    navigation.navigate('DietPlan', { 
-      bookingId: appointmentId 
-    } as any);
-  }, [navigation, appointmentId]);
 
   // --- Validation ---
   useEffect(() => {
@@ -201,11 +250,12 @@ const ChatScreen: React.FC = () => {
   }, [currentAppointment]);
 
   // --- Message Mapping ---
-  const mapBackendMessageToGifted = useCallback((backendMessage: any): IMessage => {
+  const mapBackendMessageToGifted = useCallback((backendMessage: any): EnhancedMessage => {
     try {
       const messageId = backendMessage.messageId || backendMessage.id || backendMessage._id;
       const senderId = backendMessage.senderId || backendMessage.userId || backendMessage.user?._id;
       const isSystemMessage = backendMessage.messageType === 'system';
+      const isMe = String(senderId) === String(currentUserId.current);
       
       return {
         _id: messageId,
@@ -217,8 +267,16 @@ const ChatScreen: React.FC = () => {
         },
         system: isSystemMessage,
         pending: false,
-        sent: true, // Always true if it came from backend
-        received: backendMessage.d || false, // Check delivery status
+        sent: true,
+        received: backendMessage.d || false,
+        read: backendMessage.read || false,
+        delivered: backendMessage.delivered || false,
+        reactions: backendMessage.reactions || [],
+        replyTo: backendMessage.replyTo || null,
+        isVoiceMessage: backendMessage.isVoiceMessage || false,
+        voiceDuration: backendMessage.voiceDuration,
+        imageUrl: backendMessage.imageUrl,
+        documentUrl: backendMessage.documentUrl,
       };
     } catch (error) {
       return {
@@ -226,9 +284,14 @@ const ChatScreen: React.FC = () => {
         text: 'Error loading message',
         createdAt: new Date(),
         user: { _id: 'error', name: 'Error' },
+        pending: false,
+        sent: true,
+        received: false,
+        read: false,
+        delivered: false,
       };
     }
-  }, []);
+  }, [currentUserId]);
 
   // --- Message Persistence ---
   const saveMessagesToStorage = useCallback(async (messagesToSave: IMessage[]) => {
@@ -503,20 +566,30 @@ const ChatScreen: React.FC = () => {
       const tempId = `pending-${Date.now()}`;
       const effectiveChatId = chatId;
 
-      const optimisticMessage: any = {
+      const optimisticMessage: EnhancedMessage = {
           ...msg,
           _id: tempId,
           user: { _id: String(currentUserId.current), name: user?.first_name || 'Me' },
           pending: true,
           sent: false,
           received: false,
-          tempId, 
+          read: false,
+          delivered: false,
+          replyTo: replyingTo ? {
+            messageId: String(replyingTo._id),
+            text: replyingTo.text,
+            userName: replyingTo.user.name || 'Unknown'
+          } : undefined,
       };
+
+      // Store tempId separately for socket message matching
+      (optimisticMessage as any).tempId = tempId;
 
       setMessages((previous) => GiftedChat.append(previous, [optimisticMessage]));
       socketService.sendMessage(String(effectiveChatId), msg.text.trim(), tempId);
+      setReplyingTo(null); // Clear reply after sending
     },
-    [chatId, user]
+    [chatId, user, replyingTo]
   );
 
   // --- Renders ---
@@ -585,35 +658,198 @@ const ChatScreen: React.FC = () => {
     return null;
   };
 
-  const renderBubble = (props: any) => (
-    <Bubble
-        {...props}
-        wrapperStyle={{
-            right: { 
-              backgroundColor: appTheme.colors.primary, 
-              borderRadius: theme.borderRadius.l,
-              borderBottomRightRadius: 4,
-              ...theme.shadows.card,
-            },
-            left: { 
-              backgroundColor: appTheme.colors.background.surface,
-              borderRadius: theme.borderRadius.l,
-              borderBottomLeftRadius: 4,
-              ...theme.shadows.card,
-            },
-        }}
-        textStyle={{
-            right: { 
-              color: appTheme.colors.background.surface,
-              ...theme.typography.body,
-            },
-            left: { 
-              color: appTheme.colors.text.primary,
-              ...theme.typography.body,
-            },
-        }}
-    />
-  );
+  // --- Enhanced Interaction Handlers ---
+  const handleMessageLongPress = useCallback((message: EnhancedMessage) => {
+    setSelectedMessage(message);
+    setShowActionSheet(true);
+  }, []);
+
+  const handleReply = useCallback((message: EnhancedMessage) => {
+    setReplyingTo(message);
+    setShowActionSheet(false);
+  }, []);
+
+  const handleAddReaction = useCallback((message: EnhancedMessage, emoji: string) => {
+    setMessages(prev => prev.map(msg => {
+      if (msg._id === message._id) {
+        const existingReaction = msg.reactions?.find(r => r.emoji === emoji);
+        if (existingReaction) {
+          return {
+            ...msg,
+            reactions: msg.reactions?.filter(r => r.emoji !== emoji) || []
+          };
+        } else {
+          const newReaction = {
+            emoji,
+            count: 1,
+            users: [String(currentUserId.current)]
+          };
+          return {
+            ...msg,
+            reactions: [...(msg.reactions || []), newReaction]
+          };
+        }
+      }
+      return msg;
+    }));
+    setShowActionSheet(false);
+  }, [currentUserId]);
+
+  const handleDeleteMessage = useCallback((message: EnhancedMessage) => {
+    if (message.user._id === String(currentUserId.current)) {
+      Alert.alert(
+        "Delete Message",
+        "Are you sure you want to delete this message?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Delete", 
+            style: "destructive",
+            onPress: () => {
+              setMessages(prev => prev.filter(msg => msg._id !== message._id));
+            }
+          }
+        ]
+      );
+    }
+    setShowActionSheet(false);
+  }, [currentUserId]);
+
+  const renderActionSheet = () => {
+    if (!showActionSheet || !selectedMessage) return null;
+
+    const isMe = selectedMessage.user._id === String(currentUserId.current);
+    const reactions = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
+
+    return (
+      <View style={styles.actionSheetOverlay}>
+        <View style={styles.actionSheet}>
+          <View style={styles.actionSheetHeader}>
+            <Text style={styles.actionSheetTitle}>Message Actions</Text>
+            <TouchableOpacity onPress={() => setShowActionSheet(false)}>
+              <Ionicons name="close" size={24} color={appTheme.colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
+          
+          <TouchableOpacity style={styles.actionSheetItem} onPress={() => handleReply(selectedMessage)}>
+            <Ionicons name="arrow-undo" size={20} color={appTheme.colors.primary} />
+            <Text style={styles.actionSheetItemText}>Reply</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.reactionsSection}>
+            <Text style={styles.reactionsSectionTitle}>React</Text>
+            <View style={styles.reactionsGrid}>
+              {reactions.map((emoji, index) => (
+                <TouchableOpacity 
+                  key={index} 
+                  style={styles.reactionOption}
+                  onPress={() => handleAddReaction(selectedMessage, emoji)}
+                >
+                  <Text style={styles.reactionOptionText}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+          
+          {isMe && (
+            <TouchableOpacity 
+              style={[styles.actionSheetItem, styles.deleteAction]} 
+              onPress={() => handleDeleteMessage(selectedMessage)}
+            >
+              <Ionicons name="trash" size={20} color={appTheme.colors.feedback.error} />
+              <Text style={[styles.actionSheetItemText, styles.deleteActionText]}>Delete</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  };
+
+  // --- Enhanced Render Functions ---
+  const renderBubble = (props: any) => {
+    const currentMessage = props.currentMessage as EnhancedMessage;
+    const isMe = currentMessage.user._id === String(currentUserId.current);
+    
+    return (
+      <View style={styles.messageContainer}>
+        {/* Reply indicator */}
+        {currentMessage.replyTo && (
+          <View style={styles.replyContainer}>
+            <Text style={styles.replyUserName}>{currentMessage.replyTo.userName}</Text>
+            <Text style={styles.replyText} numberOfLines={2}>{currentMessage.replyTo.text}</Text>
+          </View>
+        )}
+        
+        {/* Main message bubble */}
+        <TouchableOpacity 
+          onLongPress={() => handleMessageLongPress(currentMessage)}
+          activeOpacity={0.7}
+        >
+          <Bubble
+              {...props}
+              wrapperStyle={{
+                  right: { 
+                    backgroundColor: appTheme.colors.primary, 
+                    borderRadius: theme.borderRadius.l,
+                    borderBottomRightRadius: 4,
+                    ...theme.shadows.card,
+                  },
+                  left: { 
+                    backgroundColor: appTheme.colors.background.surface,
+                    borderRadius: theme.borderRadius.l,
+                    borderBottomLeftRadius: 4,
+                    ...theme.shadows.card,
+                  },
+              }}
+              textStyle={{
+                  right: { 
+                    color: appTheme.colors.background.surface,
+                    ...theme.typography.body,
+                  },
+                  left: { 
+                    color: appTheme.colors.text.primary,
+                    ...theme.typography.body,
+                  },
+              }}
+          />
+        </TouchableOpacity>
+        
+        {/* Message status and time */}
+        <View style={[
+          styles.messageStatusContainer,
+          isMe ? styles.statusRight : styles.statusLeft
+        ]}>
+          <Text style={styles.messageTime}>
+            {formatMessageTime(new Date(currentMessage.createdAt))}
+          </Text>
+          
+          {isMe && (
+            <View style={styles.messageStatus}>
+              {currentMessage.pending && <Ionicons name="time" size={12} color="#999" />}
+              {currentMessage.sent && !currentMessage.delivered && <Ionicons name="checkmark" size={12} color="#999" />}
+              {currentMessage.delivered && !currentMessage.read && <Ionicons name="checkmark-done" size={12} color="#999" />}
+              {currentMessage.read && <Ionicons name="checkmark-done" size={12} color={appTheme.colors.primary} />}
+            </View>
+          )}
+        </View>
+        
+        {/* Reactions */}
+        {currentMessage.reactions && currentMessage.reactions.length > 0 && (
+          <View style={[
+            styles.reactionsContainer,
+            isMe ? styles.reactionsRight : styles.reactionsLeft
+          ]}>
+            {currentMessage.reactions.map((reaction: any, index: number) => (
+              <TouchableOpacity key={index} style={styles.reactionBubble}>
+                <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
+                <Text style={styles.reactionCount}>{reaction.count}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -647,8 +883,17 @@ const ChatScreen: React.FC = () => {
             </TouchableOpacity>
             
             <View style={styles.profileContainer}>
-              <View style={styles.avatar}>
-                <Ionicons name="person" size={20} color={appTheme.colors.background.surface} />
+              <View style={[
+                styles.avatar,
+                { backgroundColor: professionalAvatar.backgroundColor || 'rgba(255, 255, 255, 0.2)' }
+              ]}>
+                {professionalAvatar.url ? (
+                  <Image source={{ uri: professionalAvatar.url }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarInitials}>
+                    {professionalAvatar.initials || 'DR'}
+                  </Text>
+                )}
               </View>
               <View style={styles.headerTextContainer}>
                 <Text style={styles.headerTitle}>{professionalName}</Text>
@@ -664,25 +909,6 @@ const ChatScreen: React.FC = () => {
               </View>
             </View>
             
-            <View style={{ flexDirection: 'row' }}>
-              {/* 🥗 NEW DIET PLAN BUTTON */}
-              <TouchableOpacity 
-                style={[styles.prescriptionButton, { marginRight: 8 }]} 
-                activeOpacity={0.7}
-                onPress={handleDietPlanPress}
-              >
-                <Ionicons name="nutrition" size={20} color={appTheme.colors.background.surface} />
-              </TouchableOpacity>
-
-              {/* 💊 EXISTING PRESCRIPTION BUTTON */}
-              <TouchableOpacity 
-                style={styles.prescriptionButton} 
-                activeOpacity={0.7}
-                onPress={handlePrescriptionPress}
-              >
-                <Ionicons name="medical" size={20} color={appTheme.colors.background.surface} />
-              </TouchableOpacity>
-            </View>
           </View>
           
           {/* Decorative elements */}
@@ -705,7 +931,15 @@ const ChatScreen: React.FC = () => {
           renderFooter={renderFooter}
           renderLoadEarlier={renderLoadEarlier}
           isTyping={otherUserTyping}
+
           renderBubble={renderBubble}
+          renderDay={(props) => (
+            <Day
+              {...props}
+              textStyle={styles.dayText}
+              containerStyle={styles.dayContainer}
+            />
+          )}
           renderSystemMessage={(props) => (
             <SystemMessage
                 {...props}
@@ -741,6 +975,29 @@ const ChatScreen: React.FC = () => {
           alwaysShowSend={false}
           minInputToolbarHeight={56}
       />
+      
+      {/* Reply Indicator */}
+      {replyingTo && (
+        <View style={styles.replyIndicator}>
+          <View style={styles.replyIndicatorContent}>
+            <Text style={styles.replyIndicatorText}>
+              Replying to {replyingTo.user.name}
+            </Text>
+            <Text style={styles.replyIndicatorMessage} numberOfLines={1}>
+              {replyingTo.text}
+            </Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.replyIndicatorClose}
+            onPress={() => setReplyingTo(null)}
+          >
+            <Ionicons name="close" size={16} color={appTheme.colors.text.secondary} />
+          </TouchableOpacity>
+        </View>
+      )}
+      
+      {/* Action Sheet */}
+      {renderActionSheet()}
     </SafeAreaView>
   );
 };
@@ -791,6 +1048,16 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     justifyContent: 'center',
   },
+  avatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  avatarInitials: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.background.surface,
+  },
   headerTextContainer: { 
     marginLeft: theme.spacing.s,
   },
@@ -814,14 +1081,6 @@ const styles = StyleSheet.create({
     ...theme.typography.caption,
     color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 12,
-  },
-  prescriptionButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   // Decorative elements
   topCircle: {
@@ -949,6 +1208,207 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.m,
     ...theme.typography.body,
     color: theme.colors.text.secondary,
+  },
+  // Enhanced Message Styles
+  messageContainer: {
+    marginBottom: theme.spacing.s,
+  },
+  replyContainer: {
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.primary,
+    padding: theme.spacing.s,
+    marginBottom: theme.spacing.xs,
+    borderRadius: theme.borderRadius.s,
+  },
+  replyUserName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.primary,
+    marginBottom: 2,
+  },
+  replyText: {
+    fontSize: 13,
+    color: theme.colors.text.secondary,
+  },
+  messageStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.s,
+  },
+  statusRight: {
+    justifyContent: 'flex-end',
+  },
+  statusLeft: {
+    justifyContent: 'flex-start',
+  },
+  messageTime: {
+    fontSize: 11,
+    color: theme.colors.text.secondary,
+    marginRight: theme.spacing.xs,
+  },
+  messageStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  reactionsContainer: {
+    flexDirection: 'row',
+    marginTop: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  reactionsRight: {
+    justifyContent: 'flex-end',
+  },
+  reactionsLeft: {
+    justifyContent: 'flex-start',
+  },
+  reactionBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    paddingHorizontal: theme.spacing.s,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginRight: theme.spacing.xs,
+    marginBottom: theme.spacing.xs,
+  },
+  reactionEmoji: {
+    fontSize: 14,
+    marginRight: 2,
+  },
+  reactionCount: {
+    fontSize: 11,
+    color: theme.colors.text.secondary,
+    fontWeight: '600',
+  },
+  // Date separator styles
+  dayContainer: {
+    paddingVertical: theme.spacing.s,
+    paddingHorizontal: theme.spacing.m,
+    backgroundColor: 'transparent',
+  },
+  dayText: {
+    fontSize: 13,
+    color: theme.colors.text.secondary,
+    fontWeight: '600',
+    textAlign: 'center',
+    backgroundColor: theme.colors.background.surface,
+    paddingHorizontal: theme.spacing.m,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.m,
+    overflow: 'hidden',
+  },
+  scrollToBottomButton: {
+    backgroundColor: theme.colors.primary,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'absolute',
+    bottom: theme.spacing.l,
+    right: theme.spacing.m,
+    ...theme.shadows.card,
+  },
+  // Action Sheet Styles
+  actionSheetOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+    zIndex: 1000,
+  },
+  actionSheet: {
+    backgroundColor: theme.colors.background.surface,
+    borderTopLeftRadius: theme.borderRadius.l,
+    borderTopRightRadius: theme.borderRadius.l,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 0,
+  },
+  actionSheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: theme.spacing.m,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.background.secondary,
+  },
+  actionSheetTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+  },
+  actionSheetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: theme.spacing.m,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.background.secondary,
+  },
+  actionSheetItemText: {
+    fontSize: 16,
+    color: theme.colors.text.primary,
+    marginLeft: theme.spacing.m,
+  },
+  deleteAction: {
+    backgroundColor: theme.colors.feedback.error + '10',
+  },
+  deleteActionText: {
+    color: theme.colors.feedback.error,
+  },
+  reactionsSection: {
+    padding: theme.spacing.m,
+  },
+  reactionsSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text.secondary,
+    marginBottom: theme.spacing.s,
+  },
+  reactionsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  reactionOption: {
+    padding: theme.spacing.s,
+    borderRadius: theme.borderRadius.m,
+    backgroundColor: theme.colors.background.secondary,
+  },
+  reactionOptionText: {
+    fontSize: 20,
+  },
+  // Reply Indicator Styles
+  replyIndicator: {
+    position: 'absolute',
+    bottom: 70,
+    left: theme.spacing.m,
+    right: theme.spacing.m,
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.s,
+    flexDirection: 'row',
+    alignItems: 'center',
+    ...theme.shadows.card,
+  },
+  replyIndicatorContent: {
+    flex: 1,
+  },
+  replyIndicatorText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.primary,
+    marginBottom: 2,
+  },
+  replyIndicatorMessage: {
+    fontSize: 13,
+    color: theme.colors.text.secondary,
+  },
+  replyIndicatorClose: {
+    padding: theme.spacing.xs,
+    marginLeft: theme.spacing.s,
   },
 });
 

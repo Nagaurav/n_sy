@@ -183,15 +183,17 @@ const AppointmentDetailScreen: React.FC = () => {
               status: found.status,
               date: found.date,
               time: found.time || 'TBA',
-              professionalName: found.title, // e.g. "Morning Yoga"
-              professionalSpeciality: 'Yoga Instructor',
+              professionalName: found.professional?.first_name && found.professional?.last_name
+                ? `Dr. ${found.professional.first_name} ${found.professional.last_name}`
+                : found.title,
+              professionalSpeciality: found.professional?.speciality_name || found.professional?.speciality || 'Yoga Instructor',
               amount: found.amount,
               paymentStatus: found.payment_status,
-              mode: found.subtitle, // e.g. "Group Online"
-              professionalPhoto: found.imageUrl || found.professional?.photo_url,
-              professional: found.professional // Include full professional object
+              mode: found.mode || (isYoga ? 'offline' : 'online'), // 🆕 Use actual mode instead of subtitle
+              professionalPhoto: found.professional?.photo_url || found.imageUrl,
+              professional: found.professional
             };
-            console.log(` [DetailScreen] Found yoga booking: ${found.title}`);
+            console.log(` [DetailScreen] Found yoga booking: ${data.professionalName}`);
           } else if (apptType === 'consultation') {
             data = {
               id: found.reference_id,
@@ -199,13 +201,15 @@ const AppointmentDetailScreen: React.FC = () => {
               status: found.status,
               date: found.date,
               time: found.time,
-              professionalName: found.title || 'Consultation',
-              professionalSpeciality: found.subtitle || 'General Practitioner',
+              professionalName: found.professional?.first_name && found.professional?.last_name
+                ? `Dr. ${found.professional.first_name} ${found.professional.last_name}`
+                : found.title,
+              professionalSpeciality: found.professional?.speciality_new?.name || found.professional?.speciality_name || found.professional?.speciality || found.professional?.role || 'General Practitioner',
               amount: found.amount,
               paymentStatus: found.payment_status,
-              mode: found.subtitle,
-              professionalPhoto: found.imageUrl || found.professional?.photo_url,
-              professional: found.professional // Include full professional object
+              mode: found.mode || (isYoga ? 'offline' : 'online'), // 🆕 Use actual mode instead of subtitle
+              professionalPhoto: found.professional?.photo_url || found.imageUrl,
+              professional: found.professional
             };
             console.log(` [DetailScreen] Found consultation: ${data.professionalName}`);
           }
@@ -252,6 +256,46 @@ const AppointmentDetailScreen: React.FC = () => {
       title: detail.professionalName,
     });
   };
+
+  const handlePrescriptionPress = useCallback(async () => {
+    if (!detail?.id) {
+      Alert.alert("Error", "No appointment ID found.");
+      return;
+    }
+
+    console.log('🧭 [DetailScreen] Navigating to PrescriptionDetail with appointmentId:', detail.id);
+    
+    try {
+      // Navigate through the hierarchy: RootStack -> MainDrawer -> HomeStack -> PrescriptionDetail
+      const rootNav = navigation as any;
+      
+      rootNav.navigate('MainDrawer', {
+        screen: 'HomeStack',
+        params: {
+          screen: 'PrescriptionDetail',
+          params: {
+            prescriptionId: detail.id
+          }
+        }
+      });
+    } catch (error) {
+      console.error('🧭 [DetailScreen] Navigation error:', error);
+      Alert.alert("Navigation Error", "Could not navigate to prescription details.");
+    }
+  }, [detail?.id, navigation]);
+
+  const handleDietPlanPress = useCallback(async () => {
+    if (!detail?.id) {
+      Alert.alert("Error", "No appointment ID found.");
+      return;
+    }
+
+    console.log('🧭 [DetailScreen] Navigating to DietPlan with bookingId:', detail.id);
+    
+    (navigation.navigate as any)('DietPlan', { 
+      bookingId: detail.id 
+    });
+  }, [detail?.id, navigation]);
 
   const handleAddToCalendar = () => {
     if (!detail || detail.status !== 'CONFIRMED') return;
@@ -393,7 +437,16 @@ const AppointmentDetailScreen: React.FC = () => {
             </Text>
           </View>
           
-          <View style={styles.placeholderButton} />
+          {/* Calendar Button in Header - Right Side */}
+          {detail.status === 'CONFIRMED' && (
+            <TouchableOpacity 
+              style={styles.headerCalendarButton}
+              onPress={handleAddToCalendar}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
         </View>
       </LinearGradient>
 
@@ -403,7 +456,7 @@ const AppointmentDetailScreen: React.FC = () => {
       >
         {/* Modern Appointment Card */}
         <Animated.View style={[
-          styles.modernCard,
+          styles.modernCard, // 🆕 Remove colored borders to match ProfessionalHomeScreen
           { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
         ]}>
           {/* Modern Header with Status Chips */}
@@ -532,7 +585,7 @@ const AppointmentDetailScreen: React.FC = () => {
           {/* Message Action */}
           <TouchableOpacity 
             style={[
-              styles.actionRow, 
+              styles.actionRow, // 🆕 Remove colored borders to match ProfessionalHomeScreen
               { opacity: detail.status === 'CONFIRMED' ? 1 : 0.5 }
             ]} 
             onPress={handleChatPress}
@@ -550,44 +603,16 @@ const AppointmentDetailScreen: React.FC = () => {
             <Ionicons name="chevron-forward" size={18} color={detail.status === 'CONFIRMED' ? '#ccc' : '#e0e0e0'} />
           </TouchableOpacity>
 
-          {/* Calendar Action */}
-          <TouchableOpacity 
-            style={[
-              styles.actionRow, 
-              { opacity: detail.status === 'CONFIRMED' ? 1 : 0.5 }
-            ]} 
-            onPress={handleAddToCalendar}
-            disabled={detail.status !== 'CONFIRMED'}
-          >
-            <View style={[styles.actionIcon, { backgroundColor: detail.status === 'CONFIRMED' ? theme.colors.primary + '15' : '#f5f5f5' }]}>
-              <Ionicons name="calendar-outline" size={20} color={detail.status === 'CONFIRMED' ? theme.colors.primary : '#999'} />
-            </View>
-            <View style={styles.actionContent}>
-              <Text style={[styles.actionTitle, { color: detail.status === 'CONFIRMED' ? theme.colors.text.primary : '#999' }]}>
-                Add to Calendar
-              </Text>
-              <Text style={styles.actionSubtitle}>Set reminder</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={detail.status === 'CONFIRMED' ? '#ccc' : '#e0e0e0'} />
-          </TouchableOpacity>
-
-          {/* Reschedule Action */}
-          {detail.status === 'CONFIRMED' && (
-            <TouchableOpacity style={styles.actionRow} onPress={handleReschedule}>
-              <View style={[styles.actionIcon, { backgroundColor: theme.colors.accent + '15' }]}>
-                <Ionicons name="sync-outline" size={20} color={theme.colors.accent} />
-              </View>
-              <View style={styles.actionContent}>
-                <Text style={styles.actionTitle}>Reschedule</Text>
-                <Text style={styles.actionSubtitle}>Change date/time</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#ccc" />
-            </TouchableOpacity>
-          )}
-
           {/* Cancel Action */}
           {(detail.status === 'CONFIRMED' || detail.status === 'PENDING') && (
-            <TouchableOpacity style={[styles.actionRow, styles.cancelAction]} onPress={handleCancelPress} disabled={cancelling}>
+            <TouchableOpacity 
+              style={[
+                styles.actionRow, // 🆕 Remove colored borders to match ProfessionalHomeScreen
+                styles.cancelAction
+              ]} 
+              onPress={handleCancelPress} 
+              disabled={cancelling}
+            >
               <View style={[styles.actionIcon, { backgroundColor: theme.colors.feedback.error + '15' }]}>
                 {cancelling ? <ActivityIndicator size="small" color={theme.colors.feedback.error} /> : <Ionicons name="close-circle" size={20} color={theme.colors.feedback.error} />}
               </View>
@@ -598,11 +623,50 @@ const AppointmentDetailScreen: React.FC = () => {
             </TouchableOpacity>
           )}
 
+          {/* Prescription Action */}
+          {(detail.status === 'COMPLETED' || detail.status === 'CONFIRMED') && (
+            <TouchableOpacity 
+              style={styles.actionRow} // 🆕 Remove colored borders to match ProfessionalHomeScreen
+              onPress={handlePrescriptionPress}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: theme.colors.primary + '15' }]}>
+                <Ionicons name="medical" size={20} color={theme.colors.primary} />
+              </View>
+              <View style={styles.actionContent}>
+                <Text style={styles.actionTitle}>View Prescription</Text>
+                <Text style={styles.actionSubtitle}>Medical prescription details</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#ccc" />
+            </TouchableOpacity>
+          )}
+
+          {/* Diet Plan Action */}
+          {(detail.status === 'COMPLETED' || detail.status === 'CONFIRMED') && (
+            <TouchableOpacity 
+              style={styles.actionRow} // 🆕 Remove colored borders to match ProfessionalHomeScreen
+              onPress={handleDietPlanPress}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: theme.colors.secondary + '15' }]}>
+                <Ionicons name="nutrition" size={20} color={theme.colors.secondary} />
+              </View>
+              <View style={styles.actionContent}>
+                <Text style={styles.actionTitle}>Diet Plan</Text>
+                <Text style={styles.actionSubtitle}>Nutrition recommendations</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#ccc" />
+            </TouchableOpacity>
+          )}
+
           {/* Book Again Action */}
           {detail.status === 'COMPLETED' && (
-            <TouchableOpacity style={[styles.actionRow, styles.bookAgainAction]} onPress={() => {
-              Alert.alert("Coming Soon", "Rebooking will be available soon!");
-            }}>
+            <TouchableOpacity 
+              style={[
+                styles.actionRow, // 🆕 Remove colored borders to match ProfessionalHomeScreen
+                styles.bookAgainAction
+              ]} 
+              onPress={() => {
+                Alert.alert("Coming Soon", "Rebooking will be available soon!");
+              }}>
               <View style={[styles.actionIcon, { backgroundColor: theme.colors.feedback.success + '15' }]}>
                 <Ionicons name="add-circle-outline" size={20} color={theme.colors.feedback.success} />
               </View>
@@ -652,6 +716,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerCalendarButton: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.borderRadius.s,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   titleContainer: {
     flex: 1,
     alignItems: 'center',
@@ -676,12 +748,22 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.l,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: theme.colors.feedback.success, // 🆕 Green border to match ProfessionalStatsContainer
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
+  },
+  
+  // 🆕 Card Type Styles - Different Border Colors (thinner borders, matching appointment cards)
+  consultationCard: {
+    borderColor: '#10B981', // Green for consultation
+    borderLeftWidth: 2, // 🆕 Reduced from 4px to 2px
+  },
+  yogaCard: {
+    borderColor: '#8B5CF6', // Purple for yoga
+    borderLeftWidth: 2, // 🆕 Reduced from 4px to 2px
   },
   modernHeader: {
     padding: theme.spacing.m,
@@ -880,6 +962,18 @@ const styles = StyleSheet.create({
   actionsSection: {
     marginTop: theme.spacing.l,
   },
+  
+  // 🆕 Individual Action Row Border Styles - Different Border Colors
+  consultationActionRow: {
+    borderColor: '#10B981', // Green for consultation
+    borderLeftWidth: 2,
+    borderWidth: 1,
+  },
+  yogaActionRow: {
+    borderColor: '#8B5CF6', // Purple for yoga
+    borderLeftWidth: 2,
+    borderWidth: 1,
+  },
   actionsTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -895,7 +989,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.m,
     marginBottom: theme.spacing.s,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: theme.colors.feedback.success, // 🆕 Green border to match ProfessionalStatsContainer
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,

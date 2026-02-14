@@ -166,126 +166,38 @@ const AppointmentsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'COMPLETED': 
-        return '#10B981';
-      case 'CANCELLED': 
-        return '#EF4444';
-      case 'CONFIRMED': 
-        return '#F59E0B';
-      case 'PENDING': 
-        return '#8B5CF6';
-      default: 
-        return '#6B7280';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'COMPLETED': 
-        return 'checkmark-circle';
-      case 'CANCELLED': 
-        return 'close-circle';
-      case 'CONFIRMED': 
-        return 'calendar';
-      case 'PENDING': 
-        return 'time';
-      default: 
-        return 'help-circle';
-    }
-  };
-
+  
   const renderItem = ({ item }: { item: UnifiedAppointment }) => {
     const isYoga = item.type === 'yoga_class';
-    const statusColor = getStatusColor(item.status);
-    const statusIcon = getStatusIcon(item.status);
+    
+    // Transform UnifiedAppointment to NextAppointment format for ModernAppointmentCard
+    const transformedAppointment = {
+      id: item.id,
+      professional_name: item.title,
+      speciality: item.subtitle,
+      speciality_new: { name: item.subtitle },
+      date: item.date,
+      time: item.time,
+      mode: (isYoga ? 'offline' : 'online') as 'online' | 'offline',
+      booking_status: item.status as 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED',
+      status: item.status as 'scheduled' | 'completed' | 'cancelled',
+      professional_photo: item.imageUrl,
+    };
 
     return (
       <View style={styles.cardWrapper}>
-        <LinearGradient
-          colors={['#F8FAFC', '#F1F5F9']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.card}
-        >
-          <View style={styles.cardHeader}>
-            <View style={styles.headerLeft}>
-              <View style={styles.statusIndicator}>
-                <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-              </View>
-              <Text style={[styles.statusText, { color: statusColor }]}>{item.status}</Text>
-            </View>
-            <View style={styles.modeBadge}>
-              <Ionicons 
-                name={isYoga ? 'location' : 'videocam'} 
-                size={14} 
-                color={theme.colors.primary} 
-              />
-              <Text style={styles.modeText}>{isYoga ? 'offline' : 'online'}</Text>
-            </View>
-          </View>
-
-          <View style={styles.content}>
-            <View style={styles.professionalSection}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {item.subtitle ? item.subtitle.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'DR'}
-                </Text>
-              </View>
-              <View style={styles.professionalInfo}>
-                <Text style={styles.professionalName}>{item.title}</Text>
-                <Text style={styles.speciality}>
-                  {item.subtitle || 'Wellness Professional'}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.dateTimeSection}>
-              <View style={styles.dateTimeRow}>
-                <Ionicons name="calendar-outline" size={16} color={theme.colors.primary} />
-                <Text style={styles.dateTimeText}>
-                  {new Date(item.date).toLocaleDateString('en-US', {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </Text>
-              </View>
-              {item.time && (
-                <View style={styles.dateTimeRow}>
-                  <Ionicons name="time-outline" size={16} color={theme.colors.primary} />
-                  <Text style={styles.dateTimeText}>
-                    {formatTimeWithAMPM(item.time)}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            <TouchableOpacity 
-              style={styles.joinButton}
-              onPress={() => {
-                navigation.navigate('AppointmentDetail', { 
-                  appointmentId: item.reference_id,
-                  type: item.type
-                });
-              }}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={[theme.colors.primary, theme.colors.secondary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.buttonGradient}
-              >
-                <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-                <Text style={styles.buttonText}>View Details</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.decorativeElement} />
-        </LinearGradient>
+        <ModernAppointmentCard
+          appointment={transformedAppointment}
+          onJoinSession={() => {
+            navigation.navigate('AppointmentDetail', { 
+              appointmentId: item.reference_id,
+              type: item.type
+            });
+          }}
+          buttonText="View Details"
+          showActualStatus={true}
+          serviceType={item.type} // 🆕 Pass service type to distinguish consultation vs yoga
+        />
       </View>
     );
   };
@@ -457,7 +369,7 @@ const AppointmentsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 }
               </Text>
               <TouchableOpacity 
-                style={styles.joinButton}
+                style={styles.bookButton}
                 onPress={() => navigation.navigate('ProfessionalsList')}
                 activeOpacity={0.8}
               >
@@ -465,10 +377,10 @@ const AppointmentsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                   colors={[theme.colors.primary, theme.colors.secondary]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
-                  style={styles.buttonGradient}
+                  style={styles.bookButtonGradient}
                 >
                   <Ionicons name="add" size={18} color="#FFFFFF" />
-                  <Text style={styles.buttonText}>Book Appointment</Text>
+                  <Text style={styles.bookButtonText}>Book Appointment</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -624,140 +536,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   
-  // Professional Card Styles (matching ModernAppointmentCard exactly)
+  // Card wrapper for ModernAppointmentCard
   cardWrapper: {
     paddingHorizontal: theme.spacing.l,
     paddingVertical: theme.spacing.xs,
     alignItems: 'center',
-  },
-  card: {
-    width: '120%',
-    borderRadius: theme.borderRadius.l,
-    padding: theme.spacing.l,
-    marginBottom: theme.spacing.m,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: theme.colors.feedback.success,
-    ...theme.shadows.card,
-    minHeight: 220,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.m,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statusIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: theme.spacing.s,
-  },
-  statusDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.text.primary,
-  },
-  modeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 130, 114, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  modeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: theme.colors.primary,
-    marginLeft: 4,
-    textTransform: 'uppercase',
-  },
-  content: {
-    flex: 1,
-  },
-  professionalSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: theme.spacing.m,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: theme.spacing.m,
-  },
-  avatarText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  professionalInfo: {
-    flex: 1,
-  },
-  professionalName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.colors.text.primary,
-    marginBottom: 2,
-  },
-  speciality: {
-    fontSize: 14,
-    color: theme.colors.text.secondary,
-    fontWeight: '500',
-  },
-  dateTimeSection: {
-    marginBottom: theme.spacing.m,
-  },
-  dateTimeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dateTimeText: {
-    fontSize: 15,
-    color: theme.colors.primary,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
-  joinButton: {
-    borderRadius: theme.borderRadius.m,
-    overflow: 'hidden',
-    ...theme.shadows.card,
-  },
-  buttonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: theme.spacing.s,
-    paddingHorizontal: theme.spacing.m,
-    borderRadius: theme.borderRadius.m,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    marginLeft: 6,
-  },
-  decorativeElement: {
-    position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(0, 130, 114, 0.05)',
-    top: -40,
-    right: -40,
   },
   
   // Empty State Styles
@@ -795,6 +578,20 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.m,
     overflow: 'hidden',
     ...theme.shadows.card,
+  },
+  bookButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.s,
+    paddingHorizontal: theme.spacing.m,
+    borderRadius: theme.borderRadius.m,
+  },
+  bookButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 6,
   },
 });
 
