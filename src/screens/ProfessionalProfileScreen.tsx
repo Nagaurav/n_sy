@@ -111,6 +111,47 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
       console.log('📊 [ProfessionalProfile] Response Success:', response.success);
       console.log('📊 [ProfessionalProfile] Response Data Keys:', response.data ? Object.keys(response.data) : 'No data');
       
+      // Debug: Show all possible about-related fields in the raw data
+      if (response.data) {
+        const data = response.data;
+        console.log('🔍 [ProfessionalProfile] ALL POSSIBLE ABOUT FIELDS:');
+        Object.keys(data).forEach(key => {
+          if (key.toLowerCase().includes('about') || 
+              key.toLowerCase().includes('bio') || 
+              key.toLowerCase().includes('description') || 
+              key.toLowerCase().includes('summary') || 
+              key.toLowerCase().includes('profile') ||
+              key.toLowerCase().includes('intro')) {
+            console.log(`  - ${key}:`, (data as any)[key]);
+          }
+        });
+        
+        // Debug: Check for the fields that should be included according to the API spec
+        console.log('🔍 [ProfessionalProfile] EXPECTED API FIELDS:');
+        console.log('  - educations:', (data as any).educations);
+        console.log('  - experiences:', (data as any).experiences);
+        console.log('  - certificates:', (data as any).certificates);
+        console.log('  - achievements:', (data as any).achievements);
+        console.log('  - yoga_plans:', (data as any).yoga_plans);
+        console.log('  - speciality_new:', (data as any).speciality_new);
+        
+        // Debug: Check if any of these contain about/bio information
+        const additionalFields = ['educations', 'experiences', 'certificates', 'achievements'];
+        additionalFields.forEach(field => {
+          const fieldData = (data as any)[field];
+          if (fieldData && Array.isArray(fieldData)) {
+            console.log(`🔍 [ProfessionalProfile] Checking ${field} for about info:`);
+            fieldData.forEach((item: any, index: number) => {
+              if (item.description || item.summary || item.details) {
+                console.log(`  - ${field}[${index}].description:`, item.description);
+                console.log(`  - ${field}[${index}].summary:`, item.summary);
+                console.log(`  - ${field}[${index}].details:`, item.details);
+              }
+            });
+          }
+        });
+      }
+      
       if (!response.success || !response.data) {
         console.log('❌ [ProfessionalProfile] API Response Error:', response);
         throw new Error('No data received from the server');
@@ -131,7 +172,11 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
       console.log('  - language:', data.language);
       console.log('  - specialization:', data.specialization);
       console.log('  - speciality_new:', data.speciality_new);
-      console.log('  - about:', data.about || data.bio);
+      console.log('  - about:', data.about);
+      console.log('  - bio:', (data as any).bio);
+      console.log('  - description:', (data as any).description);
+      console.log('  - summary:', (data as any).summary);
+      console.log('  - profile_summary:', (data as any).profile_summary);
       console.log('  - photo_url:', data.photo_url || data.profile_picture);
       console.log('  - address:', data.address);
       console.log('  - city:', data.city);
@@ -148,9 +193,43 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
         undefined;
 
       console.log('🎯 [ProfessionalProfile] Final specialization:', specialization);
+      
+      // Debug: Check all possible about fields specifically
+      console.log('🔍 [ProfessionalProfile] ABOUT FIELD DEBUG:');
+      console.log('  - data.about:', data.about);
+      console.log('  - data.bio:', (data as any).bio);
+      console.log('  - data.description:', (data as any).description);
+      console.log('  - data.summary:', (data as any).summary);
+      console.log('  - data.profile_summary:', (data as any).profile_summary);
+      console.log('  - data.about type:', typeof data.about);
+      console.log('  - data.bio type:', typeof (data as any).bio);
+      console.log('  - data.description type:', typeof (data as any).description);
+      console.log('  - data.summary type:', typeof (data as any).summary);
+      console.log('  - data.profile_summary type:', typeof (data as any).profile_summary);
+      
+      // Check which field has actual content
+      const aboutFields = [
+        { name: 'about', value: data.about },
+        { name: 'bio', value: (data as any).bio },
+        { name: 'description', value: (data as any).description },
+        { name: 'summary', value: (data as any).summary },
+        { name: 'profile_summary', value: (data as any).profile_summary }
+      ];
+      
+      const fieldWithContent = aboutFields.find(field => 
+        field.value && typeof field.value === 'string' && field.value.trim().length > 0
+      );
+      
+      console.log('🎯 [ProfessionalProfile] Field with content:', fieldWithContent);
 
       // Map the response to match our ProfessionalAuthProfile type
-      const profileData: ProfessionalAuthProfile = {
+      const profileData: ProfessionalAuthProfile & {
+        educations?: any[];
+        experiences?: any[];
+        certificates?: any[];
+        achievements?: any[];
+        yoga_plans?: any[];
+      } = {
         professional_id:
           data.professional_id ||
           data.id ||
@@ -159,7 +238,17 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
         last_name: data.last_name || data.lastName || '',
         email: data.email || '',
         phone_number: data.phone || data.phoneNumber || '',
-        dob: data.dob || new Date().toISOString().split('T')[0],
+        rating: data.rating || 0,
+        review_count: data.review_count || 0,
+        starting_price: data.starting_price || 0,
+        experience_years: (data as any).total_experience_years || 0,
+        work_arrangement: (data.work_arrangement && Object.values(WorkArrangement).includes(data.work_arrangement as WorkArrangement)) 
+          ? data.work_arrangement as WorkArrangement 
+          : WorkArrangement.FREELANCE,
+        language: data.language || (data.languages && data.languages[0]) || 'English',
+        specialization,
+        speciality: specialization,
+        speciality_new_name: data.speciality_new?.name,
         pin_code: data.pin_code || data.pinCode || '',
         address: data.address || '',
         city: data.city || '',
@@ -170,19 +259,14 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
         adhaar_number: data.adhaar_number || data.adhaarNumber || '',
         photo_url: data.photo_url || data.profile_picture || data.profileImage || null,
         role: data.role || ProfessionalRole.YOGA_TEACHER,
-        about: data.about || data.bio || 'No bio available',
-        work_arrangement: (data.work_arrangement && Object.values(WorkArrangement).includes(data.work_arrangement as WorkArrangement)) 
-          ? data.work_arrangement as WorkArrangement 
-          : WorkArrangement.FREELANCE,
-        language: data.language || (data.languages && data.languages[0]) || 'English',
-        specialization,
-        speciality: specialization,
-        speciality_new_name: data.speciality_new?.name,
-        // ✅ NEW FIELDS FROM BACKEND
-        rating: data.rating || 0,
-        review_count: data.review_count || 0,
-        starting_price: data.starting_price || 0,
-        experience_years: data.experience_years || 0,
+        about: data.about || 'No bio available',
+        dob: data.dob || '',
+        // ✅ ADDITIONAL SECTIONS - Using exact field names from API
+        educations: (data as any).educations || [],
+        experiences: (data as any).experiences || [],
+        certificates: (data as any).certificates || [],
+        achievements: (data as any).achievements || [],
+        yoga_plans: (data as any).yoga_plans || [],
         created_at: data.created_at || data.createdAt || new Date().toISOString(),
         updated_at: data.updated_at || data.updatedAt || new Date().toISOString(),
       };
@@ -197,6 +281,7 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
       console.log('  - Final work_arrangement:', profileData.work_arrangement);
       console.log('  - Final language:', profileData.language);
       console.log('  - Final specialization:', profileData.specialization);
+      console.log('  - Final about:', profileData.about);
       console.log('  - Final about length:', profileData.about?.length || 0);
       console.log('  - Final photo_url:', profileData.photo_url);
 
@@ -331,8 +416,17 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
     }
   }, [profileData]);
 
+  // Debug: Check component state before rendering
+  console.log('🎨 [ProfessionalProfile] RENDER STATE DEBUG:');
+  console.log('  - isLoading:', isLoading);
+  console.log('  - error:', error);
+  console.log('  - profileData exists:', !!profileData);
+  console.log('  - profileData keys:', profileData ? Object.keys(profileData) : 'none');
+  console.log('  - profileData.name:', profileData ? `${profileData.first_name} ${profileData.last_name}` : 'none');
+
   // Loading state
   if (isLoading) {
+    console.log('🔄 [ProfessionalProfile] Showing loading state');
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -346,6 +440,7 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
 
   // Error state
   if (error) {
+    console.log('❌ [ProfessionalProfile] Showing error state:', error);
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -360,11 +455,12 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
     );
   }
 
+  console.log('✅ [ProfessionalProfile] Showing main content');
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={appTheme.colors.primary} />
+      <StatusBar barStyle="light-content" backgroundColor="#008272" />
       <LinearGradient 
-        colors={[appTheme.colors.primary, appTheme.colors.secondary]}
+        colors={['#008272', '#4C7360', '#2F5233']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.header}
@@ -375,20 +471,13 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
             onPress={() => navigation.goBack()}
             style={styles.backButton}
           >
-            <Ionicons name="arrow-back" size={24} color={appTheme.colors.background.surface} />
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           
           <View style={styles.titleContainer}>
             <Text style={styles.headerTitle}>Professional Profile</Text>
-            <Text style={styles.headerSubtitle}>View professional details</Text>
           </View>
-          
-          <View style={styles.placeholderButton} />
         </View>
-        
-        {/* Decorative elements */}
-        <View style={styles.topCircle} />
-        <View style={styles.bottomWave} />
       </LinearGradient>
 
       {/* Content */}
@@ -402,59 +491,45 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
           }
         >
           {/* Profile Info Card */}
-          <View style={[styles.card, { borderLeftColor: theme.colors.primary, borderLeftWidth: 5 }]}>
-            <View style={styles.cardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>
-                  {profileData?.first_name} {profileData?.last_name}
-                </Text>
-                <Text style={styles.sub}>
-                  {formatRole(profileData?.role || '')}
-                </Text>
-              </View>
-              <View style={[styles.typeBadge, { backgroundColor: theme.colors.primary + '20' }]}>
-                <Ionicons name="person" size={14} color={theme.colors.primary} />
-                <Text style={[styles.typeText, { color: theme.colors.primary }]}>PRO</Text>
-              </View>
-            </View>
+          <View style={styles.profileCard}>
             
-            <View style={styles.cardContent}>
-              {/* Profile Image and Basic Info */}
-              <View style={styles.profileSection}>
+            {/* Header with Avatar and Basic Info */}
+            <View style={styles.profileHeader}>
+              <View style={styles.avatarContainer}>
                 <Image
                   source={{ uri: profileData?.photo_url || DEFAULT_AVATAR }}
-                  style={styles.profileImage}
+                  style={styles.profileAvatar}
                   resizeMode="cover"
                 />
-                <View style={styles.profileInfo}>
-                  {/* Rating */}
+                <View style={styles.verifiedBadge}>
+                  <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+                </View>
+              </View>
+              
+              <View style={styles.professionalInfo}>
+                <Text style={styles.professionalName}>
+                  {profileData?.first_name} {profileData?.last_name}
+                </Text>
+                <Text style={styles.professionalRole}>
+                  {formatRole(profileData?.role || '')}
+                </Text>
+                
+                {/* Rating and Experience */}
+                <View style={styles.quickStats}>
                   {profileData?.rating ? (
-                    <View style={styles.ratingRow}>
-                      <Ionicons name="star" size={16} color="#FFD700" />
-                      <Text style={styles.ratingText}>
-                        {profileData.rating.toFixed(1)} ({profileData.review_count} reviews)
+                    <View style={styles.statItem}>
+                      <Ionicons name="star" size={14} color="#FFD700" />
+                      <Text style={styles.statText}>
+                        {profileData.rating.toFixed(1)} ({profileData.review_count})
                       </Text>
                     </View>
                   ) : null}
                   
-                  {/* Experience */}
                   {profileData?.experience_years ? (
-                    <View style={styles.detailRow}>
-                      <Ionicons name="briefcase-outline" size={16} color="#666" />
-                      <Text style={styles.detailText}>
-                        <Text style={styles.detailLabel}>Experience: </Text>
+                    <View style={styles.statItem}>
+                      <Ionicons name="briefcase-outline" size={14} color="#6B7280" />
+                      <Text style={styles.statText}>
                         {profileData.experience_years} years
-                      </Text>
-                    </View>
-                  ) : null}
-                  
-                  {/* Starting Price */}
-                  {profileData?.starting_price ? (
-                    <View style={styles.detailRow}>
-                      <Ionicons name="pricetag-outline" size={16} color="#666" />
-                      <Text style={styles.detailText}>
-                        <Text style={styles.detailLabel}>Starting from: </Text>
-                        ₹{profileData.starting_price}
                       </Text>
                     </View>
                   ) : null}
@@ -462,113 +537,189 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
               </View>
             </View>
             
-            <View style={styles.cardFooter}>
-              <Text style={[styles.statusText, { color: theme.colors.primary }]}>
-                {profileData?.specialization || 'General Practice'}
-              </Text>
-            </View>
+            {/* Specialization */}
+            {profileData?.specialization && (
+              <View style={styles.specializationSection}>
+                <Text style={styles.specializationLabel}>Specialization</Text>
+                <View style={styles.specializationBadge}>
+                  <Text style={styles.specializationText}>
+                    {profileData?.specialization}
+                  </Text>
+                </View>
+              </View>
+            )}
+            
+            {/* Pricing */}
+            {profileData?.starting_price ? (
+              <View style={styles.pricingSection}>
+                <View style={styles.pricingInfo}>
+                  <Ionicons name="pricetag-outline" size={16} color="#008272" />
+                  <Text style={styles.pricingLabel}>Starting from</Text>
+                </View>
+                <Text style={styles.pricingAmount}>₹{profileData.starting_price}</Text>
+              </View>
+            ) : null}
           </View>
 
         {/* About Section */}
-        {profileData?.about && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="person-outline" size={24} color={theme.colors.primary} />
-              <Text style={styles.sectionTitle}>About</Text>
+        <View style={styles.aboutCard}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.cardIcon, { backgroundColor: '#008272' + '20' }]}>
+              <Ionicons name="person-outline" size={20} color="#008272" />
             </View>
-            
-            <TouchableOpacity onPress={() => setIsExpanded(!isExpanded)}>
-              <Text style={styles.aboutText} numberOfLines={isExpanded ? undefined : 3}>
-                {profileData?.about}
-              </Text>
-              {profileData?.about && profileData.about.length > 150 && (
-                <Text style={styles.readMoreText}>
-                  {isExpanded ? 'Read less' : 'Read more'}
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Contact Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="call-outline" size={24} color={theme.colors.primary} />
-            <Text style={styles.sectionTitle}>Get in Touch</Text>
+            <Text style={styles.cardTitle}>About</Text>
           </View>
           
-          {profileData?.email && (
-            <TouchableOpacity 
-              style={styles.contactItem}
-              onPress={() => handleContact('email')}
-            >
-              <View style={styles.contactIcon}>
-                <Ionicons name="mail-outline" size={20} color="#fff" />
-              </View>
-              <View style={styles.contactInfo}>
-                <Text style={styles.contactLabel}>Email</Text>
-                <Text style={styles.contactText} numberOfLines={1} ellipsizeMode="tail">
-                  {profileData?.email}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity onPress={() => setIsExpanded(!isExpanded)}>
+            <Text style={styles.aboutText} numberOfLines={isExpanded ? undefined : 3}>
+              {profileData?.about || 'No information available about this professional.'}
+            </Text>
+            {profileData?.about && profileData.about.length > 150 && (
+              <Text style={styles.readMoreText}>
+                {isExpanded ? 'Read less' : 'Read more'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
-          {profileData?.phone_number && (
-            <TouchableOpacity 
-              style={styles.contactItem}
-              onPress={() => handleContact('phone')}
-            >
-              <View style={styles.contactIcon}>
-                <Ionicons name="call-outline" size={20} color="#fff" />
+        {/* Education Section */}
+        <View style={styles.educationCard}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.cardIcon, { backgroundColor: '#FF6B6B20' }]}>
+              <Ionicons name="school-outline" size={20} color="#FF6B6B" />
+            </View>
+            <Text style={styles.cardTitle}>Education</Text>
+          </View>
+          
+          {profileData?.educations && Array.isArray(profileData.educations) && profileData.educations.length > 0 ? (
+            profileData.educations.map((edu: any, index: number) => (
+              <View key={index} style={[
+                styles.educationItem,
+                index === profileData.educations.length - 1 && styles.lastItem
+              ]}>
+                <Text style={styles.educationTitle}>{edu.degree || edu.title || 'Education'}</Text>
+                <Text style={styles.educationInstitution}>{edu.institution || edu.school || ''}</Text>
+                <Text style={styles.educationYear}>{edu.year || edu.graduation_year || ''}</Text>
+                {edu.description && (
+                  <Text style={styles.educationDescription}>{edu.description}</Text>
+                )}
               </View>
-              <View style={styles.contactInfo}>
-                <Text style={styles.contactLabel}>Phone</Text>
-                <Text style={styles.contactText}>
-                  {profileData?.phone_number}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-            </TouchableOpacity>
-          )}
-
-          {profileData?.address && (
-            <TouchableOpacity 
-              style={styles.contactItem}
-              onPress={() => handleContact('location')}
-            >
-              <View style={styles.contactIcon}>
-                <Ionicons name="location-outline" size={20} color="#fff" />
-              </View>
-              <View style={styles.contactInfo}>
-                <Text style={styles.contactLabel}>Address</Text>
-                <Text style={styles.contactText} numberOfLines={2}>
-                  {[profileData?.address, profileData?.city, profileData?.state, profileData?.pin_code]
-                    .filter(Boolean)
-                    .join(', ')}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-            </TouchableOpacity>
+            ))
+          ) : (
+            <Text style={styles.noDataText}>No education data available</Text>
           )}
         </View>
 
-        {/* Specialization */}
-        {profileData?.specialization && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="star-outline" size={24} color={theme.colors.primary} />
-              <Text style={styles.sectionTitle}>Specialization</Text>
+        {/* Experience Section */}
+        <View style={styles.experienceCard}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.cardIcon, { backgroundColor: '#4ECDC420' }]}>
+              <Ionicons name="briefcase-outline" size={20} color="#4ECDC4" />
             </View>
-            
-            <View style={styles.specializationBadge}>
-              <Text style={styles.specializationText}>
-                {profileData?.specialization}
-              </Text>
-            </View>
+            <Text style={styles.cardTitle}>Experience</Text>
           </View>
-        )}
+          
+          {profileData?.experiences && Array.isArray(profileData.experiences) && profileData.experiences.length > 0 ? (
+            profileData.experiences.map((exp: any, index: number) => (
+              <View key={index} style={[
+                styles.experienceItem,
+                index === profileData.experiences.length - 1 && styles.lastItem
+              ]}>
+                <Text style={styles.experienceTitle}>{exp.position || exp.title || 'Experience'}</Text>
+                <Text style={styles.experienceCompany}>{exp.company || exp.organization || ''}</Text>
+                <Text style={styles.experienceDuration}>{exp.duration || exp.start_date && exp.end_date ? `${exp.start_date} - ${exp.end_date}` : ''}</Text>
+                {exp.description && (
+                  <Text style={styles.experienceDescription}>{exp.description}</Text>
+                )}
+              </View>
+            ))
+          ) : (
+            <Text style={styles.noDataText}>No experience data available</Text>
+          )}
+        </View>
+
+        {/* Certificates Section */}
+        <View style={styles.certificatesCard}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.cardIcon, { backgroundColor: '#FFD93D20' }]}>
+              <Ionicons name="award-outline" size={20} color="#FFD93D" />
+            </View>
+            <Text style={styles.cardTitle}>Certificates</Text>
+          </View>
+          
+          {profileData?.certificates && Array.isArray(profileData.certificates) && profileData.certificates.length > 0 ? (
+            profileData.certificates.map((cert: any, index: number) => (
+              <View key={index} style={[
+                styles.certificateItem,
+                index === profileData.certificates.length - 1 && styles.lastItem
+              ]}>
+                <Text style={styles.certificateTitle}>{cert.name || cert.title || 'Certificate'}</Text>
+                <Text style={styles.certificateIssuer}>{cert.issuer || cert.organization || ''}</Text>
+                <Text style={styles.certificateDate}>{cert.date || cert.issue_date || cert.year || ''}</Text>
+                {cert.description && (
+                  <Text style={styles.certificateDescription}>{cert.description}</Text>
+                )}
+              </View>
+            ))
+          ) : (
+            <Text style={styles.noDataText}>No certificates data available</Text>
+          )}
+        </View>
+
+        {/* Achievements Section */}
+        <View style={styles.achievementsCard}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.cardIcon, { backgroundColor: '#6C63FF20' }]}>
+              <Ionicons name="trophy-outline" size={20} color="#6C63FF" />
+            </View>
+            <Text style={styles.cardTitle}>Achievements</Text>
+          </View>
+          
+          {profileData?.achievements && Array.isArray(profileData.achievements) && profileData.achievements.length > 0 ? (
+            profileData.achievements.map((ach: any, index: number) => (
+              <View key={index} style={[
+                styles.achievementItem,
+                index === profileData.achievements.length - 1 && styles.lastItem
+              ]}>
+                <Text style={styles.achievementTitle}>{ach.title || ach.name || 'Achievement'}</Text>
+                <Text style={styles.achievementYear}>{ach.year || ach.date || ''}</Text>
+                {ach.description && (
+                  <Text style={styles.achievementDescription}>{ach.description}</Text>
+                )}
+              </View>
+            ))
+          ) : (
+            <Text style={styles.noDataText}>No achievements data available</Text>
+          )}
+        </View>
+
+        {/* Yoga Plans Section */}
+        <View style={styles.yogaPlansCard}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.cardIcon, { backgroundColor: '#00D9FF20' }]}>
+              <Ionicons name="fitness-outline" size={20} color="#00D9FF" />
+            </View>
+            <Text style={styles.cardTitle}>Yoga Plans</Text>
+          </View>
+          
+          {profileData?.yoga_plans && Array.isArray(profileData.yoga_plans) && profileData.yoga_plans.length > 0 ? (
+            profileData.yoga_plans.map((plan: any, index: number) => (
+              <View key={index} style={[
+                styles.yogaPlanItem,
+                index === profileData.yoga_plans.length - 1 && styles.lastItem
+              ]}>
+                <Text style={styles.yogaPlanTitle}>{plan.name || plan.title || 'Yoga Plan'}</Text>
+                <Text style={styles.yogaPlanDuration}>{plan.duration || plan.sessions || ''}</Text>
+                <Text style={styles.yogaPlanPrice}>{plan.price ? `$${plan.price}` : ''}</Text>
+                {plan.description && (
+                  <Text style={styles.yogaPlanDescription}>{plan.description}</Text>
+                )}
+              </View>
+            ))
+          ) : (
+            <Text style={styles.noDataText}>No yoga plans data available</Text>
+          )}
+        </View>
 
         {/* Bottom spacing */}
         <View style={styles.bottomSpacing} />
@@ -583,12 +734,12 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
           activeOpacity={0.8}
         >
           <LinearGradient
-            colors={[theme.colors.primary, theme.colors.secondary]}
+            colors={['#008272', '#4C7360', '#2F5233']}
             style={styles.bookButtonGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
           >
-            <Ionicons name="calendar-outline" size={20} color="#fff" />
+            <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
             <Text style={styles.bookButtonText}>
               Book Consultation
             </Text>
@@ -600,7 +751,7 @@ const ProfessionalProfileScreen: React.FC<ProfessionalProfileScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background.primary },
+  container: { flex: 1, backgroundColor: '#F5F2ED' },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -638,13 +789,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Consistent Header Styles (matching AppointmentsScreen)
+  // Modern Header Styles - Green Theme
   header: { 
-    paddingTop: 40,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -657,213 +805,260 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   backButton: {
-    padding: 8,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: theme.borderRadius.s,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerButton: {
-    padding: 8,
-    borderRadius: 20,
+  shareButton: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.borderRadius.s,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   titleContainer: {
     flex: 1,
     alignItems: 'center',
   },
   headerTitle: { 
-    color: theme.colors.background.surface, 
+    color: '#FFFFFF', 
     fontSize: 20, 
     fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  headerSubtitle: {
-    color: theme.colors.background.surface,
-    fontSize: 14,
-    opacity: 0.8,
-    marginTop: 2,
-  },
-  placeholderButton: {
-    width: 40,
-  },
-  topCircle: {
-    position: 'absolute',
-    top: -50,
-    right: -50,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  bottomWave: {
-    position: 'absolute',
-    bottom: -20,
-    left: -50,
-    right: -50,
-    height: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    letterSpacing: 1,
   },
 
-  // Consistent Card Styles (matching AppointmentsScreen)
+  // Modern Card Styles
   scrollView: { flex: 1 },
   scrollViewContent: { flexGrow: 1, padding: 16 },
-  card: { 
-    backgroundColor: theme.colors.background.surface, 
-    marginBottom: 16, 
-    borderRadius: theme.borderRadius.l, 
-    padding: 16, 
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#eee' },
-  statusText: { fontSize: 12, fontWeight: 'bold' },
-  title: { fontSize: 16, fontWeight: 'bold', color: theme.colors.text.primary },
-  sub: { fontSize: 14, color: theme.colors.text.secondary },
-  typeBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  typeText: { fontSize: 10, fontWeight: '700', marginLeft: 4, textTransform: 'uppercase' },
-  cardContent: {
-    marginBottom: 8,
-  },
-
-  // Profile Specific Styles
-  profileSection: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  profileImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginRight: 16,
-  },
-  profileInfo: {
-    flex: 1,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  ratingText: {
-    fontSize: 14,
-    color: theme.colors.text.primary,
-    marginLeft: 4,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  detailText: {
-    fontSize: 14,
-    color: theme.colors.text.primary,
-    flex: 1,
-    marginLeft: 8,
-  },
-  detailLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.text.secondary,
-  },
-
-  // Section Styles
-  section: {
+  
+  // Profile Card
+  profileCard: {
     backgroundColor: theme.colors.background.surface,
     marginBottom: 16,
-    borderRadius: theme.borderRadius.l,
-    padding: 16,
-    elevation: 3,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    overflow: 'hidden',
   },
-  sectionHeader: {
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 16,
+  },
+  avatarContainer: {
+    marginRight: 16,
+    position: 'relative',
+  },
+  profileAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F5F5F5',
+  },
+  verifiedBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  professionalInfo: {
+    flex: 1,
+    justifyContent: 'flex-start',
+  },
+  professionalName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+    marginBottom: 4,
+  },
+  professionalRole: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  quickStats: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  
+  // Specialization Section
+  specializationSection: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.background.secondary,
+  },
+  specializationLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  specializationBadge: {
+    backgroundColor: '#008272' + '20',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  specializationText: {
+    fontSize: 14,
+    color: '#008272',
+    fontWeight: '600',
+  },
+  
+  // Pricing Section
+  pricingSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.background.secondary,
+  },
+  pricingInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pricingLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  pricingAmount: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#008272',
+  },
+  
+  // About Card
+  aboutCard: {
+    backgroundColor: theme.colors.background.surface,
+    marginBottom: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    padding: 16,
+  },
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
+  cardIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
     color: theme.colors.text.primary,
-    marginLeft: 8,
   },
   aboutText: {
     fontSize: 14,
-    color: theme.colors.text.primary,
+    color: theme.colors.text.secondary,
     lineHeight: 20,
   },
   readMoreText: {
     fontSize: 14,
-    color: theme.colors.primary,
-    fontWeight: '600',
+    color: '#008272',
+    fontWeight: '500',
     marginTop: 8,
   },
-
-  // Contact Styles
+  
+  // Contact Card
+  contactCard: {
+    backgroundColor: theme.colors.background.surface,
+    marginBottom: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    padding: 16,
+  },
+  contactItems: {
+    gap: 12,
+  },
   contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
   },
   contactIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    justifyContent: 'center',
+    marginRight: 12,
   },
   contactInfo: {
     flex: 1,
   },
   contactLabel: {
     fontSize: 12,
-    color: theme.colors.text.secondary,
+    color: '#6B7280',
     marginBottom: 2,
+    fontWeight: '500',
   },
-  contactText: {
+  contactValue: {
     fontSize: 14,
     color: theme.colors.text.primary,
     fontWeight: '500',
   },
-
-  // Specialization Badge
-  specializationBadge: {
-    backgroundColor: theme.colors.primary + '20',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  specializationText: {
-    fontSize: 14,
-    color: theme.colors.primary,
-    fontWeight: '600',
-  },
-
-  // Footer
+  
+  // Footer Button
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    padding: 16,
     backgroundColor: theme.colors.background.surface,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
-    padding: 16,
+    borderTopColor: theme.colors.background.secondary,
   },
   bookButton: {
-    borderRadius: theme.borderRadius.m,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   bookButtonGradient: {
@@ -874,13 +1069,234 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   bookButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     marginLeft: 8,
   },
+  
   bottomSpacing: {
     height: 100,
+  },
+  
+  // Modern Section Cards - Matching Profile Card Style
+  educationCard: {
+    backgroundColor: theme.colors.background.surface,
+    marginBottom: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    overflow: 'hidden',
+    padding: 16,
+  },
+  educationItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.background.secondary,
+  },
+  educationTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 4,
+  },
+  educationInstitution: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  educationYear: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginBottom: 4,
+  },
+  educationDescription: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    lineHeight: 20,
+  },
+  
+  // Experience Section Styles
+  experienceCard: {
+    backgroundColor: theme.colors.background.surface,
+    marginBottom: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    overflow: 'hidden',
+    padding: 16,
+  },
+  experienceItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.background.secondary,
+  },
+  experienceTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 4,
+  },
+  experienceCompany: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  experienceDuration: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginBottom: 4,
+  },
+  experienceDescription: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    lineHeight: 20,
+  },
+  
+  // Certificates Section Styles
+  certificatesCard: {
+    backgroundColor: theme.colors.background.surface,
+    marginBottom: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    overflow: 'hidden',
+    padding: 16,
+  },
+  certificateItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.background.secondary,
+  },
+  certificateTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 4,
+  },
+  certificateIssuer: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  certificateDate: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginBottom: 4,
+  },
+  certificateDescription: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    lineHeight: 20,
+  },
+  
+  // Achievements Section Styles
+  achievementsCard: {
+    backgroundColor: theme.colors.background.surface,
+    marginBottom: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    overflow: 'hidden',
+    padding: 16,
+  },
+  achievementItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.background.secondary,
+  },
+  achievementTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 4,
+  },
+  achievementYear: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginBottom: 4,
+  },
+  achievementDescription: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    lineHeight: 20,
+  },
+  
+  // Yoga Plans Section Styles
+  yogaPlansCard: {
+    backgroundColor: theme.colors.background.surface,
+    marginBottom: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    overflow: 'hidden',
+    padding: 16,
+  },
+  yogaPlanItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.background.secondary,
+  },
+  yogaPlanTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 4,
+  },
+  yogaPlanDuration: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  yogaPlanPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#008272',
+    marginBottom: 4,
+  },
+  yogaPlanDescription: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    lineHeight: 20,
+  },
+  
+  // No Data Text Style
+  noDataText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  
+  // Last Item Style (to remove bottom border)
+  lastItem: {
+    borderBottomWidth: 0,
   },
 });
 

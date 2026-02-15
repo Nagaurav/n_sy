@@ -37,18 +37,31 @@ const ModernProfessionalCard: React.FC<ModernProfessionalCardProps> = ({
      professional.role === 'therapist' ? 'Therapist' : '');
   const location = [professional.city, professional.state].filter(Boolean).join(', ') || 'Location not specified';
   const isVerified = professional.is_verified;
-  const isAvailable = professional.is_available;
+  const isAvailable = professional.is_available !== false; // Show as available unless explicitly false
+  
+  // Debug: Check availability values
+  console.log('[ModernProfessionalCard] Professional:', fullName);
+  console.log('[ModernProfessionalCard] is_available:', professional.is_available);
+  console.log('[ModernProfessionalCard] isAvailable:', isAvailable);
   const avatar = professional.profile_picture || professional.photo_url;
   const hasValidAvatar = avatar && avatar.trim() !== '';
   
   // Available fields from API
   const languages = professional.language || 'Languages not specified';
   const about = professional.about;
+  
+  // Debug: Check about field in list card
+  console.log('🔍 [ModernProfessionalCard] ABOUT FIELD DEBUG:');
+  console.log('  - professional.about:', professional.about);
+  console.log('  - professional.bio:', (professional as any).bio);
+  console.log('  - professional.description:', (professional as any).description);
+  console.log('  - professional.summary:', (professional as any).summary);
+  console.log('  - professional.profile_summary:', (professional as any).profile_summary);
+  console.log('  - about type:', typeof about);
+  console.log('  - about length:', about?.length);
+  console.log('  - about trimmed:', about?.trim());
 
-  const cardColor = professional.role === 'nutritionist' ? '#4CAF50' : '#2196F3';
-  const roleIcon = professional.role === 'nutritionist' ? 'nutrition' : 
-                 professional.role === 'yoga_teacher' || professional.role === 'yoga_instructor' ? 'fitness' : 
-                 professional.role === 'therapist' ? 'medkit' : 'person';
+  const cardColor = '#008272';
 
   return (
     <TouchableOpacity
@@ -84,17 +97,6 @@ const ModernProfessionalCard: React.FC<ModernProfessionalCardProps> = ({
               <Text style={styles.locationText}>{location}</Text>
             </View>
           </View>
-        </View>
-        
-        <View style={styles.roleBadge}>
-          <View style={[styles.roleIconContainer, { backgroundColor: cardColor + '20' }]}>
-            <Ionicons name={roleIcon} size={16} color={cardColor} />
-          </View>
-          <Text style={[styles.roleText, { color: cardColor }]}>
-            {professional.role === 'nutritionist' ? 'Nutrition' : 
-             professional.role === 'yoga_teacher' || professional.role === 'yoga_instructor' ? 'Yoga' : 
-             professional.role === 'therapist' ? 'Therapy' : 'Professional'}
-          </Text>
         </View>
       </View>
 
@@ -142,14 +144,6 @@ const ModernProfessionalCard: React.FC<ModernProfessionalCardProps> = ({
         
         <View style={styles.actionSection}>
           <TouchableOpacity
-            style={[styles.actionButton, styles.profileButton]}
-            onPress={() => onProfilePress(professional)}
-          >
-            <Ionicons name="person-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>View Profile</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
             style={[styles.actionButton, styles.bookButton, { backgroundColor: cardColor }]}
             onPress={() => onBookPress(professional)}
           >
@@ -183,6 +177,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
   avatarSection: {
     marginRight: 16,
@@ -221,7 +217,7 @@ const styles = StyleSheet.create({
   },
   headerInfo: {
     flex: 1,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'flex-start',
   },
   professionalName: {
@@ -248,31 +244,11 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginLeft: 4,
   },
-  roleBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-  },
-  roleIconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 6,
-  },
-  roleText: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  
+    
   // Content Section
   cardContent: {
     marginBottom: 16,
+    paddingHorizontal: 16,
   },
   infoSection: {
     gap: 12,
@@ -313,6 +289,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 16,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
     borderTopWidth: 1,
     borderTopColor: theme.colors.background.secondary,
   },
@@ -333,20 +311,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   actionSection: {
-    flexDirection: 'row',
-    gap: 8,
+    flex: 1,
+    alignItems: 'flex-end',
   },
   actionButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
     borderRadius: 8,
-    elevation: 2,
-  },
-  profileButton: {
-    backgroundColor: '#6B7280',
+    elevation: 3,
+    minHeight: 44,
+    minWidth: 120,
   },
   bookButton: {
     elevation: 3,

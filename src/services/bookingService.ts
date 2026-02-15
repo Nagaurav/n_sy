@@ -68,12 +68,12 @@ export const bookingService = {
     return apiClient.get<ProfessionalsResponse>(endpoint);
   },
 
-  // Get available time slots for a professional
+  // Get available time slots for consultation booking
   getAvailableSlots: async (professionalId: string | number): Promise<ApiResult<TimeSlot[]>> => {
     const response = await apiClient.get('/user/check-slot/checkAvailability', {
       params: { 
         professional_id: professionalId,
-        limit: 1000 // 🟢 Increased to 1000 slots to ensure we cover upcoming weeks
+        limit: 1000 // Load sufficient slots for upcoming weeks
       }
     });
 
@@ -109,7 +109,7 @@ export const bookingService = {
     }
 
     return {
-      success: true,
+      success: false,
       data: []
     };
   },

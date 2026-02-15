@@ -25,7 +25,7 @@ interface ModernProfessionalsHeaderProps {
 }
 
 const ModernProfessionalsHeader: React.FC<ModernProfessionalsHeaderProps> = ({
-  title = 'PROFESSIONALS',
+  title = 'Professionals',
   onBackPress,
   onFavoritePress,
   showFavorite = true,

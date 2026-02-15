@@ -141,10 +141,9 @@ const ProfessionalsListScreen = () => {
       console.log('[ProfessionalsList] Raw data:', rawData);
       console.log('[ProfessionalsList] Extracted professionalsList:', professionalsList);
 
-      // Client-side Price Filtering
+      // Client-side filtering for search
       let filteredList = professionalsList;
       
-      // Debug: Check if search is working at API level
       if (currentSearchQuery && currentSearchQuery.trim()) {
         console.log('[ProfessionalsList] Checking search results for query:', currentSearchQuery);
         console.log('[ProfessionalsList] Professionals before search filter:', professionalsList.map(p => ({
@@ -168,15 +167,10 @@ const ProfessionalsListScreen = () => {
           name: `${p.first_name} ${p.last_name}`,
           speciality: p.speciality_new?.name || p.speciality
         })));
+        
+        filteredList = searchMatches;
       }
       
-      if (filters.min_price > 0 || filters.max_price < 1000) {
-        filteredList = professionalsList.filter((pro: any) => {
-          const proPrice = pro.price || 0;
-          return proPrice >= filters.min_price && proPrice <= filters.max_price;
-        });
-      }
-
       if (response.success) {
         console.log('[ProfessionalsList] API Response Success');
         console.log('[ProfessionalsList] Raw professionalsList:', professionalsList);
@@ -310,7 +304,7 @@ const ProfessionalsListScreen = () => {
     return (
       <SafeAreaView style={styles.container}>
         <ModernProfessionalsHeader
-          title={categoryName || 'PROFESSIONALS'}
+          title="Professionals"
           onBackPress={() => navigation.goBack()}
           showFavorite={false}
         />
@@ -326,7 +320,7 @@ const ProfessionalsListScreen = () => {
     return (
       <SafeAreaView style={styles.container}>
         <ModernProfessionalsHeader
-          title={categoryName || 'PROFESSIONALS'}
+          title="Professionals"
           onBackPress={() => navigation.goBack()}
           showFavorite={false}
         />
