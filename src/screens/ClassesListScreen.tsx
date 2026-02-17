@@ -332,11 +332,11 @@ const ClassesListScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
+      <StatusBar backgroundColor="#008272" barStyle="light-content" />
       
-      {/* Modern Header */}
-      <LinearGradient
-        colors={[appTheme.colors.primary, appTheme.colors.secondary]}
+      {/* Modern Header - Matching ProfessionalHomeHeader */}
+      <LinearGradient 
+        colors={['#008272', '#4C7360', '#2F5233']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.header}
@@ -347,7 +347,7 @@ const ClassesListScreen = () => {
             style={styles.backButton}
             activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={24} color={appTheme.colors.background.surface} />
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           
           <View style={styles.titleContainer}>
@@ -355,18 +355,15 @@ const ClassesListScreen = () => {
             <Text style={styles.headerSubtitle}>Find your perfect class</Text>
           </View>
           
+          <View style={styles.placeholderButton} />
           <TouchableOpacity 
             onPress={() => setShowFilters(true)}
             style={styles.filterButton}
             activeOpacity={0.7}
           >
-            <Ionicons name="filter" size={24} color={appTheme.colors.background.surface} />
+            <Ionicons name="filter" size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
-        
-        {/* Decorative elements */}
-        <View style={styles.topCircle} />
-        <View style={styles.bottomWave} />
       </LinearGradient>
 
       {/* Main Content */}
@@ -502,70 +499,51 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.primary 
   },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { 
-    paddingTop: 50,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+  header: {
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    zIndex: 2,
   },
   backButton: {
-    padding: 8,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: theme.borderRadius.s,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   titleContainer: {
     flex: 1,
     alignItems: 'center',
   },
-  headerTitle: { 
-    color: theme.colors.background.surface, 
-    fontSize: 20, 
+  headerTitle: {
+    fontSize: 20,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    color: '#FFFFFF',
+    letterSpacing: 1,
   },
   headerSubtitle: {
-    color: theme.colors.background.surface,
+    color: '#FFFFFF',
     fontSize: 14,
     opacity: 0.8,
     marginTop: 2,
   },
   filterButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: theme.borderRadius.s,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  topCircle: {
-    position: 'absolute',
-    top: -50,
-    right: -50,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  bottomWave: {
-    position: 'absolute',
-    bottom: -20,
-    left: -50,
-    right: -50,
-    height: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+  placeholderButton: {
+    width: 44,
+    height: 44,
   },
   activeFiltersContainer: {
     backgroundColor: theme.colors.background.surface,
@@ -757,19 +735,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
-  // Class card styles (matching appointment cards)
+  // Modern Card Styles matching ProfessionalHomeScreen stats cards
   classCard: {
+    width: '100%',
     backgroundColor: theme.colors.background.surface,
-    marginBottom: 16,
-    borderRadius: theme.borderRadius.l,
-    padding: 16,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    borderLeftWidth: 5,
-    borderLeftColor: '#4CAF50',
+    borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.m,
+    marginBottom: theme.spacing.m,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    ...theme.shadows.card,
   },
   classImage: {
     height: 150,

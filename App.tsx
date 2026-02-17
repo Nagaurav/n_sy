@@ -69,6 +69,21 @@ export type RootStackParamList = AuthStackParamList &
         price: number;
       };
     };
+    BookingConfirmationScreen: {
+      bookingData: {
+        serviceType: 'consultation' | 'yoga_class';
+        professionalId: string | number;
+        professionalName: string;
+        serviceName: string;
+        price: number;
+        date?: string;
+        startTime?: string;
+        endTime?: string;
+        duration?: number;
+        deliveryMode?: string;
+        slotId?: string | number;
+      };
+    };
   };
 
 const AuthStack = createStackNavigator<AuthStackParamList>();
@@ -114,28 +129,6 @@ const HomeStackNavigator = () => {
       <HomeStack.Screen name="ClassesList" component={ClassesListScreen} />
       <HomeStack.Screen name="ClassDetails" component={ClassDetailsScreen} />
       <HomeStack.Screen name="AppointmentDetail" component={AppointmentDetailScreen} />
-      <HomeStack.Screen name="BookingConfirmation" component={BookingConfirmationScreen} />
-      <HomeStack.Screen 
-        name="PaymentGateway" 
-        component={PaymentGatewayScreen} 
-        options={{
-          gestureEnabled: false,
-        }}
-      />
-      <HomeStack.Screen 
-        name="BookingSuccess" 
-        component={BookingSuccessScreen} 
-        options={{
-          gestureEnabled: false,
-        }}
-      />
-      <HomeStack.Screen 
-        name="BookingFailed" 
-        component={BookingFailedScreen}
-        options={{
-          gestureEnabled: true,
-        }}
-      />
       <HomeStack.Screen name="EditProfile" component={EditProfileScreen} />
       <HomeStack.Screen name="ChatScreen" component={ChatScreen} />
       <HomeStack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
@@ -299,6 +292,53 @@ const AppNavigator = () => {
             presentation: 'card',
             animation: 'slide_from_right',
             gestureEnabled: false,
+          }}
+        />
+        
+        {/* ✅ BookingConfirmationScreen sits on TOP LAYER */}
+        <RootStack.Screen
+          name="BookingConfirmationScreen"
+          component={BookingConfirmationScreen}
+          options={{
+            headerShown: false,
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
+        
+        {/* ✅ PaymentGateway sits on TOP LAYER */}
+        <RootStack.Screen
+          name="PaymentGateway"
+          component={PaymentGatewayScreen}
+          options={{
+            headerShown: false,
+            presentation: 'modal',
+            animation: 'slide_from_bottom',
+            gestureEnabled: false,
+          }}
+        />
+        
+        {/* ✅ BookingSuccess sits on TOP LAYER */}
+        <RootStack.Screen
+          name="BookingSuccess"
+          component={BookingSuccessScreen}
+          options={{
+            headerShown: false,
+            presentation: 'modal',
+            animation: 'fade_from_bottom',
+            gestureEnabled: false,
+          }}
+        />
+        
+        {/* ✅ BookingFailed sits on TOP LAYER */}
+        <RootStack.Screen
+          name="BookingFailed"
+          component={BookingFailedScreen}
+          options={{
+            headerShown: false,
+            presentation: 'modal',
+            animation: 'fade_from_bottom',
+            gestureEnabled: true,
           }}
         />
         
