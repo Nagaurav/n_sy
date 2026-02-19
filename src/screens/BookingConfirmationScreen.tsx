@@ -75,6 +75,11 @@ const BookingConfirmationScreen = () => {
       'group_offline': 'Group In-Person Class',
       'one_to_one': '1-on-1 Session',
       'home_visit': 'Home Visit',
+      'GROUP_ONLINE': 'Group Online Class',
+      'GROUP_OFFLINE': 'Group In-Person Class',
+      'ONE_TO_ONE_ONLINE': '1-on-1 Online Session',
+      'ONE_TO_ONE_OFFLINE': '1-on-1 In-Person Session',
+      'HOME_VISIT': 'Home Visit'
     };
     return modeMap[mode] || mode.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
@@ -308,7 +313,10 @@ const BookingConfirmationScreen = () => {
               <View style={styles.detailItem}>
                 <Text style={styles.detailLabel}>Mode</Text>
                 <Text style={styles.detailValue}>
-                  {bookingData.deliveryMode.includes('online') ? 'Online Session' : 'In-Person Visit'}
+                  {bookingData.deliveryMode.includes('ONLINE') ? 'Online Session' : 
+                  bookingData.deliveryMode.includes('OFFLINE') ? 'In-Person Visit' : 
+                  bookingData.deliveryMode.includes('GROUP') ? 'Group Session' : 
+                  getDeliveryModeLabel(bookingData.deliveryMode)}
                 </Text>
               </View>
             )}
