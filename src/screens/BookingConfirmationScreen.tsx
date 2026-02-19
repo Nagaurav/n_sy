@@ -75,6 +75,11 @@ const BookingConfirmationScreen = () => {
       'group_offline': 'Group In-Person Class',
       'one_to_one': '1-on-1 Session',
       'home_visit': 'Home Visit',
+      'GROUP_ONLINE': 'Group Online Class',
+      'GROUP_OFFLINE': 'Group In-Person Class',
+      'ONE_TO_ONE_ONLINE': '1-on-1 Online Session',
+      'ONE_TO_ONE_OFFLINE': '1-on-1 In-Person Session',
+      'HOME_VISIT': 'Home Visit'
     };
     return modeMap[mode] || mode.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
@@ -195,15 +200,15 @@ const BookingConfirmationScreen = () => {
 
   if (!bookingData) return null;
 
-  const color = isYoga ? '#4CAF50' : appTheme.theme.colors.primary;
+  const color = isYoga ? '#4CAF50' : '#008272';
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <StatusBar backgroundColor="#008272" barStyle="light-content" />
       
-      {/* Modern Gradient Header - Matching Other Screens */}
+      {/* Header - Matching ProfessionalHomeHeader */}
       <LinearGradient 
-        colors={[appTheme.theme.colors.primary, appTheme.theme.colors.secondary]}
+        colors={['#008272', '#4C7360', '#2F5233']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.header}
@@ -214,7 +219,7 @@ const BookingConfirmationScreen = () => {
             style={styles.backButton}
             activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={24} color={appTheme.theme.colors.background.white} />
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           
           <View style={styles.titleContainer}>
@@ -228,10 +233,6 @@ const BookingConfirmationScreen = () => {
           
           <View style={styles.placeholderButton} />
         </View>
-        
-        {/* Decorative elements */}
-        <View style={styles.topCircle} />
-        <View style={styles.bottomWave} />
       </LinearGradient>
 
       <ScrollView 
@@ -239,173 +240,145 @@ const BookingConfirmationScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         
-        {/* Comprehensive Booking Summary Card */}
+        {/* Modern Consultation Card - Matching Payment Summary Style */}
         <Animated.View style={[
           styles.card,
-          appTheme.theme.shadows.card,
+          styles.consultationCard,
           { 
             opacity: fadeAnim, 
             transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
-            borderLeftColor: color, 
-            borderLeftWidth: 5 
           }
         ]}>
+          {/* Card Header */}
           <View style={styles.cardHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.title}>{bookingData.serviceName}</Text>
-              <Text style={styles.sub}>
-                {bookingData.professionalName}
-                {bookingData.professionalSpecialization && ` • ${bookingData.professionalSpecialization}`}
-              </Text>
+            <View style={styles.headerIconContainer}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {bookingData.professionalName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                </Text>
+              </View>
             </View>
-            <View style={[styles.typeBadge, { backgroundColor: color + '20' }]}>
-              <Ionicons name={isYoga ? 'fitness' : 'medkit'} size={14} color={color} />
-              <Text style={[styles.typeText, { color }]}>{isYoga ? 'Yoga' : 'Consult'}</Text>
+            <View style={styles.headerInfo}>
+              <Text style={styles.cardHeaderTitle}>Consultation Details</Text>
+              <Text style={styles.cardHeaderSubtitle}>{bookingData.professionalName}</Text>
+            </View>
+            <View style={[styles.serviceTypeBadge, { backgroundColor: '#008272' }]}>
+              <Text style={styles.serviceTypeText}>
+                {isYoga ? 'YOGA' : 'CONSULT'}
+              </Text>
             </View>
           </View>
           
-          {/* Appointment Details */}
-          <View style={styles.detailsContainer}>
-            <Text style={styles.sectionTitle}>Appointment Details</Text>
+          {/* Consultation Details */}
+          <View style={styles.consultationDetailsContainer}>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Service</Text>
+              <Text style={styles.detailValue}>{bookingData.serviceName}</Text>
+            </View>
             
-            <DetailRow 
-              label="Service" 
-              value={bookingData.serviceName} 
-              icon="medkit" 
-            />
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Professional</Text>
+              <Text style={styles.detailValue}>{bookingData.professionalName}</Text>
+            </View>
             
-            <DetailRow 
-              label="Provider" 
-              value={bookingData.professionalName} 
-              icon="person" 
-            />
+            {bookingData.professionalSpecialization && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Specialization</Text>
+                <Text style={styles.detailValue}>{bookingData.professionalSpecialization}</Text>
+              </View>
+            )}
             
             {bookingData.date && (
-              <DetailRow 
-                label="Date" 
-                value={formatDisplayDate(bookingData.date)} 
-                icon="calendar" 
-              />
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Date</Text>
+                <Text style={styles.detailValue}>{formatDisplayDate(bookingData.date)}</Text>
+              </View>
             )}
             
             {(bookingData.startTime || bookingData.time) && (
-              <DetailRow 
-                label="Time" 
-                value={
-                  bookingData.startTime && bookingData.endTime 
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Time</Text>
+                <Text style={styles.detailValue}>
+                  {bookingData.startTime && bookingData.endTime 
                     ? formatSlotTimeRange(bookingData.startTime, bookingData.endTime)
                     : bookingData.time 
                     ? formatDisplayTime(bookingData.time)
                     : 'To be scheduled'
-                } 
-                icon="time-outline" 
-              />
+                  }
+                </Text>
+              </View>
             )}
             
             {bookingData.deliveryMode && (
-              <DetailRow 
-                label="Mode" 
-                value={getDeliveryModeLabel(bookingData.deliveryMode)} 
-                icon="videocam" 
-              />
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Mode</Text>
+                <Text style={styles.detailValue}>
+                  {bookingData.deliveryMode.includes('ONLINE') ? 'Online Session' : 
+                  bookingData.deliveryMode.includes('OFFLINE') ? 'In-Person Visit' : 
+                  bookingData.deliveryMode.includes('GROUP') ? 'Group Session' : 
+                  getDeliveryModeLabel(bookingData.deliveryMode)}
+                </Text>
+              </View>
             )}
             
             {bookingData.duration && (
-              <DetailRow 
-                label="Duration" 
-                value={getDurationLabel(bookingData.duration, isYoga)} 
-                icon="hourglass-outline" 
-              />
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Duration</Text>
+                <Text style={styles.detailValue}>{getDurationLabel(bookingData.duration, isYoga)}</Text>
+              </View>
             )}
           </View>
         </Animated.View>
 
-        {/* Comprehensive Price Breakdown Card */}
+        {/* Modern Payment Summary Card - Matching ModernAppointmentCard */}
         <Animated.View style={[
           styles.card,
-          appTheme.theme.shadows.card,
           { 
             opacity: fadeAnim, 
             transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
-            borderLeftColor: appTheme.theme.colors.primary, 
-            borderLeftWidth: 5 
           }
         ]}>
-          <View style={styles.cardHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.title}>Payment Summary</Text>
-              <Text style={styles.sub}>Secure transaction</Text>
+          {/* Payment Header */}
+          <View style={styles.paymentHeader}>
+            <View style={styles.paymentIconContainer}>
+              <Ionicons name="shield-checkmark-outline" size={24} color="#4CAF50" />
             </View>
-            <View style={[styles.typeBadge, { backgroundColor: appTheme.theme.colors.feedback.success + '20' }]}>
-              <Ionicons name="shield-checkmark-outline" size={14} color={appTheme.theme.colors.feedback.success} />
-              <Text style={[styles.typeText, { color: appTheme.theme.colors.feedback.success }]}>SECURE</Text>
+            <View style={styles.paymentInfo}>
+              <Text style={styles.paymentTitle}>Payment Summary</Text>
+              <Text style={styles.paymentSubtitle}>Secure transaction</Text>
+            </View>
+            <View style={[styles.secureBadge, { backgroundColor: '#4CAF5020' }]}>
+              <Text style={[styles.secureBadgeText, { color: '#4CAF50' }]}>SECURE</Text>
             </View>
           </View>
           
           {/* Price Breakdown */}
-          <View style={styles.priceBreakdown}>
-            <Text style={styles.sectionTitle}>Payment Details</Text>
-            
-            <View style={styles.priceRow}>
+          <View style={styles.priceBreakdownContainer}>
+            <View style={styles.priceItem}>
               <Text style={styles.priceLabel}>Base Amount</Text>
               <Text style={styles.priceValue}>₹{bookingData.basePrice || bookingData.price.toLocaleString()}</Text>
             </View>
             
             {bookingData.discount && bookingData.discount > 0 && (
-              <View style={styles.priceRow}>
+              <View style={styles.priceItem}>
                 <Text style={styles.priceLabel}>Discount</Text>
-                <Text style={[styles.priceValue, { color: appTheme.theme.colors.feedback.success }]}>
+                <Text style={[styles.priceValue, { color: '#4CAF50' }]}>
                   -₹{bookingData.discount.toLocaleString()}
                 </Text>
               </View>
             )}
             
-            <View style={styles.priceRow}>
+            <View style={styles.priceItem}>
               <Text style={styles.priceLabel}>Platform Fee</Text>
               <Text style={styles.priceValue}>₹{bookingData.platformFee || 0}</Text>
             </View>
             
-            <View style={[styles.priceRow, styles.totalRow]}>
+            <View style={[styles.priceItem, styles.totalItem]}>
               <Text style={styles.totalLabel}>Total Payable</Text>
               <Text style={styles.totalValue}>₹{bookingData.price.toLocaleString()}</Text>
             </View>
           </View>
         </Animated.View>
-
-        {/* Cancellation Policy Card */}
-        <Animated.View style={[
-          styles.card,
-          appTheme.theme.shadows.card,
-          { 
-            opacity: fadeAnim, 
-            transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
-            borderLeftColor: appTheme.theme.colors.secondary, 
-            borderLeftWidth: 5 
-          }
-        ]}>
-          <View style={styles.cardHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.title}>Cancellation Policy</Text>
-              <Text style={styles.sub}>Important information</Text>
-            </View>
-            <View style={[styles.typeBadge, { backgroundColor: appTheme.theme.colors.secondary + '20' }]}>
-              <Ionicons name="information-circle" size={14} color={appTheme.theme.colors.secondary} />
-              <Text style={[styles.typeText, { color: appTheme.theme.colors.secondary }]}>INFO</Text>
-            </View>
-          </View>
-          
-          <View style={styles.policyContent}>
-            <Text style={styles.policyText}>
-              {bookingData.cancellationPolicy || 
-               (isYoga 
-                 ? "Cancellations are allowed up to 24 hours before the class start time for a full refund."
-                 : "Cancellations are allowed up to 2 hours before the appointment for a full refund."
-               )
-              }
-            </Text>
-          </View>
-        </Animated.View>
-
 
       </ScrollView>
 
@@ -424,9 +397,8 @@ const BookingConfirmationScreen = () => {
           <TouchableOpacity 
             style={[
               styles.confirmButton, 
-              appTheme.theme.shadows.float,
               { 
-                backgroundColor: isProcessing ? appTheme.theme.colors.text.secondary : appTheme.theme.colors.primary,
+                backgroundColor: isProcessing ? theme.colors.text.secondary : '#008272',
                 opacity: isProcessing ? 0.7 : 1
               }
             ]} 
@@ -435,10 +407,10 @@ const BookingConfirmationScreen = () => {
             activeOpacity={0.8}
           >
             {isProcessing ? (
-              <ActivityIndicator color={appTheme.theme.colors.background.white} size="small" />
+              <ActivityIndicator color={theme.colors.background.white} size="small" />
             ) : (
               <View style={styles.buttonContent}>
-                <Ionicons name="lock-closed" size={18} color={appTheme.theme.colors.background.white} />
+                <Ionicons name="lock-closed" size={18} color={theme.colors.background.white} />
                 <Text style={styles.confirmButtonText}>
                   Pay ₹ {bookingData.price.toLocaleString()}
                 </Text>
@@ -454,25 +426,15 @@ const BookingConfirmationScreen = () => {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: theme.colors.background.primary 
+    backgroundColor: '#F5F2ED'
   },
   scrollContent: {
     padding: theme.spacing.m,
     paddingBottom: 120, // Extra padding for footer
   },
   header: {
-    paddingTop: 50,
-    paddingBottom: 24,
     paddingHorizontal: theme.spacing.l,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
-    position: 'relative',
-    overflow: 'hidden',
+    paddingVertical: theme.spacing.m,
   },
   headerContent: {
     flexDirection: 'row',
@@ -483,7 +445,7 @@ const styles = StyleSheet.create({
   backButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: theme.borderRadius.s,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -495,12 +457,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: theme.colors.background.white,
-    textAlign: 'center',
-    letterSpacing: -0.5,
+    color: '#FFFFFF',
+    letterSpacing: 1,
   },
   headerSubtitle: {
-    color: theme.colors.background.white,
+    color: '#FFFFFF',
     fontSize: 14,
     opacity: 0.8,
     marginTop: 2,
@@ -509,74 +470,217 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
   },
-  topCircle: {
-    position: 'absolute',
-    top: -50,
-    right: -50,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  bottomWave: {
-    position: 'absolute',
-    bottom: -20,
-    left: -50,
-    right: -50,
-    height: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
 
-  // Card Styles (matching AppointmentsScreen)
+  // Modern Card Styles matching ProfessionalHomeScreen Stats Card
   card: { 
-    backgroundColor: theme.colors.background.surface, 
-    marginBottom: theme.spacing.m, 
-    borderRadius: theme.borderRadius.l, 
-    padding: theme.spacing.m, 
-    elevation: 3,
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: theme.spacing.l,
+    marginBottom: theme.spacing.m,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    position: 'relative',
   },
-  cardHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'flex-start', 
-    marginBottom: 12 
+  
+  // Card Type Styles - Different Border Colors
+  consultationCard: {
+    borderColor: '#10B981', // Green for consultation
+    borderLeftWidth: 2,
   },
-  title: { 
-    fontSize: 16, 
-    fontWeight: 'bold', 
-    color: theme.colors.text.primary 
+  yogaCard: {
+    borderColor: '#8B5CF6', // Purple for yoga
+    borderLeftWidth: 2,
   },
-  sub: { 
-    fontSize: 14, 
-    color: theme.colors.text.secondary 
+  // Modern Consultation Card Styles - Matching Payment Summary
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.m,
   },
-  typeBadge: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingHorizontal: 8, 
-    paddingVertical: 4, 
-    borderRadius: 8 
+  headerIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F0FDF4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: theme.spacing.m,
   },
-  typeText: { 
-    fontSize: 10, 
-    fontWeight: '700', 
-    marginLeft: 4, 
-    textTransform: 'uppercase' 
+  headerInfo: {
+    flex: 1,
   },
-  cardFooter: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginTop: 12, 
-    paddingTop: 12, 
-    borderTopWidth: 1, 
-    borderTopColor: '#eee' 
+  cardHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+    marginBottom: 2,
+  },
+  cardHeaderSubtitle: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    fontWeight: '500',
+  },
+  consultationDetailsContainer: {
+    paddingTop: theme.spacing.m,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  detailItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.s,
+  },
+  detailsGrid: {
+    gap: theme.spacing.m,
+  },
+  detailCard: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.m,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+  },
+  detailIcon: {
+    marginRight: theme.spacing.m,
+  },
+  detailContent: {
+    flex: 1,
+  },
+  serviceHighlight: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.m,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    marginTop: theme.spacing.s,
+  },
+  serviceName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#065F46',
+    marginBottom: theme.spacing.xs,
+  },
+  serviceTag: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 2,
+    borderRadius: theme.borderRadius.xs,
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: theme.spacing.m,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#F3F4F6',
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  professionalInfo: {
+    flex: 1,
+  },
+  professionalName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  speciality: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  
+  // Payment Summary Styles
+  paymentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.m,
+  },
+  paymentIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F0FDF4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: theme.spacing.m,
+  },
+  paymentInfo: {
+    flex: 1,
+  },
+  paymentTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+    marginBottom: 2,
+  },
+  paymentSubtitle: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    fontWeight: '500',
+  },
+  secureBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  secureBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  priceBreakdownContainer: {
+    paddingTop: theme.spacing.m,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  priceItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.s,
+  },
+  totalItem: {
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: theme.spacing.s,
+    marginTop: theme.spacing.xs,
+  },
+  serviceTypeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  serviceTypeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    color: '#FFFFFF',
   },
   detailLabel: {
     fontSize: 12,
@@ -597,57 +701,27 @@ const styles = StyleSheet.create({
     color: theme.colors.text.primary
   },
 
-  // Price Breakdown Styles
-  priceBreakdown: {
-    marginTop: theme.spacing.m,
-    paddingTop: theme.spacing.m,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.background.secondary,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: theme.spacing.s,
-  },
-  totalRow: {
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.background.secondary,
-    paddingTop: theme.spacing.s,
-    marginTop: theme.spacing.xs,
-  },
+  
+  // Price Styles
   priceLabel: { 
     fontSize: 14, 
     fontWeight: '500',
-    color: theme.colors.text.secondary
+    color: '#6B7280'
   },
   totalLabel: { 
     fontSize: 16, 
     fontWeight: '700',
-    color: theme.colors.text.primary
+    color: '#1F2937'
   },
   priceValue: { 
     fontSize: 14, 
     fontWeight: '600',
-    color: theme.colors.text.primary
+    color: '#1F2937'
   },
   totalValue: { 
     fontSize: 18, 
     fontWeight: 'bold',
-    color: theme.colors.primary
-  },
-
-  // Policy Styles
-  policyContent: {
-    marginTop: theme.spacing.m,
-    paddingTop: theme.spacing.m,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.background.secondary,
-  },
-  policyText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: theme.colors.text.secondary,
+    color: '#008272'
   },
 
   // Redesigned Details Styles
@@ -670,22 +744,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: theme.spacing.m,
-  },
-  detailContent: {
-    flex: 1,
-  },
-  modeBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: theme.spacing.s,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.borderRadius.s,
-    backgroundColor: theme.colors.primary + '20',
-  },
-  modeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.primary,
-    letterSpacing: 0.5,
   },
 
   // Footer
@@ -710,21 +768,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   totalLabelFooter: {
-    fontSize: theme.typography.small.fontSize,
+    fontSize: 12,
     marginBottom: theme.spacing.xs,
     color: theme.colors.text.secondary
   },
   totalAmount: {
-    fontSize: theme.typography.h2.fontSize,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: theme.colors.primary
+    color: '#008272'
   },
   confirmButton: { 
     paddingVertical: theme.spacing.m,
     paddingHorizontal: theme.spacing.l,
     borderRadius: theme.borderRadius.m,
+    backgroundColor: '#008272',
     alignItems: 'center',
     minWidth: 180,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   buttonContent: {
     flexDirection: 'row',
@@ -733,8 +797,29 @@ const styles = StyleSheet.create({
   },
   confirmButtonText: { 
     color: theme.colors.background.white, 
-    fontSize: theme.typography.body.fontSize, 
+    fontSize: 16, 
     fontWeight: 'bold'
+  },
+  
+  // Status Indicator Styles
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: theme.spacing.s,
+    marginBottom: theme.spacing.m,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: theme.spacing.s,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.text.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   }
 });
 

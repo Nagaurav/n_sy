@@ -68,12 +68,12 @@ export const bookingService = {
     return apiClient.get<ProfessionalsResponse>(endpoint);
   },
 
-  // Get available time slots for a professional
+  // Get available time slots for consultation booking
   getAvailableSlots: async (professionalId: string | number): Promise<ApiResult<TimeSlot[]>> => {
     const response = await apiClient.get('/user/check-slot/checkAvailability', {
       params: { 
         professional_id: professionalId,
-        limit: 1000 // 🟢 Increased to 1000 slots to ensure we cover upcoming weeks
+        limit: 1000 // Load sufficient slots for upcoming weeks
       }
     });
 
@@ -109,7 +109,7 @@ export const bookingService = {
     }
 
     return {
-      success: true,
+      success: false,
       data: []
     };
   },
@@ -271,12 +271,12 @@ export const bookingService = {
         };
       }
     }
-    
+
     // Return booking response even if payment URL fails
     return bookingResponse;
   },
 
-  // ✅ 2. Unified List Fetching (Merge 2 APIs)
+  // ✅ 2. Unified List Fetching (Merge 2 APIs) - WITH PROFESSIONAL DETAILS JOIN
   getAllUserBookings: async (userId: string | number): Promise<ApiResult<UnifiedAppointment[]>> => {
     try {
       // Fetch consultations with error handling
@@ -286,7 +286,6 @@ export const bookingService = {
         console.log('✅ [bookingService] Consultation API success');
       } catch (consultError: any) {
         console.warn('⚠️ [bookingService] Consultation API failed:', consultError.message);
-        // Set a failed response so processing continues
         consultRes = { success: false, error: consultError.message, data: null };
       }
 
@@ -297,7 +296,6 @@ export const bookingService = {
         console.log('✅ [bookingService] Yoga API success');
       } catch (yogaError: any) {
         console.warn('⚠️ [bookingService] Yoga API failed:', yogaError.message);
-        // Set a failed response so processing continues
         yogaRes = { success: false, error: yogaError.message, data: null };
       }
 
@@ -318,9 +316,55 @@ export const bookingService = {
         }
         
         console.log('📋 [bookingService] Processed consultation list:', consultList.length, 'items');
+
+        // 🆕 STEP 1: Extract unique professional IDs for speciality fetching
+        const professionalIds = [...new Set(
+          consultList
+            .map((item: any) => item.professional_id || item.professional?.id)
+            .filter((id: any) => id != null)
+        )] as number[];
+
+        console.log('🎯 [bookingService] Found professional IDs:', professionalIds);
+
+        // 🆕 STEP 2: Fetch professional details if we have IDs
+        const professionalDetails: { [key: number]: any } = {};
+        if (professionalIds.length > 0) {
+          try {
+            console.log('🔄 [bookingService] Fetching professional details for speciality_id...');
+            
+            // Fetch details for each professional
+            for (const profId of professionalIds) {
+              try {
+                const profRes = await apiClient.get(`/user/professional/getProfessional?professional_id=${profId}`);
+                console.log(`🔍 [bookingService] Professional API response for ${profId}:`, profRes);
+                
+                if (profRes.success && profRes.data?.data?.[0]) {
+                  const professional = profRes.data.data[0];
+                  console.log(`👤 [bookingService] Professional object for ${profId}:`, professional);
+                  console.log(`🏥 [bookingService] speciality_new for ${profId}:`, professional.speciality_new);
+                  console.log(`🏥 [bookingService] speciality_id for ${profId}:`, professional.speciality_id);
+                  console.log(`🏥 [bookingity] speciality for ${profId}:`, professional.speciality);
+                  
+                  professionalDetails[profId] = {
+                    speciality_id: professional.speciality_new?.speciality_id || professional.speciality_id,
+                    speciality_name: professional.speciality_new?.name || professional.speciality,
+                  };
+                  console.log(`✅ [bookingService] Got speciality data for professional ${profId}:`, professionalDetails[profId]);
+                } else {
+                  console.warn(`⚠️ [bookingService] No professional data found for ${profId}`);
+                }
+              } catch (profError: any) {
+                console.warn(`⚠️ [bookingService] Failed to fetch professional ${profId}:`, profError.message);
+              }
+            }
+          } catch (error) {
+            console.warn('⚠️ [bookingService] Professional details fetch failed:', error);
+          }
+        }
         
         consultList.forEach((item: any, index: number) => {
-          console.log('📝 [bookingService] Consultation item:', item);
+          const professionalId = item.professional_id || item.professional?.id;
+          const profDetails = professionalId ? professionalDetails[professionalId] : null;
           
           const bookingId = item.booking_id || item.id || item._id || `consult-${index}-${Date.now()}`;
           unifiedList.push({
@@ -333,7 +377,7 @@ export const bookingService = {
             date: item.slot?.date || item.date,
             time: item.time || item.slot?.time || 'Scheduled',
             title: item.professional_name || `Dr. ${item.professional?.first_name} ${item.professional?.last_name}` || 'Consultation',
-            subtitle: 'Medical Consultation',
+            subtitle: profDetails?.speciality_name || item.professional?.speciality_new?.name || item.professional?.speciality_name || item.professional?.speciality || item.professional?.role || 'Medical Consultation',
             imageUrl: item.professional?.photo_url,
             professional: item.professional
           });
@@ -357,8 +401,6 @@ export const bookingService = {
         console.log('📋 [bookingService] Processed yoga list:', yogaList.length, 'items');
         
         yogaList.forEach((item: any, index: number) => {
-          console.log('📝 [bookingService] Yoga item:', item);
-          
           const yogaId = item.id || item.booking_id || item._id || `yoga-${index}-${Date.now()}`;
           unifiedList.push({
             id: `yoga-${yogaId}`,

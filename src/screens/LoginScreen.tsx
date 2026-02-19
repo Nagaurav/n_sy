@@ -19,10 +19,10 @@ import {
   Animated,
 } from 'react-native';
 import { StackScreenProps } from '@react-navigation/stack';
-import { authService } from '../services'; // Ensure authService is correctly imported
+import { authService } from '../services';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
-import { theme } from '../theme';
+import { theme, commonStyles } from '../theme';
 import { FloatingLabelInput } from '../components/FloatingLabelInput';
 
 type LoginScreenProps = StackScreenProps<any, 'Login'>;
@@ -121,7 +121,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       } else {
         Alert.alert(
           'Login Failed',
-          'The email or password you entered is incorrect. Please try again.'
+          'Invalid credentials. Please try again or use phone verification.'
         );
       }
     setIsLoading(true);
@@ -144,11 +144,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   }, [navigation]);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+    <View style={[styles.container, { backgroundColor: '#F5F2ED' }]}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
       
       {/* Header with Logo */}
-      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
+      <View style={[styles.header, { backgroundColor: '#008272' }]}>
         <Animated.View 
           style={{
             opacity: fadeAnim,
@@ -174,8 +174,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               transform: [{ translateY: slideAnim }]
             }}
           >
-            <View style={[styles.card, { backgroundColor: theme.colors.background.surface, ...theme.shadows.float }]}>
-              <Text style={[styles.title, { color: theme.colors.text.primary }]}>Welcome Back</Text>
+            <View style={[styles.card, commonStyles.primaryCard, { borderColor: theme.colors.feedback.success }]}>
+              <Text style={[styles.title, { color: '#008272' }]}>Welcome Back</Text>
               <Text style={[styles.subtitle, { color: theme.colors.text.secondary }]}>Continue your wellness journey</Text>
 
               <View style={styles.form}>
@@ -223,7 +223,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                   <Pressable
                     style={[
                       styles.button, 
-                      { backgroundColor: theme.colors.primary },
+                      { backgroundColor: '#008272' },
                       isLoading && styles.buttonDisabled,
                       isButtonPressed && { backgroundColor: theme.colors.secondary }
                     ]}
@@ -244,14 +244,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                   onPress={handleOTPToggle}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.toggleButtonText, { color: theme.colors.primary }]}>
+                  <Text style={[styles.toggleButtonText, { color: '#008272' }]}>
                     {isPasswordLogin ? 'Use OTP instead' : 'Use email/password'}
                   </Text>
                 </TouchableOpacity>
 
                 {/* Forgot Password Link */}
                 {isPasswordLogin && (
-                  <TouchableOpacity style={styles.forgotPasswordButton}>
+                  <TouchableOpacity 
+                    style={styles.forgotPasswordButton}
+                    onPress={() => navigation.navigate('PhoneNumber')}
+                  >
                     <Text style={[styles.forgotPasswordText, { color: theme.colors.text.secondary }]}>
                       Forgot your password?
                     </Text>
@@ -264,12 +267,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                     New to Samyayog? 
                   </Text>
                   <Pressable 
-                    style={[styles.signUpLink, { color: theme.colors.primary }]}
+                    style={[styles.signUpLink, { color: '#008272' }]}
                     onPress={() => navigation.navigate('Signup')}
                     onPressIn={() => setIsButtonPressed(true)}
                     onPressOut={() => setIsButtonPressed(false)}
                   >
-                    <Text style={[styles.signUpLink, { color: theme.colors.primary }]}>Create Account</Text>
+                    <Text style={[styles.signUpLink, { color: '#008272' }]}>Create Account</Text>
                   </Pressable>
                 </View>
               </View>
@@ -327,8 +330,8 @@ const styles = StyleSheet.create<Styles>({
     marginHorizontal: 24,
     marginTop: 20,
     marginBottom: 40,
-    borderRadius: 24,
-    padding: 32,
+    borderRadius: 16,
+    padding: 24,
   },
   title: {
     fontSize: 24,

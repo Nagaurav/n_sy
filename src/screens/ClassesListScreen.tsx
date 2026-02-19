@@ -210,7 +210,13 @@ const ClassesListScreen = () => {
     const effectivePrice = getEffectivePrice(item);
     console.log('📊 Available modes in list:', availableModes);
     console.log('💰 Effective price in list:', effectivePrice);
-    const imageUrl = item.location ? 'https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=800' : 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800';
+    
+    // Use appropriate image based on class type
+    const imageUrl = item.home_visit 
+      ? 'https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=800' 
+      : item.group_offline || item.location
+      ? 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800'
+      : 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=800';
 
     return (
       <TouchableOpacity 
@@ -218,83 +224,113 @@ const ClassesListScreen = () => {
         onPress={() => handleClassPress(item)}
         activeOpacity={0.9}
       >
-        {/* Class Image */}
-        <ImageBackground source={{ uri: imageUrl }} style={styles.classImage} imageStyle={styles.classImageBorder}>
-          <View style={styles.imageOverlay}>
-            {/* Price Badge */}
-            <View style={styles.priceBadge}>
-              <Text style={styles.priceText}>{formatPrice(effectivePrice)}</Text>
-            </View>
-            
-            {/* Category Badge */}
-            {item.is_disease_specific && item.disease && (
-              <View style={styles.categoryBadge}>
-                <Text style={styles.categoryBadgeText}>{item.disease}</Text>
-              </View>
-            )}
-          </View>
-        </ImageBackground>
+        {/* Available Status Badge - Top Right Corner */}
+        <View style={styles.availableBadge}>
+          <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+        </View>
 
-        {/* Class Content */}
-        <View style={styles.classContent}>
-          {/* Title */}
-          <Text style={styles.classTitle} numberOfLines={2}>
-            {item.title}
-          </Text>
-
-          {/* Description */}
-          <Text style={styles.classDescription} numberOfLines={2}>
-            {item.description}
-          </Text>
-
-          {/* Meta Information */}
-          <View style={styles.metaContainer}>
-            <View style={styles.metaItem}>
-              <Ionicons name="time-outline" size={16} color="#666" />
-              <Text style={styles.metaText}>{item.duration.replace('_', ' ')}</Text>
-            </View>
-            
-            <View style={styles.metaItem}>
-              <Ionicons name="calendar-outline" size={16} color="#666" />
-              <Text style={styles.metaText} numberOfLines={1}>{item.days}</Text>
-            </View>
-            
-            {item.city && (
-              <View style={styles.metaItem}>
-                <Ionicons name="location-outline" size={16} color="#666" />
-                <Text style={styles.metaText} numberOfLines={1}>{item.city}</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Available Modes */}
-          <View style={styles.modesContainer}>
-            <Text style={styles.modesLabel}>Available Modes:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.modesScroll}>
-              {availableModes.map((mode, index) => (
-                <View key={index} style={styles.modeChip}>
-                  <Text style={styles.modeText}>{mode}</Text>
+        {/* Header with Image and Basic Info */}
+        <View style={styles.cardHeader}>
+          <View style={styles.imageSection}>
+            <ImageBackground source={{ uri: imageUrl }} style={styles.classImage} imageStyle={styles.classImageBorder}>
+              {/* Category Badge */}
+              {item.is_disease_specific && item.disease && (
+                <View style={styles.categoryBadge}>
+                  <Text style={styles.categoryBadgeText}>{item.disease}</Text>
                 </View>
-              ))}
-            </ScrollView>
+              )}
+            </ImageBackground>
           </View>
-
-          {/* Languages */}
-          {item.languages && (
-            <View style={styles.languagesContainer}>
-              <Ionicons name="language-outline" size={16} color="#666" />
-              <Text style={styles.languagesText}>{item.languages}</Text>
+          
+          <View style={styles.headerInfo}>
+            <Text style={styles.classTitle} numberOfLines={2}>
+              {item.title}
+            </Text>
+            <View style={styles.classMeta}>
+              <View style={styles.metaItem}>
+                <Ionicons name="time-outline" size={14} color="#6B7280" />
+                <Text style={styles.metaText}>{item.duration.replace('_', ' ')}</Text>
+              </View>
+              <View style={styles.metaItem}>
+                <Ionicons name="calendar-outline" size={14} color="#6B7280" />
+                <Text style={styles.metaText} numberOfLines={1}>{item.days}</Text>
+              </View>
             </View>
-          )}
+          </View>
         </View>
 
-        {/* Footer */}
-        <View style={styles.classFooter}>
-          <TouchableOpacity style={styles.viewButton} onPress={() => handleClassPress(item)}>
-            <Text style={styles.viewButtonText}>View Details</Text>
-            <Ionicons name="arrow-forward" size={16} color="#4CAF50" />
-          </TouchableOpacity>
+        {/* Content Section */}
+        <View style={styles.cardContent}>
+          <View style={styles.infoSection}>
+            {/* Description */}
+            <View style={styles.infoItem}>
+              <View style={[styles.infoIcon, { backgroundColor: '#008272' + '20' }]}>
+                <Ionicons name="information-circle-outline" size={16} color="#008272" />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>About</Text>
+                <Text style={styles.infoValue} numberOfLines={2}>{item.description}</Text>
+              </View>
+            </View>
+            
+            {/* Location */}
+            {(item.city || item.location) && (
+              <View style={styles.infoItem}>
+                <View style={[styles.infoIcon, { backgroundColor: '#4CAF50' + '20' }]}>
+                  <Ionicons name="location-outline" size={16} color="#4CAF50" />
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Location</Text>
+                  <Text style={styles.infoValue}>{item.city || 'Center'}</Text>
+                </View>
+              </View>
+            )}
+            
+            {/* Languages */}
+            {item.languages && (
+              <View style={styles.infoItem}>
+                <View style={[styles.infoIcon, { backgroundColor: '#FFA500' + '20' }]}>
+                  <Ionicons name="language-outline" size={16} color="#FFA500" />
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Languages</Text>
+                  <Text style={styles.infoValue}>{item.languages}</Text>
+                </View>
+              </View>
+            )}
+            
+            {/* Available Modes */}
+            <View style={styles.infoItem}>
+              <View style={[styles.infoIcon, { backgroundColor: '#9333EA' + '20' }]}>
+                <Ionicons name="grid-outline" size={16} color="#9333EA" />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Available Modes</Text>
+                <View style={styles.modesContainer}>
+                  {availableModes.slice(0, 3).map((mode, index) => (
+                    <View key={index} style={styles.modeChip}>
+                      <Text style={styles.modeText}>{mode}</Text>
+                    </View>
+                  ))}
+                  {availableModes.length > 3 && (
+                    <View style={styles.moreChip}>
+                      <Text style={styles.moreText}>+{availableModes.length - 3}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </View>
+          </View>
         </View>
+
+        {/* Footer Section - Full Button */}
+        <TouchableOpacity 
+          style={styles.cardFooterButton}
+          onPress={() => handleClassPress(item)}
+        >
+          <Text style={styles.footerButtonText}>View Details • {formatPrice(effectivePrice)}</Text>
+          <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+        </TouchableOpacity>
       </TouchableOpacity>
     );
   }, [handleClassPress, getAvailableModes, getEffectivePrice, formatPrice]);
@@ -332,11 +368,11 @@ const ClassesListScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
+      <StatusBar backgroundColor="#008272" barStyle="light-content" />
       
-      {/* Modern Header */}
-      <LinearGradient
-        colors={[appTheme.colors.primary, appTheme.colors.secondary]}
+      {/* Modern Header - Matching ProfessionalHomeHeader */}
+      <LinearGradient 
+        colors={['#008272', '#4C7360', '#2F5233']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.header}
@@ -347,7 +383,7 @@ const ClassesListScreen = () => {
             style={styles.backButton}
             activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={24} color={appTheme.colors.background.surface} />
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           
           <View style={styles.titleContainer}>
@@ -360,13 +396,9 @@ const ClassesListScreen = () => {
             style={styles.filterButton}
             activeOpacity={0.7}
           >
-            <Ionicons name="filter" size={24} color={appTheme.colors.background.surface} />
+            <Ionicons name="filter" size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
-        
-        {/* Decorative elements */}
-        <View style={styles.topCircle} />
-        <View style={styles.bottomWave} />
       </LinearGradient>
 
       {/* Main Content */}
@@ -502,17 +534,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.primary 
   },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { 
-    paddingTop: 50,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+  header: {
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
   },
   headerContent: {
     flexDirection: 'row',
@@ -520,52 +544,36 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   backButton: {
-    padding: 8,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: theme.borderRadius.s,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   titleContainer: {
     flex: 1,
     alignItems: 'center',
   },
-  headerTitle: { 
-    color: theme.colors.background.surface, 
-    fontSize: 20, 
+  headerTitle: {
+    fontSize: 20,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    color: '#FFFFFF',
+    letterSpacing: 1,
   },
   headerSubtitle: {
-    color: theme.colors.background.surface,
+    color: '#FFFFFF',
     fontSize: 14,
     opacity: 0.8,
     marginTop: 2,
   },
   filterButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: theme.borderRadius.s,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  topCircle: {
-    position: 'absolute',
-    top: -50,
-    right: -50,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  bottomWave: {
-    position: 'absolute',
-    bottom: -20,
-    left: -50,
-    right: -50,
-    height: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
   },
   activeFiltersContainer: {
     backgroundColor: theme.colors.background.surface,
@@ -757,137 +765,261 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
-  // Class card styles (matching appointment cards)
+  // Modern Card Styles matching ProfessionalHomeScreen stats cards
   classCard: {
     backgroundColor: theme.colors.background.surface,
     marginBottom: 16,
-    borderRadius: theme.borderRadius.l,
-    padding: 16,
-    elevation: 3,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    borderLeftWidth: 5,
-    borderLeftColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    overflow: 'hidden',
+  },
+  
+  // Header Section
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  imageSection: {
+    marginRight: 16,
+    position: 'relative',
   },
   classImage: {
-    height: 150,
-    borderRadius: 8,
-    marginBottom: 12,
+    width: 80,
+    height: 80,
+    borderRadius: 12,
   },
   classImageBorder: {
-    borderRadius: 8,
+    borderRadius: 12,
   },
   imageOverlay: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 12,
+    padding: 8,
   },
   priceBadge: {
-    alignSelf: 'flex-start',
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4,
+    borderRadius: 8,
   },
   priceText: {
-    color: '#fff',
-    fontSize: 14,
+    color: '#FFFFFF',
+    fontSize: 12,
     fontWeight: '700',
   },
   categoryBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#FF6B6B',
+    backgroundColor: theme.colors.primary,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4,
+    borderRadius: 8,
   },
   categoryBadgeText: {
-    color: '#fff',
-    fontSize: 12,
+    color: '#FFFFFF',
+    fontSize: 10,
     fontWeight: '600',
   },
-  classContent: {
+  availableBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    zIndex: 10,
+  },
+  headerInfo: {
     flex: 1,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
   },
   classTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: theme.colors.text.primary,
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  classDescription: {
-    fontSize: 14,
-    color: theme.colors.text.secondary,
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  metaContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 12,
+  classMeta: {
+    alignItems: 'flex-start',
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 16,
-    marginBottom: 8,
+    marginBottom: 2,
   },
   metaText: {
     fontSize: 12,
-    color: '#666',
+    color: '#6B7280',
     marginLeft: 4,
   },
-  modesContainer: {
-    marginBottom: 12,
+  
+  // Content Section
+  cardContent: {
+    marginBottom: 16,
+    paddingHorizontal: 16,
   },
-  modesLabel: {
+  infoSection: {
+    gap: 12,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+    padding: 12,
+  },
+  infoIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  infoContent: {
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  infoValue: {
+    fontSize: 14,
+    color: theme.colors.text.primary,
+    fontWeight: '500',
+  },
+  
+  // Footer Section - Full Button
+  cardFooterButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 16,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.background.secondary,
+    backgroundColor: theme.colors.primary,
+    gap: 8,
+  },
+  footerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  statusSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusIndicator: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#10B981',
+  },
+  actionSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  priceSection: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    marginRight: 12,
+    backgroundColor: theme.colors.primary + '10',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.primary + '30',
+  },
+  footerPrice: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.colors.primary,
+    marginBottom: 2,
+  },
+  footerLabel: {
+    fontSize: 12,
+    color: theme.colors.text.secondary,
+    fontWeight: '500',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  bookButton: {
+    backgroundColor: theme.colors.primary,
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.text.primary,
-    marginBottom: 8,
   },
-  modesScroll: {
+  
+  // Mode chips (keep existing)
+  modesContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
   },
   modeChip: {
-    backgroundColor: theme.colors.primary + '20',
+    backgroundColor: theme.colors.primary + '15',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    marginRight: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.primary + '30',
   },
   modeText: {
-    fontSize: 12,
+    fontSize: 11,
     color: theme.colors.primary,
-    fontWeight: '600',
+    fontWeight: '500',
   },
-  languagesContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
+  moreChip: {
+    backgroundColor: theme.colors.background.secondary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
-  languagesText: {
-    fontSize: 12,
-    color: '#666',
-    marginLeft: 4,
-  },
-  classFooter: {
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    paddingTop: 12,
-  },
-  viewButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  viewButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4CAF50',
-    marginRight: 8,
+  moreText: {
+    fontSize: 11,
+    color: theme.colors.text.secondary,
+    fontWeight: '500',
   },
 });
 

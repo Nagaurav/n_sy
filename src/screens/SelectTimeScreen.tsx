@@ -5,19 +5,31 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  SectionList,
-  Platform,
-  StatusBar,
-  Alert,
   ScrollView,
   Dimensions,
   Animated,
   SafeAreaView,
   RefreshControl,
+  StatusBar,
+  Alert,
+  TouchableWithoutFeedback,
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp, CommonActions } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { format, parseISO, isToday, isTomorrow, isThisWeek } from 'date-fns';
+import { 
+  format, 
+  parseISO, 
+  isToday, 
+  isTomorrow, 
+  startOfMonth, 
+  endOfMonth, 
+  eachDayOfInterval, 
+  addMonths, 
+  subMonths,
+  isSameMonth,
+  isSameDay,
+  getDay,
+} from 'date-fns';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 
@@ -28,7 +40,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useAppSelector } from '../store';
 import { theme } from '../theme';
 import { useTheme } from '../contexts/ThemeContext';
-import { AvailableSlot, FormattedAvailableSlot, SectionData } from '../types/booking';
+import { AvailableSlot, FormattedAvailableSlot } from '../types/booking';
 
 type SelectTimeRouteProp = RouteProp<RootStackParamList, 'SelectTime'>;
 type SelectTimeNavigationProp = StackNavigationProp<RootStackParamList, 'SelectTime'>;
@@ -36,7 +48,7 @@ type SelectTimeNavigationProp = StackNavigationProp<RootStackParamList, 'SelectT
 const { width, height } = Dimensions.get('window');
 
 const SelectTimeScreen: React.FC = () => {
-  console.log('🚀 SelectTimeScreen MOUNTED - Redesigned UI');
+  console.log('🚀 SelectTimeScreen MOUNTED - Modern UI');
   
   const navigation = useNavigation<SelectTimeNavigationProp>();
   const route = useRoute<SelectTimeRouteProp>();
@@ -50,26 +62,25 @@ const SelectTimeScreen: React.FC = () => {
     serviceDetails
   });
 
-  // Performance optimization: Limit initial load
-  const MAX_INITIAL_DATES = 7; // Load max 7 dates initially
-  const LOAD_MORE_THRESHOLD = 3; // Load more when user scrolls near bottom
-
-  const [sectionedSlots, setSectionedSlots] = useState<SectionData[]>([]);
+  // State management
+  const [allSlots, setAllSlots] = useState<FormattedAvailableSlot[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<FormattedAvailableSlot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [priceDetails, setPriceDetails] = useState<any>(null);
   const [isPriceLoading, setIsPriceLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [displayedDates, setDisplayedDates] = useState<number>(MAX_INITIAL_DATES);
-  const [allSlotsLoaded, setAllSlotsLoaded] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [availableDates, setAvailableDates] = useState<Set<Date>>(new Set());
+  const [selectedDuration, setSelectedDuration] = useState<number | null>(null); // For duration filtering
+  const [showDurationDropdown, setShowDurationDropdown] = useState(false); // For dropdown visibility
 
   const { user } = useAppSelector((state: any) => state.auth);
   const userId = user?.user_id || user?._id || user?.id;
 
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
   // --- HELPER FUNCTIONS ---
   const formatTime = (dateString: string) => {
@@ -95,36 +106,11 @@ const SelectTimeScreen: React.FC = () => {
     } catch { return 0; }
   };
 
-  const formatDateLabel = (dateString: string) => {
-    try {
-      const date = parseISO(dateString);
-      const now = new Date();
-      
-      // Check if date is in the past
-      if (date < now && !isToday(date)) {
-        return format(date, 'MMM d (Past)');
-      }
-      
-      if (isToday(date)) return 'Today';
-      if (isTomorrow(date)) return 'Tomorrow';
-      
-      // Check if within this week
-      const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      if (date <= weekFromNow) {
-        return format(date, 'EEEE');
-      }
-      
-      // For dates further in the future, show full date
-      return format(date, 'MMM d, yyyy');
-    } catch (error) {
-      console.warn('Date formatting error:', error);
-      return dateString;
-    }
+  const formatDateLabel = (date: Date) => {
+    if (isToday(date)) return 'Today';
+    if (isTomorrow(date)) return 'Tomorrow';
+    return format(date, 'MMM d');
   };
-
-  const loadMoreDates = useCallback(() => {
-    setDisplayedDates(prev => Math.min(prev + LOAD_MORE_THRESHOLD, sectionedSlots.length));
-  }, [sectionedSlots.length]);
 
   const animateIn = useCallback(() => {
     Animated.parallel([
@@ -151,47 +137,35 @@ const SelectTimeScreen: React.FC = () => {
       const slots = await apiService.getAllAvailableSlots(professionalId);
       
       if (!slots || !slots.data || !Array.isArray(slots.data) || slots.data.length === 0) {
-        setSectionedSlots([]);
+        setAllSlots([]);
         setError('No available time slots found.');
         return;
       }
 
-      const groupedSlots = (slots.data as AvailableSlot[]).reduce<SectionData[]>((acc, slot) => {
-        const dateKey = slot.date.substring(0, 10);
-        const slotDate = parseISO(dateKey);
-        const now = new Date();
-        
-        // Filter out past dates (only keep today and future dates)
-        if (slotDate < now && !isToday(slotDate)) {
-          return acc; // Skip past dates
-        }
-        
-        const formattedSlot: FormattedAvailableSlot = {
-          ...slot,
-          displayStartTime: formatTime(slot.start_time),
-          displayEndTime: formatTime(slot.end_time),
-          isSelected: false
-        };
+      const formattedSlots = (slots.data as AvailableSlot[]).map(slot => ({
+        ...slot,
+        displayStartTime: formatTime(slot.start_time),
+        displayEndTime: formatTime(slot.end_time),
+      }));
 
-        let section = acc.find((sec) => sec.title === dateKey);
-        if (!section) {
-          section = { 
-            title: dateKey, 
-            data: [],
-            formattedDate: format(parseISO(dateKey), 'EEEE, MMMM d, yyyy'),
-            dateLabel: formatDateLabel(dateKey)
-          };
-          acc.push(section);
-        }
-        section.data.push(formattedSlot);
-        return acc;
-      }, []);
+      // Filter out past dates and extract available dates
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      
+      const futureSlots = formattedSlots.filter(slot => {
+        const slotDate = parseISO(slot.date);
+        return slotDate >= now;
+      });
 
-      // Sort by date (closest dates first)
-      groupedSlots.sort((a, b) => new Date(a.title).getTime() - new Date(b.title).getTime());
-      groupedSlots.forEach(s => s.data.sort((a, b) => a.start_time.localeCompare(b.start_time)));
+      // Extract unique available dates
+      const dates = new Set<string>();
+      futureSlots.forEach(slot => {
+        const slotDate = parseISO(slot.date);
+        dates.add(format(slotDate, 'yyyy-MM-dd'));
+      });
 
-      setSectionedSlots(groupedSlots);
+      setAllSlots(futureSlots);
+      setAvailableDates(new Set(Array.from(dates).map(d => parseISO(d))));
       animateIn();
     } catch (err: any) {
       console.error('Error:', err);
@@ -219,6 +193,13 @@ const SelectTimeScreen: React.FC = () => {
     fetchAvailableSlots();
   }, [professionalId, fetchAvailableSlots]);
 
+  // --- HANDLERS ---
+  const handleDateSelect = (date: Date) => {
+    setSelectedDate(date);
+    setSelectedSlot(null);
+    setPriceDetails(null);
+  };
+
   const handleSlotSelect = (slot: FormattedAvailableSlot) => {
     if (selectedSlot?.id === slot.id) {
       setSelectedSlot(null);
@@ -229,47 +210,192 @@ const SelectTimeScreen: React.FC = () => {
     }
   };
 
+  const handleMonthChange = (direction: 'prev' | 'next') => {
+    setCurrentMonth(prev => 
+      direction === 'prev' ? subMonths(prev, 1) : addMonths(prev, 1)
+    );
+  };
+
   const handleConfirm = () => {
-    if (!selectedSlot || !serviceDetails) return;
-    const duration = getSlotDuration(selectedSlot.start_time, selectedSlot.end_time);
+    if (!selectedSlot || !selectedDate || !serviceDetails) return;
     
-    console.log('🚀 SelectTimeScreen: Attempting to navigate to BookingConfirmation');
+    const bookingData = {
+      professionalId,
+      professionalName,
+      serviceName: serviceDetails.name,
+      price: priceDetails?.final_amount || 0,
+      date: format(selectedDate, 'yyyy-MM-dd'),
+      startTime: selectedSlot.start_time,
+      endTime: selectedSlot.end_time,
+      duration: getSlotDuration(selectedSlot.start_time, selectedSlot.end_time),
+      slotId: selectedSlot.id,
+      serviceType: 'consultation',
+      deliveryMode: selectedSlot.is_online ? 'online' : 'offline',
+    };
+
+    navigation.navigate('BookingConfirmationScreen' as any, { bookingData });
+  };
+
+  // --- CALENDAR LOGIC ---
+  const getDaysInMonth = () => {
+    const start = startOfMonth(currentMonth);
+    const end = endOfMonth(currentMonth);
+    const days = eachDayOfInterval({ start, end });
     
-    try {
-      const rootNav = navigation;
-      
-      if (rootNav) {
-        (rootNav as any).navigate('MainDrawer', {
-          screen: 'HomeStack',
-          params: {
-            screen: 'BookingConfirmation',
-            params: {
-              bookingData: {
-                professionalId,
-                professionalName,
-                slotId: selectedSlot.id, // Fixed: slotId instead of slot_id
-                slot_id: selectedSlot.id, // Keep both for backward compatibility
-                date: selectedSlot.date,
-                startTime: selectedSlot.start_time,
-                endTime: selectedSlot.end_time,
-                duration,
-                price: priceDetails?.final_amount || 0,
-                isOnline: selectedSlot.is_online,
-                serviceType: 'consultation',
-                serviceDetails: { ...serviceDetails, price: priceDetails?.final_amount || 0 }
-              }
-            }
-          }
-        });
-        console.log('✅ SelectTimeScreen: Navigation called successfully');
-      } else {
-        console.log('❌ No root navigation found');
-        throw new Error('No navigation available');
-      }
-    } catch (error) {
-      console.error('❌ SelectTimeScreen: Navigation error:', error);
-      Alert.alert('Error', 'Unable to proceed with booking confirmation. Please try again.');
+    // Add empty days for alignment
+    const startDay = getDay(startOfMonth(currentMonth));
+    const emptyDays = Array(startDay).fill(null);
+    
+    return [...emptyDays, ...days];
+  };
+
+  const getSlotsForDate = (date: Date) => {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    return allSlots.filter(slot => slot.date.startsWith(dateStr));
+  };
+
+  const isDateAvailable = (date: Date) => {
+    return Array.from(availableDates).some(availableDate => 
+      isSameDay(date, availableDate)
+    );
+  };
+
+  // --- DURATION FILTER LOGIC ---
+  const getAvailableDurations = () => {
+    const durations = new Set<number>();
+    selectedDateSlots.forEach(slot => {
+      const duration = getSlotDuration(slot.start_time, slot.end_time);
+      if (duration > 0) durations.add(duration);
+    });
+    return Array.from(durations).sort((a, b) => a - b);
+  };
+
+  const handleDurationSelect = (duration: number | null) => {
+    setSelectedDuration(duration);
+    setShowDurationDropdown(false);
+  };
+
+  const toggleDropdown = () => {
+    setShowDurationDropdown(!showDurationDropdown);
+  };
+
+  const getFilteredTimeSlots = () => {
+    if (!selectedDuration) return selectedDateSlots;
+    return selectedDateSlots.filter(slot => {
+      const duration = getSlotDuration(slot.start_time, slot.end_time);
+      return duration === selectedDuration;
+    });
+  };
+
+  // --- RENDER COMPONENTS ---
+  const renderCalendarDay = (day: Date | null, index: number) => {
+    if (!day) {
+      return <View key={`empty-${index}`} style={styles.emptyDay} />;
     }
+
+    const isSelected = selectedDate && isSameDay(day, selectedDate);
+    const isAvailable = isDateAvailable(day);
+    const isCurrentMonth = isSameMonth(day, currentMonth);
+    const isTodayDate = isToday(day);
+    const isPast = day < new Date() && !isTodayDate;
+
+    return (
+      <TouchableOpacity
+        key={day.toISOString()}
+        style={[
+          styles.calendarDay,
+          isSelected && styles.selectedCalendarDay,
+          isAvailable && !isPast && styles.availableCalendarDay,
+          isTodayDate && styles.todayCalendarDay,
+          !isCurrentMonth && styles.otherMonthDay,
+          isPast && styles.pastDay
+        ]}
+        onPress={() => isAvailable && !isPast && handleDateSelect(day)}
+        disabled={!isAvailable || isPast}
+        activeOpacity={0.7}
+      >
+        <Text style={[
+          styles.calendarDayText,
+          isSelected && styles.selectedCalendarDayText,
+          isAvailable && !isPast && styles.availableCalendarDayText,
+          !isCurrentMonth && styles.otherMonthDayText,
+          isPast && styles.pastDayText
+        ]}>
+          {format(day, 'd')}
+        </Text>
+        {isAvailable && !isPast && (
+          <View style={[
+            styles.availableDot,
+            isSelected && styles.selectedAvailableDot
+          ]} />
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderTimeSlot = (slot: FormattedAvailableSlot) => {
+    const isSelected = selectedSlot?.id === slot.id;
+    const duration = getSlotDuration(slot.start_time, slot.end_time);
+
+    return (
+      <TouchableOpacity
+        key={slot.id}
+        style={[
+          styles.timeSlotCard,
+          isSelected && styles.selectedTimeSlotCard,
+          slot.is_online && styles.onlineTimeSlotCard
+        ]}
+        onPress={() => handleSlotSelect(slot)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.timeSlotContent}>
+          <View style={styles.timeSlotHeader}>
+            <Text style={[
+              styles.timeSlotTime,
+              isSelected && styles.selectedTimeSlotText
+            ]}>
+              {slot.displayStartTime}
+            </Text>
+            <View style={styles.timeSlotHeaderRight}>
+              {slot.is_online && (
+                <View style={[
+                  styles.onlineBadge,
+                  isSelected && styles.selectedOnlineBadge
+                ]}>
+                  <Ionicons name="videocam" size={12} color={isSelected ? theme.colors.primary : "#fff"} />
+                  <Text style={[
+                    styles.onlineBadgeText,
+                    isSelected && styles.selectedOnlineBadgeText
+                  ]}>Online</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          
+          <View style={styles.timeSlotFooter}>
+            <Text style={[
+              styles.timeSlotDuration,
+              isSelected && styles.selectedTimeSlotDuration
+            ]}>
+              {duration} min
+            </Text>
+            <View style={styles.timeSlotPriceContainer}>
+              <Text style={[
+                styles.timeSlotPrice,
+                isSelected && styles.selectedTimeSlotPrice
+              ]}>
+                ₹{duration * 10}
+              </Text>
+              {isSelected && (
+                <View style={styles.selectedIndicator}>
+                  <Ionicons name="checkmark" size={16} color="#fff" />
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   // --- RENDER ---
@@ -285,16 +411,14 @@ const SelectTimeScreen: React.FC = () => {
         >
           <View style={styles.headerContent}>
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-              <Ionicons name="arrow-back" size={24} color={appTheme.colors.background.surface} />
+              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.titleContainer}>
               <Text style={styles.headerTitle}>Select Time Slot</Text>
               <Text style={styles.headerSubtitle}>Choose your preferred time</Text>
             </View>
-            <View style={styles.headerButton} />
+            <View style={styles.shareButton} />
           </View>
-          <View style={styles.topCircle} />
-          <View style={styles.bottomWave} />
         </LinearGradient>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={appTheme.colors.primary} />
@@ -316,16 +440,14 @@ const SelectTimeScreen: React.FC = () => {
         >
           <View style={styles.headerContent}>
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-              <Ionicons name="arrow-back" size={24} color={appTheme.colors.background.surface} />
+              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.titleContainer}>
               <Text style={styles.headerTitle}>Select Time Slot</Text>
               <Text style={styles.headerSubtitle}>Choose your preferred time</Text>
             </View>
-            <View style={styles.headerButton} />
+            <View style={styles.shareButton} />
           </View>
-          <View style={styles.topCircle} />
-          <View style={styles.bottomWave} />
         </LinearGradient>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={appTheme.colors.error} />
@@ -338,31 +460,28 @@ const SelectTimeScreen: React.FC = () => {
     );
   }
 
+  const selectedDateSlots = selectedDate ? getSlotsForDate(selectedDate) : [];
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={appTheme.colors.primary} />
+      <StatusBar barStyle="light-content" backgroundColor="#008272" />
       
-      {/* Consistent Header */}
+      {/* Header */}
       <LinearGradient
-        colors={[appTheme.colors.primary, appTheme.colors.secondary]}
+        colors={['#008272', '#4C7360', '#2F5233']}
         style={styles.header}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
         <View style={styles.headerContent}>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color={appTheme.colors.background.surface} />
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.titleContainer}>
             <Text style={styles.headerTitle}>Select Time Slot</Text>
             <Text style={styles.headerSubtitle}>Choose your preferred time</Text>
           </View>
-          <View style={styles.headerButton} />
         </View>
-        
-        {/* Decorative elements */}
-        <View style={styles.topCircle} />
-        <View style={styles.bottomWave} />
       </LinearGradient>
 
       {/* Content */}
@@ -376,104 +495,158 @@ const SelectTimeScreen: React.FC = () => {
           }
         >
           {/* Professional Info Card */}
-          <View style={[styles.card, { borderLeftColor: appTheme.colors.primary, borderLeftWidth: 5 }]}>
-            <View style={styles.cardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>{professionalName}</Text>
-                <Text style={styles.sub}>{serviceDetails?.name || 'Consultation'}</Text>
+          <View style={[styles.professionalCard, styles.firstCard]}>
+            <View style={styles.professionalCardContent}>
+              <View style={styles.professionalIconContainer}>
+                <Ionicons name="person" size={24} color="#FFFFFF" />
               </View>
-              <View style={[styles.typeBadge, { backgroundColor: appTheme.colors.primary + '20' }]}>
-                <Ionicons name="person" size={14} color={appTheme.colors.primary} />
-                <Text style={[styles.typeText, { color: appTheme.colors.primary }]}>PRO</Text>
+              
+              <View style={styles.professionalTextContainer}>
+                <Text style={styles.professionalTitle}>{professionalName}</Text>
+                <Text style={styles.professionalSubtitle}>{serviceDetails?.name || 'Consultation'}</Text>
+              </View>
+              
+              <View style={styles.professionalArrowContainer}>
+                <Ionicons name="arrow-forward" size={20} color={appTheme.colors.text.secondary} />
               </View>
             </View>
           </View>
 
-          {/* Instructions Card */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="calendar-outline" size={24} color={appTheme.colors.primary} />
-              <Text style={styles.sectionTitle}>Select Your Preferred Time</Text>
+          {/* Calendar Card */}
+          <View style={[styles.professionalCard, styles.calendarCard]}>
+            <View style={styles.professionalCardContent}>
+              <View style={styles.calendarIconContainer}>
+                <Ionicons name="calendar" size={24} color="#FFFFFF" />
+              </View>
+              
+              <View style={styles.professionalTextContainer}>
+                <Text style={styles.professionalTitle}>Select Date</Text>
+                <Text style={styles.professionalSubtitle}>Choose an available date</Text>
+              </View>
             </View>
-            <Text style={styles.aboutText}>
-              Choose a time slot that works best for your schedule. Available slots are shown below.
-            </Text>
+
+            {/* Calendar Content */}
+            <View style={styles.calendarContent}>
+            {/* Month Navigation */}
+            <View style={styles.monthNavigation}>
+              <TouchableOpacity 
+                style={styles.monthNavButton} 
+                onPress={() => handleMonthChange('prev')}
+              >
+                <Ionicons name="chevron-back" size={20} color={appTheme.colors.primary} />
+              </TouchableOpacity>
+              
+              <Text style={styles.monthTitle}>
+                {format(currentMonth, 'MMMM yyyy')}
+              </Text>
+              
+              <TouchableOpacity 
+                style={styles.monthNavButton} 
+                onPress={() => handleMonthChange('next')}
+              >
+                <Ionicons name="chevron-forward" size={20} color={appTheme.colors.primary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Calendar Grid */}
+            <View style={styles.calendarGrid}>
+              {/* Day headers */}
+              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day, index) => (
+                <Text key={index} style={styles.dayHeader}>
+                  {day}
+                </Text>
+              ))}
+              
+              {/* Calendar days */}
+              {getDaysInMonth().map((day, index) => renderCalendarDay(day, index))}
+            </View>
+
+            {/* Selected Date Info */}
+            {selectedDate && (
+              <View style={styles.selectedDateInfo}>
+                <Text style={styles.selectedDateText}>
+                  {formatDateLabel(selectedDate)}
+                </Text>
+                <Text style={styles.selectedDateSlots}>
+                  {selectedDateSlots.length} time slots available
+                </Text>
+              </View>
+            )}
+            </View>
           </View>
 
-          {/* Time Slots */}
-          <View style={styles.compactSlotsContainer}>
-            {sectionedSlots.slice(0, displayedDates).map((section) => {
-              if (!section) return null;
-              return (
-                <View key={section.title} style={styles.compactDaySection}>
-                  {/* Date Header */}
-                  <View style={styles.compactDateHeader}>
-                    <Text style={[
-                      styles.compactDateLabel,
-                      section.dateLabel?.includes('(Past)') && styles.pastDateLabel
-                    ]}>
-                      {section.dateLabel || section.formattedDate?.split(',')[0]}
-                    </Text>
-                    <Text style={styles.compactDateCount}>
-                      {section.data?.length || 0} slots
-                    </Text>
-                  </View>
-                  
-                  {/* Time Slots Grid */}
-                  <View style={styles.compactSlotsGrid}>
-                    {(selectedDate === section.title ? section.data : section.data.slice(0, 4)).map((item, index) => (
-                      <TouchableOpacity
-                        key={item.id}
-                        style={[
-                          styles.compactTimeSlot,
-                          selectedSlot?.id === item.id && styles.selectedCompactSlot,
-                          item.is_online && styles.onlineCompactSlot
-                        ]}
-                        onPress={() => handleSlotSelect(item)}
-                        activeOpacity={0.9}
-                      >
-                        <View style={styles.compactSlotContent}>
-                          <Text style={[
-                            styles.compactTimeText,
-                            selectedSlot?.id === item.id && styles.selectedCompactSlotText
-                          ]}>
-                            {item.displayStartTime}
-                          </Text>
-                          <Text style={styles.compactDuration}>{getSlotDuration(item.start_time, item.end_time)}min</Text>
-                        </View>
-                        {item.is_online && (
-                          <View style={styles.compactOnlineBadge}>
-                            <Ionicons name="videocam" size={8} color="#fff" />
-                          </View>
-                        )}
-                        {selectedSlot?.id === item.id && (
-                          <View style={styles.compactSelectedIndicator}>
-                            <Ionicons name="checkmark" size={12} color="#fff" />
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                    {section.data.length > 4 && (
-                      <TouchableOpacity 
-                        style={[
-                          styles.showMoreButton,
-                          selectedDate === section.title && styles.showMoreButtonActive
-                        ]}
-                        onPress={() => setSelectedDate(selectedDate === section.title ? null : section.title)}
-                      >
-                        <Text style={[
-                          styles.showMoreText,
-                          selectedDate === section.title && styles.showMoreTextActive
-                        ]}>
-                          {selectedDate === section.title ? `Show less` : `+${section.data.length - 4} more`}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
+          {/* Time Slots Card */}
+          {selectedDate && (
+            <View style={[styles.professionalCard, styles.timeSlotsCard]}>
+              <View style={styles.professionalCardContent}>
+                <View style={styles.timeIconContainer}>
+                  <Ionicons name="time-outline" size={24} color="#FFFFFF" />
                 </View>
-              );
-            })}
-          </View>
+                
+                <View style={styles.professionalTextContainer}>
+                  <Text style={styles.professionalTitle}>Select Time</Text>
+                  <Text style={styles.professionalSubtitle}>Choose your preferred time slot</Text>
+                </View>
+                
+                <TouchableOpacity 
+                  style={styles.moreButton}
+                  onPress={toggleDropdown}
+                >
+                  <Ionicons 
+                    name="ellipsis-vertical" 
+                    size={20} 
+                    color={appTheme.colors.primary} 
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Duration Dropdown */}
+              {showDurationDropdown && (
+                <View style={styles.durationDropdown}>
+                  <TouchableOpacity 
+                    style={styles.dropdownItem}
+                    onPress={() => handleDurationSelect(null)}
+                  >
+                    <Text style={styles.dropdownText}>All Durations</Text>
+                    {selectedDuration === null && (
+                      <Ionicons name="checkmark" size={16} color={appTheme.colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                  {getAvailableDurations().map(duration => (
+                    <TouchableOpacity 
+                      key={duration}
+                      style={styles.dropdownItem}
+                      onPress={() => handleDurationSelect(duration)}
+                    >
+                      <Text style={styles.dropdownText}>{duration} min</Text>
+                      {selectedDuration === duration && (
+                        <Ionicons name="checkmark" size={16} color={appTheme.colors.primary} />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {/* Time Slots Content */}
+              <View style={styles.calendarContent}>
+              {getFilteredTimeSlots().length > 0 ? (
+                <View style={styles.timeSlotsGrid}>
+                  {getFilteredTimeSlots().map(renderTimeSlot)}
+                </View>
+              ) : (
+                <View style={styles.noSlotsContainer}>
+                  <Ionicons name="time-off-outline" size={48} color={appTheme.colors.text.secondary} />
+                  <Text style={styles.noSlotsText}>
+                    {selectedDuration ? `No ${selectedDuration}min slots available` : 'No time slots available'}
+                  </Text>
+                  <Text style={styles.noSlotsSubText}>
+                    {selectedDuration ? 'Try a different duration' : 'Please select a different date'}
+                  </Text>
+                </View>
+              )}
+              </View>
+            </View>
+          )}
 
           {/* Bottom spacing */}
           <View style={styles.bottomSpacing} />
@@ -530,7 +703,7 @@ const SelectTimeScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: theme.colors.background.primary 
+    backgroundColor: '#F5F2ED'
   },
   loadingContainer: {
     flex: 1,
@@ -569,18 +742,268 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Consistent Header Styles (matching ProfessionalProfileScreen)
-  header: { 
-    paddingTop: 40,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+  // Calendar Styles
+  calendarCard: {
+    paddingBottom: 0, // Remove padding since content is now in the card header
+  },
+  monthNavigation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  monthNavButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  dayHeader: {
+    width: '14.28%',
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.text.secondary,
+    marginBottom: 8,
+  },
+  emptyDay: {
+    width: '14.28%',
+    height: 40,
+    marginBottom: 4,
+  },
+  calendarDay: {
+    width: '14.28%',
+    height: 40,
+    borderRadius: 20,
+    marginBottom: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  selectedCalendarDay: {
+    backgroundColor: theme.colors.primary,
+  },
+  availableCalendarDay: {
+    backgroundColor: theme.colors.primary + '15',
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  todayCalendarDay: {
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+  },
+  otherMonthDay: {
+    opacity: 0.3,
+  },
+  pastDay: {
+    opacity: 0.3,
+  },
+  calendarDayText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme.colors.text.primary,
+  },
+  selectedCalendarDayText: {
+    color: '#fff',
+  },
+  availableCalendarDayText: {
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  otherMonthDayText: {
+    color: theme.colors.text.secondary,
+  },
+  pastDayText: {
+    color: theme.colors.text.secondary,
+  },
+  availableDot: {
+    position: 'absolute',
+    bottom: 2,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.colors.primary,
+  },
+  selectedAvailableDot: {
+    backgroundColor: '#fff',
+  },
+  selectedDateInfo: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.background.secondary,
+  },
+  selectedDateText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  selectedDateSlots: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
+  },
+
+  // Time Slots Styles
+  timeSlotsCard: {
+    paddingBottom: 0, // Remove padding since content is now in the card header
+  },
+  calendarContent: {
+    padding: theme.spacing.l,
+    paddingTop: 0, // No top padding since header already has padding
+  },
+  timeSlotsGrid: {
+    gap: 12,
+  },
+  timeSlotCard: {
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.background.secondary,
+    padding: 8,
+  },
+  selectedTimeSlotCard: {
+    backgroundColor: theme.colors.background.primary,
+    borderColor: theme.colors.primary,
+    borderWidth: 2,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  onlineTimeSlotCard: {
+    borderColor: theme.colors.primary,
+    borderWidth: 2,
+  },
+  timeSlotContent: {
+    flexDirection: 'column',
+    padding: 4,
+    gap: 6,
+  },
+  timeSlotHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  timeSlotHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timeSlotFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  timeSlotPriceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timeSlotTime: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+  },
+  selectedTimeSlotText: {
+    color: theme.colors.primary,
+  },
+  timeSlotDuration: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: theme.colors.text.secondary,
+  },
+  selectedTimeSlotDuration: {
+    color: theme.colors.primary,
+  },
+  timeSlotPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+  },
+  selectedTimeSlotPrice: {
+    color: theme.colors.primary,
+    fontWeight: '700',
+  },
+  onlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  selectedOnlineBadge: {
+    backgroundColor: '#fff',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  onlineBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+    marginLeft: 4,
+  },
+  selectedOnlineBadgeText: {
+    color: theme.colors.primary,
+  },
+  selectedIndicator: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  noSlotsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noSlotsText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.secondary,
+    marginTop: 16,
+  },
+  noSlotsSubText: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    marginTop: 4,
+  },
+
+  // Consistent Header Styles (matching ProfessionalHomeHeader)
+  header: { 
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
   },
   headerContent: {
     flexDirection: 'row',
@@ -588,26 +1011,33 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   backButton: {
-    padding: 8,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: theme.borderRadius.s,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerButton: {
-    padding: 8,
-    borderRadius: 20,
+  shareButton: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.borderRadius.s,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   titleContainer: {
     flex: 1,
     alignItems: 'center',
   },
   headerTitle: { 
-    color: theme.colors.background.surface, 
+    color: '#FFFFFF', 
     fontSize: 20, 
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 1,
   },
   headerSubtitle: {
-    color: theme.colors.background.surface,
+    color: '#FFFFFF',
     fontSize: 14,
     opacity: 0.8,
     marginTop: 2,
@@ -637,6 +1067,7 @@ const styles = StyleSheet.create({
   scrollViewContent: { 
     flexGrow: 1, 
     padding: 16,
+    paddingTop: 24, // Added extra top margin
     paddingBottom: 140 // Add padding for footer height
   },
   card: { 
@@ -649,6 +1080,123 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+  },
+  firstCard: {
+    marginTop: 8, // Extra margin for the first card
+  },
+
+  // Professional Card Styles (matching ProfessionalHomeScreen)
+  professionalCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#008272',
+    borderRadius: theme.borderRadius.m,
+    marginBottom: theme.spacing.m,
+    ...theme.shadows.card,
+  },
+  professionalCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: theme.spacing.l,
+    justifyContent: 'space-between',
+  },
+  professionalIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: theme.borderRadius.m,
+    backgroundColor: '#008272',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: theme.spacing.m,
+  },
+  professionalTextContainer: {
+    flex: 1,
+  },
+  professionalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.xs,
+  },
+  professionalSubtitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: theme.colors.text.secondary,
+  },
+  professionalArrowContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: theme.borderRadius.s,
+    backgroundColor: '#F5F2ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: theme.borderRadius.m,
+    backgroundColor: '#008272',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: theme.spacing.m,
+  },
+  timeIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: theme.borderRadius.m,
+    backgroundColor: '#008272',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: theme.spacing.m,
+  },
+  filterButton: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.borderRadius.s,
+    backgroundColor: '#F5F2ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterButtonActive: {
+    backgroundColor: theme.colors.primary + '20',
+  },
+  moreButton: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.borderRadius.s,
+    backgroundColor: '#F5F2ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  durationDropdown: {
+    position: 'absolute',
+    top: 60,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: theme.borderRadius.m,
+    borderWidth: 1,
+    borderColor: theme.colors.background.secondary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    zIndex: 1000,
+    minWidth: 120,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.spacing.m,
+    paddingVertical: theme.spacing.s,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.background.secondary,
+  },
+  dropdownText: {
+    fontSize: 14,
+    color: theme.colors.text.primary,
+    fontWeight: '500',
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#eee' },
@@ -748,7 +1296,8 @@ const styles = StyleSheet.create({
     color: theme.colors.text.secondary,
     textAlign: 'center',
   },
-  // Remove old compact slots styles that are duplicated
+
+  // Legacy Styles (keep for compatibility)
   compactSlotsContainer: {
     gap: 20,
   },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,255 +10,212 @@ import {
   Platform as RNPlatform,
   ViewStyle,
   TextStyle,
-  ImageStyle,
   ActivityIndicator,
   ScrollView,
   Alert,
   StatusBar,
   PermissionsAndroid,
-  Image,
-  Pressable,
   Animated,
+  Pressable,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import LinearGradient from 'react-native-linear-gradient';
 import Geolocation from '@react-native-community/geolocation';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { theme } from '../theme';
+import { theme, commonStyles } from '../theme';
 import { authService } from '../services';
 import { RootStackParamList } from '../../App';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
 import { FloatingLabelInput } from '../components/FloatingLabelInput';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import Geocoder from 'react-native-geocoding';
 
 type Gender = 'male' | 'female' | 'other' | '';
-
-type LocationError = {
-  code: number;
-  message: string;
-};
 
 type Styles = {
   container: ViewStyle;
   header: ViewStyle;
-  logoImage: ImageStyle;
-  headerTitle: TextStyle;
+  headerContent: ViewStyle;
+  backButton: ViewStyle;
+  titleContainer: ViewStyle;
+  appTitle: TextStyle;
+  contentContainer: ViewStyle;
   card: ViewStyle;
-  title: TextStyle;
-  subtitle: TextStyle;
-  phoneContainer: ViewStyle;
-  phoneLabel: TextStyle;
-  phoneNumber: TextStyle;
+  cardHeader: ViewStyle;
+  cardTitle: TextStyle;
+  cardSubtitle: TextStyle;
   formContainer: ViewStyle;
-  input: TextStyle;
-  inputError: ViewStyle;
-  cityInput: TextStyle;
-  cityContainer: ViewStyle;
-  dateInput: ViewStyle;
+  errorText: TextStyle;
   locationContainer: ViewStyle;
   locationButton: ViewStyle;
   locationButtonText: TextStyle;
-  label: TextStyle;
-  errorText: TextStyle;
-  genderContainer: ViewStyle;
-  genderButton: ViewStyle;
-  genderButtonActive: ViewStyle;
-  genderIconContainer: ViewStyle;
-  genderIcon: ImageStyle;
-  genderText: TextStyle;
-  genderTextActive: TextStyle;
   submitButton: ViewStyle;
   submitButtonDisabled: ViewStyle;
   submitButtonText: TextStyle;
-  toggleButton: ViewStyle;
-  toggleButtonText: TextStyle;
+  signInContainer: ViewStyle;
+  signInText: TextStyle;
+  signInLinkText: TextStyle;
+  citySuggestionsContainer: ViewStyle;
+  citySuggestionItem: ViewStyle;
+  citySuggestionText: TextStyle;
 };
 
 const styles = StyleSheet.create<Styles>({
   container: {
     flex: 1,
+    backgroundColor: '#F5F2ED',
   },
   header: {
-    height: 80,
-    width: '100%',
-    marginTop: 40,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    overflow: 'hidden',
-    position: 'relative',
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
+    paddingTop: 50,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 0,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.borderRadius.s,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoImage: {
-    width: 120,
-    height: 120,
-    resizeMode: 'contain',
+  titleContainer: {
+    flex: 1,
+    alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 22,
+  appTitle: {
+    fontSize: 20,
     fontWeight: '700',
-    letterSpacing: 0.5,
-    fontFamily: RNPlatform.OS === 'ios' ? 'Georgia' : 'serif',
+    color: '#FFFFFF',
+    letterSpacing: 1,
+  },
+  contentContainer: {
+    flex: 1,
+    paddingTop: theme.spacing.l,
   },
   card: {
     marginHorizontal: 24,
     marginTop: 20,
     marginBottom: 40,
-    borderRadius: 24,
-    padding: 32,
+    borderRadius: 16,
+    padding: 24,
   },
-  title: {
+  cardHeader: {
+    marginBottom: 32,
+  },
+  cardTitle: {
     fontSize: 24,
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 8,
-    fontFamily: RNPlatform.OS === 'ios' ? 'Georgia' : 'serif',
+    color: '#008272',
   },
-  subtitle: {
+  cardSubtitle: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 32,
-    fontFamily: RNPlatform.OS === 'ios' ? 'Georgia' : 'serif',
-  },
-  phoneContainer: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  phoneLabel: {
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  phoneNumber: {
-    fontSize: 16,
-    fontWeight: '600',
+    color: theme.colors.text.secondary,
   },
   formContainer: {
-    marginBottom: 24,
+    width: '100%',
+   },
+  errorText: {
+    marginTop: theme.spacing.xs,
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#E53E3E',
   },
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 18,
-    marginBottom: 8,
-  },
-  inputError: {
-    borderColor: '#EF4444',
-  },
-  cityInput: {
-    flex: 1,
-    marginRight: 12,
-    fontSize: 18,
-    height: 56, // Match main input height
-  },
-  cityContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginBottom: 8,
-  },
-  dateInput: {
-    justifyContent: 'center',
-    height: 56,
-  } as ViewStyle,
   locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 8,
-  } as ViewStyle,
+    gap: theme.spacing.m,
+    marginBottom: theme.spacing.l,
+  },
   locationButton: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
+    backgroundColor: '#F7FAFC',
+    borderRadius: 12,
+    paddingVertical: theme.spacing.m,
+    paddingHorizontal: theme.spacing.m,
     justifyContent: 'center',
     alignItems: 'center',
-    height: 48, 
-    width: 48, 
-    marginBottom: 24, 
-  } as ViewStyle,
+    height: 56,
+    width: 56,
+    borderWidth: 2,
+    borderColor: theme.colors.feedback.success,
+  },
   locationButtonText: {
     fontWeight: '600',
     fontSize: 14,
-  } as TextStyle,
-  label: {
-    fontSize: 14,
-    marginBottom: 8,
-    marginTop: 8,
-    fontWeight: '500',
-  },
-  errorText: {
-    marginTop: 8,
-    fontSize: 14,
-    fontWeight: '400',
-  },
-  genderContainer: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  genderButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-    marginRight: 8,
-    alignItems: 'center',
-    height: 80,
-  },
-  genderButtonActive: {
-    backgroundColor: '#1E88E5',
-  },
-  genderIconContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  genderIcon: {
-    width: 32,
-    height: 32,
-    marginBottom: 4,
-  },
-  genderText: {
-    fontWeight: '500',
-    fontSize: 12,
-    textAlign: 'center',
-  },
-  genderTextActive: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    textAlign: 'center',
+    color: '#008272',
   },
   submitButton: {
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: 'center',
     marginBottom: 16,
+    backgroundColor: '#008272',
   },
   submitButtonDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
   submitButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
-  toggleButton: {
+  signInContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 12,
-    marginBottom: 8,
+    marginTop: 16,
   },
-  toggleButtonText: {
+  signInText: {
     fontSize: 14,
+    fontWeight: '400',
+    color: theme.colors.text.secondary,
+  },
+  signInLinkText: {
+    fontSize: 14,
+    color: '#008272',
     fontWeight: '600',
-    textDecorationLine: 'underline',
+  },
+  citySuggestionsContainer: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    zIndex: 1000,
+    maxHeight: 200,
+    marginTop: 4,
+  },
+  citySuggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  citySuggestionText: {
+    fontSize: 16,
+    color: '#1A202C',
+    flex: 1,
   },
 });
 
@@ -277,47 +234,11 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
   const { signIn } = useAuth();
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
-  const [scrollY] = useState(new Animated.Value(0));
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [headerHeight] = useState(new Animated.Value(160));
-
-  React.useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 1000,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
-
-  const handleScroll = Animated.event(
-    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-    { useNativeDriver: false }
-  );
-
-  React.useEffect(() => {
-    const listener = scrollY.addListener(({ value }) => {
-      const shouldShrink = value > 50;
-      if (shouldShrink !== isScrolled) {
-        setIsScrolled(shouldShrink);
-        Animated.timing(headerHeight, {
-          toValue: shouldShrink ? 80 : 160,
-          duration: 200,
-          useNativeDriver: false,
-        }).start();
-      }
-    });
-
-    return () => {
-      scrollY.removeListener(listener);
-    };
-  }, [scrollY, isScrolled]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [isLocationLoading, setIsLocationLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     first_name: '',
@@ -332,17 +253,99 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
     latitude: 0,
     longitude: 0
   });
-  const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [isLocationLoading, setIsLocationLoading] = useState(false);
+
+  // City autocomplete states
+  const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
+  const [showCitySuggestions, setShowCitySuggestions] = useState(false);
+  const [isCityLoading, setIsCityLoading] = useState(false);
+
+  useEffect(() => {
+    fadeAnim.setValue(0);
+    slideAnim.setValue(30);
+
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Initialize Geocoder (you'll need to get an API key from Google Maps)
+    Geocoder.init('AIzaSyBrdCK1vB9x2vT2W7v8xY3z9w8x7y6z5a4'); // Replace with your actual API key
+  }, [fadeAnim, slideAnim]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
+
+    // Handle city autocomplete
+    if (field === 'city') {
+      console.log('City input changed:', value); // Debug log
+      if (value.length > 1) {
+        searchCities(value);
+      } else {
+        setCitySuggestions([]);
+        setShowCitySuggestions(false);
+      }
+    }
+  };
+
+  const searchCities = async (query: string) => {
+    console.log('Searching cities for:', query); // Debug log
+    setIsCityLoading(true);
+    try {
+      // Use Google Geocoding API to get city suggestions
+      const results = await Geocoder.from(query);
+      
+      // Filter results to get cities only
+      const cities = results.results
+        .filter(result => {
+          return result.types.includes('locality') || 
+                 result.types.includes('administrative_area_level_1') ||
+                 result.types.includes('administrative_area_level_2');
+        })
+        .map(result => result.formatted_address)
+        .slice(0, 5); // Limit to 5 suggestions
+
+      console.log('Geocoded cities:', cities); // Debug log
+      setCitySuggestions(cities);
+      setShowCitySuggestions(cities.length > 0);
+    } catch (error) {
+      console.error('Error searching cities:', error);
+      // Fallback to some common cities if geocoding fails
+      const fallbackCities = [
+        'New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix',
+        'Philadelphia', 'San Antonio', 'San Diego', 'Dallas', 'San Jose'
+      ].filter(city => city.toLowerCase().includes(query.toLowerCase()))
+       .slice(0, 5);
+      
+      setCitySuggestions(fallbackCities);
+      setShowCitySuggestions(fallbackCities.length > 0);
+    } finally {
+      setIsCityLoading(false);
+    }
+  };
+
+  const selectCity = (city: string) => {
+    setFormData(prev => ({ ...prev, city }));
+    setCitySuggestions([]);
+    setShowCitySuggestions(false);
+    if (errors.city) {
+      setErrors(prev => ({ ...prev, city: '' }));
+    }
+  };
+
+  const hideCitySuggestions = () => {
+    setShowCitySuggestions(false);
+    setCitySuggestions([]);
   };
 
   const handleGenderSelect = (gender: Gender) => {
@@ -390,6 +393,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
   };
 
   const getCurrentLocation = async () => {
+    console.log('Getting current location...'); // Debug log
     const hasPermission = await requestLocationPermission();
     if (!hasPermission) {
       Alert.alert(
@@ -403,14 +407,50 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
     
     try {
       Geolocation.getCurrentPosition(
-        (position) => {
+        async (position) => {
+          console.log('Location captured:', position.coords); // Debug log
+          
+          // Update coordinates
           setFormData(prev => ({
             ...prev,
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
           }));
+
+          // Get city name from coordinates using reverse geocoding
+          try {
+            const reverseGeocoded = await Geocoder.from(
+              position.coords.latitude, 
+              position.coords.longitude
+            );
+            
+            // Extract city name from the results
+            const cityComponent = reverseGeocoded.results[0]?.address_components.find(
+              component => component.types.includes('locality') ||
+                          component.types.includes('administrative_area_level_1') ||
+                          component.types.includes('administrative_area_level_2')
+            );
+            
+            if (cityComponent) {
+              const cityName = cityComponent.long_name || cityComponent.short_name;
+              console.log('Detected city:', cityName);
+              
+              // Auto-fill city field
+              setFormData(prev => ({
+                ...prev,
+                city: cityName,
+              }));
+              
+              Alert.alert('Success', `Location captured! City detected: ${cityName}`);
+            } else {
+              Alert.alert('Success', 'Location captured successfully! (City not detected)');
+            }
+          } catch (geocodeError) {
+            console.error('Reverse geocoding error:', geocodeError);
+            Alert.alert('Success', 'Location captured successfully! (Could not detect city)');
+          }
+          
           setIsLocationLoading(false);
-          Alert.alert('Success', 'Location updated successfully!');
         },
         (error) => {
           console.error('Error getting location:', error);
@@ -515,7 +555,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
       const payload = {
         first_name: formData.first_name.trim(),
         last_name: formData.last_name.trim(),
-        phone: formData.phone,
+        phone: formData.phone, // Required field from verification
         email: formData.email.trim().toLowerCase(),
         dob: formData.dob,
         gender: formData.gender,
@@ -571,237 +611,240 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
-      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+    <SafeAreaView style={styles.container}>
+      <StatusBar backgroundColor="#008272" barStyle="light-content" />
       
+      {/* Professional Header - Same as ProfessionalHomeScreen */}
+      <LinearGradient
+        colors={['#008272', '#4C7360', '#2F5233']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <View style={styles.headerContent}>
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()} 
+            style={styles.backButton} 
+            activeOpacity={0.7}
+          >
+            <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+          
+          <View style={styles.titleContainer}>
+            <Text style={styles.appTitle}>Create Account</Text>
+          </View>
+          
+          <View style={{ width: 44 }} />
+        </View>
+      </LinearGradient>
+          
       <KeyboardAvoidingView
         behavior={RNPlatform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
+        style={styles.contentContainer}
+        keyboardVerticalOffset={RNPlatform.OS === 'ios' ? 0 : 20}
       >
-        <ScrollView
-          contentContainerStyle={{ flexGrow: 1, paddingBottom: 10 }}
-          keyboardShouldPersistTaps="handled"
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
+        <ScrollView 
+          contentContainerStyle={{ 
+            flexGrow: 1,
+            paddingBottom: 40
+          }}
+          keyboardShouldPersistTaps="always"
+          showsVerticalScrollIndicator={false}
         >
-          {/* Dynamic Header with Title */}
-          <Animated.View style={[styles.header, { 
-            backgroundColor: theme.colors.primary,
-          }]}>
-            <Animated.View style={{
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '100%',
-            }}>
-              <Text style={[styles.headerTitle, { color: '#FFFFFF', fontFamily: theme.typography.fontFamily }]}>SIGN UP</Text>
-            </Animated.View>
-          </Animated.View>
-          
-          <Animated.View 
-            style={{
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }]
-            }}
-          >
-            <View style={[styles.card, { backgroundColor: theme.colors.background.surface, ...theme.shadows.float }]}>
-              <Text style={[styles.title, { color: theme.colors.text.primary, fontFamily: theme.typography.fontFamily }]}>Create Your Account</Text>
-              <Text style={[styles.subtitle, { color: theme.colors.text.secondary, fontFamily: theme.typography.fontFamily }]}>
-                Please fill in your details to create an account
-              </Text>
-
-              <View style={styles.phoneContainer}>
-                <Text style={[styles.label, { color: theme.colors.text.primary }]}>Phone Number</Text>
-                <View style={[
-                  styles.input,
-                  { backgroundColor: theme.colors.background.surface }
-                ]}>
-                  <Text style={[styles.phoneNumber, { color: theme.colors.text.primary }]}>+{formData.phone}</Text>
-                </View>
+          <Pressable style={{ flex: 1 }} onPress={hideCitySuggestions}>
+          <View style={[styles.card, commonStyles.primaryCard, { borderColor: theme.colors.feedback.success }]}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Create Account</Text>
+                <Text style={styles.cardSubtitle}>Start your wellness journey with Samyayog</Text>
               </View>
 
-            <View style={styles.formContainer}>
-              <FloatingLabelInput
-                label="First Name"
-                value={formData.first_name}
-                onChangeText={(value) => handleInputChange('first_name', value)}
-                error={errors.first_name}
-                autoCapitalize="words"
-              />
-
-              <FloatingLabelInput
-                label="Last Name"
-                value={formData.last_name}
-                onChangeText={(value) => handleInputChange('last_name', value)}
-                error={errors.last_name}
-                autoCapitalize="words"
-              />
-
-              <FloatingLabelInput
-                label="Email Address"
-                value={formData.email}
-                onChangeText={(value) => handleInputChange('email', value)}
-                error={errors.email}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-
-              <FloatingLabelInput
-                label="Date of Birth"
-                value={formData.dob}
-                onChangeText={(value) => handleInputChange('dob', value)}
-                error={errors.dob}
-                editable={false}
-                onPressIn={() => setShowDatePicker(true)}
-              />
-              {showDatePicker && (
-                <DateTimePicker
-                  value={selectedDate}
-                  mode="date"
-                  display={RNPlatform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={handleDateChange}
-                  maximumDate={new Date()}
+              <View style={styles.formContainer}>
+                <FloatingLabelInput
+                  label="Phone Number"
+                  value={`+${formData.phone}`}
+                  onChangeText={() => {}} // No change allowed - locked
+                  editable={false}
+                  icon="phone"
                 />
-              )}
 
-              <Text style={[styles.label, { color: theme.colors.text.primary }]}>Gender</Text>
-              <View style={styles.genderContainer}>
-                {(['male', 'female', 'other'] as const).map((gender) => (
+                <FloatingLabelInput
+                  label="First Name"
+                  value={formData.first_name}
+                  onChangeText={(value) => handleInputChange('first_name', value)}
+                  error={errors.first_name}
+                  autoCapitalize="words"
+                />
+
+                <FloatingLabelInput
+                  label="Last Name"
+                  value={formData.last_name}
+                  onChangeText={(value) => handleInputChange('last_name', value)}
+                  error={errors.last_name}
+                  autoCapitalize="words"
+                />
+
+                <FloatingLabelInput
+                  label="Email Address"
+                  value={formData.email}
+                  onChangeText={(value) => handleInputChange('email', value)}
+                  error={errors.email}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+
+                <FloatingLabelInput
+                  label="Date of Birth"
+                  value={formData.dob}
+                  onChangeText={() => {}} // Prevent manual input
+                  error={errors.dob}
+                  onPressIn={() => setShowDatePicker(true)}
+                />
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={selectedDate}
+                    mode="date"
+                    display={RNPlatform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={handleDateChange}
+                    maximumDate={new Date()}
+                  />
+                )}
+
+                <View style={{ flexDirection: 'row', gap: theme.spacing.s, marginBottom: theme.spacing.l }}>
+                  {(['male', 'female', 'other'] as const).map((gender) => (
+                    <TouchableOpacity
+                      key={gender}
+                      style={{
+                        flex: 1,
+                        paddingVertical: 10,
+                        paddingHorizontal: 10,
+                        borderRadius: 12,
+                        backgroundColor: formData.gender === gender ? '#EBF8F6' : '#F9FAFB',
+                        borderWidth: 1,
+                        borderColor: formData.gender === gender ? theme.colors.feedback.success : theme.colors.feedback.success,
+                        alignItems: 'center',
+                        minHeight: 56,
+                        justifyContent: 'center',
+                      }}
+                      onPress={() => handleGenderSelect(gender)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={{ alignItems: 'center', justifyContent: 'center', marginBottom: 2 }}>
+                        <Ionicons
+                          name={gender === 'male' ? 'male' : gender === 'female' ? 'female' : 'person'}
+                          size={20}
+                          color={formData.gender === gender ? '#008272' : '#718096'}
+                        />
+                      </View>
+                      <Text
+                        style={{
+                          fontWeight: '600',
+                          fontSize: 14,
+                          textAlign: 'center',
+                          color: formData.gender === gender ? '#008272' : '#718096',
+                        }}
+                      >
+                        {gender.charAt(0).toUpperCase() + gender.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {errors.gender ? <Text style={styles.errorText}>{errors.gender}</Text> : null}
+
+                <View style={styles.locationContainer}>
                   <TouchableOpacity
-                    key={gender}
-                    style={[
-                      styles.genderButton,
-                      { backgroundColor: theme.colors.background.secondary },
-                      formData.gender === gender && { backgroundColor: theme.colors.primary }
-                    ]}
-                    onPress={() => handleGenderSelect(gender)}
+                    style={styles.locationButton}
+                    onPress={getCurrentLocation}
+                    disabled={isLocationLoading}
+                    activeOpacity={0.8}
                   >
-                    {formData.gender === gender ? (
-                      <View style={styles.genderIconContainer}>
-                        {gender === 'male' && (
-                          <Image 
-                            source={require('../assets/icons/male-gender.png')} 
-                            style={styles.genderIcon} 
-                            resizeMode="contain"
-                          />
-                        )}
-                        {gender === 'female' && (
-                          <Image 
-                            source={require('../assets/icons/femenine.png')} 
-                            style={styles.genderIcon} 
-                            resizeMode="contain"
-                          />
-                        )}
-                        {gender === 'other' && (
-                          <Image 
-                            source={require('../assets/icons/gender.png')} 
-                            style={styles.genderIcon} 
-                            resizeMode="contain"
-                          />
-                        )}
-                      </View>
+                    {isLocationLoading ? (
+                      <ActivityIndicator color="#008272" size="small" />
                     ) : (
-                      <View style={styles.genderIconContainer}>
-                        {gender === 'male' && (
-                          <Image 
-                            source={require('../assets/icons/male-gender.png')} 
-                            style={[styles.genderIcon, { tintColor: theme.colors.text.secondary }]} 
-                            resizeMode="contain"
-                          />
-                        )}
-                        {gender === 'female' && (
-                          <Image 
-                            source={require('../assets/icons/femenine.png')} 
-                            style={[styles.genderIcon, { tintColor: theme.colors.text.secondary }]} 
-                            resizeMode="contain"
-                          />
-                        )}
-                        {gender === 'other' && (
-                          <Image 
-                            source={require('../assets/icons/gender.png')} 
-                            style={[styles.genderIcon, { tintColor: theme.colors.text.secondary }]} 
-                            resizeMode="contain"
-                          />
-                        )}
-                        <Text style={[styles.genderText, { color: theme.colors.text.secondary }]}>
-                          {gender.charAt(0).toUpperCase() + gender.slice(1)}
-                        </Text>
-                      </View>
+                      <Ionicons name="location" size={20} color="#008272" />
                     )}
                   </TouchableOpacity>
-                ))}
-              </View>
-              {errors.gender ? <Text style={[styles.errorText, { color: theme.colors.error }]}>{errors.gender}</Text> : null}
+                  
+                  <View style={{ flex: 1, position: 'relative', zIndex: showCitySuggestions ? 1000 : 1, marginTop: theme.spacing.m }}>
+                    <FloatingLabelInput
+                      label="City"
+                      value={formData.city}
+                      onChangeText={(value) => handleInputChange('city', value)}
+                      error={errors.city}
+                    />
+                    
+                    {/* City Suggestions Dropdown */}
+                    {showCitySuggestions && (
+                      <View style={styles.citySuggestionsContainer}>
+                        {isCityLoading ? (
+                          <View style={styles.citySuggestionItem}>
+                            <ActivityIndicator color="#008272" size="small" />
+                            <Text style={styles.citySuggestionText}>Searching...</Text>
+                          </View>
+                        ) : citySuggestions.length > 0 ? (
+                          citySuggestions.map((city, index) => (
+                            <TouchableOpacity
+                              key={index}
+                              style={styles.citySuggestionItem}
+                              onPress={() => selectCity(city)}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={styles.citySuggestionText}>{city}</Text>
+                            </TouchableOpacity>
+                          ))
+                        ) : (
+                          <View style={styles.citySuggestionItem}>
+                            <Text style={styles.citySuggestionText}>No cities found</Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                </View>
 
-              <Text style={[styles.label, { color: theme.colors.text.primary }]}>City</Text>
-              <View style={styles.cityContainer}>
                 <FloatingLabelInput
-                  label="City"
-                  value={formData.city}
-                  onChangeText={(value) => handleInputChange('city', value)}
-                  error={errors.city}
-                  containerStyle={{ flex: 1, marginRight: 12 }}
+                  label="Password"
+                  value={formData.password}
+                  onChangeText={(value) => handleInputChange('password', value)}
+                  error={errors.password}
+                  secureTextEntry
                 />
+
+                <FloatingLabelInput
+                  label="Confirm Password"
+                  value={formData.confirmPassword}
+                  onChangeText={(value) => handleInputChange('confirmPassword', value)}
+                  error={errors.confirmPassword}
+                  secureTextEntry
+                />
+
                 <TouchableOpacity
-                  style={[styles.locationButton, { backgroundColor: theme.colors.background.secondary }]}
-                  onPress={getCurrentLocation}
-                  disabled={isLocationLoading}
+                  style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
+                  onPress={handleSignup}
+                  disabled={isLoading}
+                  activeOpacity={0.8}
                 >
-                  {isLocationLoading ? (
-                    <ActivityIndicator color={theme.colors.primary} size="small" />
+                  {isLoading ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
                   ) : (
-                    <Ionicons name="location" size={18} color={theme.colors.primary} />
+                    <Text style={styles.submitButtonText}>Create Account</Text>
                   )}
                 </TouchableOpacity>
+
+                <View style={styles.signInContainer}>
+                  <Text style={styles.signInText}>Already have an account? </Text>
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('PhoneNumber')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.signInLinkText}>Sign In</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-
-              <FloatingLabelInput
-                label="Password"
-                value={formData.password}
-                onChangeText={(value) => handleInputChange('password', value)}
-                error={errors.password}
-                secureTextEntry
-              />
-
-              <FloatingLabelInput
-                label="Confirm Password"
-                value={formData.confirmPassword}
-                onChangeText={(value) => handleInputChange('confirmPassword', value)}
-                error={errors.confirmPassword}
-                secureTextEntry
-              />
-
-              <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  { backgroundColor: theme.colors.primary },
-                  isLoading ? styles.submitButtonDisabled : null
-                ]}
-                onPress={handleSignup}
-                disabled={isLoading}
-                activeOpacity={0.8}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={styles.submitButtonText}>Complete Signup</Text>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.toggleButton}
-                onPress={() => navigation.navigate('PhoneNumber')}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.toggleButtonText, { color: theme.colors.primary }]}>Already have an account? Log In</Text>
-              </TouchableOpacity>
             </View>
-          </View>
-        </Animated.View>
+            </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 };
 

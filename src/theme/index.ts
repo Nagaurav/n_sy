@@ -287,6 +287,20 @@ export const commonStyles = {
     padding: theme.spacing.m,
     ...theme.shadows.card,
   },
+  primaryCard: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 130, 114, 0.1)',
+    ...theme.shadows.card,
+  },
+  secondaryCard: {
+    backgroundColor: theme.colors.background.surface,
+    borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.m,
+    ...theme.shadows.card,
+  },
   appointmentCard: {
     backgroundColor: theme.colors.background.surface,
     borderRadius: theme.borderRadius.l,

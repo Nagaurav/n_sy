@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Image } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { theme } from '../../theme';
@@ -19,6 +19,7 @@ export interface NextAppointment {
   status?: 'scheduled' | 'completed' | 'cancelled';
   created_at?: string;
   updated_at?: string;
+  professional_photo?: string;
 }
 
 interface ModernAppointmentCardProps {
@@ -27,6 +28,9 @@ interface ModernAppointmentCardProps {
   onBookSession?: () => void;
   loading?: boolean;
   error?: string | null;
+  buttonText?: string;
+  showActualStatus?: boolean;
+  serviceType?: 'consultation' | 'yoga_class'; // 🆕 Add service type prop
 }
 
 const ModernAppointmentCard: React.FC<ModernAppointmentCardProps> = ({
@@ -35,24 +39,48 @@ const ModernAppointmentCard: React.FC<ModernAppointmentCardProps> = ({
   onBookSession,
   loading = false,
   error = null,
+  buttonText,
+  showActualStatus = false,
+  serviceType, // 🆕 Add service type to props
 }) => {
   const formatAppointmentDateTime = (date: string, time: string) => {
-    // Extract the start time from the range (e.g., "09:00 - 09:15" -> "09:00")
-    const startTime = time?.split(' - ')[0] || time;
-    const appointmentDate = new Date(`${date}T${startTime}`);
-    
-    // Check if date is valid
-    if (isNaN(appointmentDate.getTime())) {
+    try {
+      // Handle date format - assume it's in YYYY-MM-DD or ISO format
+      let dateObj: Date;
+
+      // Check if date is already in ISO format or just date part
+      if (date.includes('T')) {
+        dateObj = new Date(date);
+      } else {
+        // Assume YYYY-MM-DD format, combine with time
+        const startTime = time?.split(' - ')[0] || time || '00:00';
+        const dateTimeString = `${date}T${startTime}:00`;
+        dateObj = new Date(dateTimeString);
+      }
+
+      // Check if date is valid
+      if (isNaN(dateObj.getTime())) {
+        // Fallback: format date and time separately
+        const formattedDate = new Date(date).toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+        });
+        return `${formattedDate} at ${time}`;
+      }
+
+      // Format as weekday, month day, hour:minute
+      return dateObj.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (error) {
+      // Ultimate fallback
       return `${date} at ${time}`;
     }
-    
-    return appointmentDate.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
   };
 
   const getStatusColor = (status?: string, booking_status?: string) => {
@@ -95,74 +123,89 @@ const ModernAppointmentCard: React.FC<ModernAppointmentCardProps> = ({
 
   if (appointment) {
     return (
-      <LinearGradient
-        colors={['#F8FAFC', '#F1F5F9']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.container}
-      >
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <View style={styles.statusIndicator}>
-              <View style={[styles.statusDot, { backgroundColor: getStatusColor(appointment.status, appointment.booking_status) }]} />
-            </View>
-            <Text style={styles.statusText}>Upcoming Session</Text>
+      <View style={[
+        styles.container,
+        serviceType === 'yoga_class' ? styles.yogaCard : styles.consultationCard
+      ]}>
+        {/* Professional Info Section */}
+        <View style={styles.professionalSection}>
+          <View style={styles.avatar}>
+            {appointment.professional_photo ? (
+              <Image
+                source={{ uri: appointment.professional_photo }}
+                style={styles.avatarImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <Text style={styles.avatarText}>
+                {appointment.professional_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+              </Text>
+            )}
           </View>
-          <View style={styles.modeBadge}>
+          <View style={styles.professionalInfo}>
+            <Text style={styles.professionalName}>{appointment.professional_name}</Text>
+            <Text style={styles.speciality}>
+              {appointment.speciality_new?.name || appointment.speciality || 'Wellness Professional'}
+            </Text>
+          </View>
+          <View style={[
+            styles.statusBadge,
+            { backgroundColor: getStatusColor(appointment.status, appointment.booking_status) }
+          ]}>
+            <Text style={styles.statusText}>
+              {showActualStatus 
+                ? (appointment.booking_status || appointment.status || 'SCHEDULED')
+                : 'UPCOMING'
+              }
+            </Text>
+          </View>
+        </View>
+
+        {/* Date & Time Section */}
+        <View style={styles.dateTimeContainer}>
+          <View style={styles.dateTimeItem}>
+            <Ionicons name="calendar-outline" size={16} color={theme.colors.primary} />
+            <Text style={styles.dateTimeText}>
+              {new Date(appointment.date).toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+              })}
+            </Text>
+          </View>
+          <View style={styles.dateTimeItem}>
+            <Ionicons name="time-outline" size={16} color={theme.colors.primary} />
+            <Text style={styles.dateTimeText}>{appointment.time}</Text>
+          </View>
+          <View style={styles.modeItem}>
             <Ionicons 
               name={appointment.mode === 'online' ? 'videocam' : 'location'} 
-              size={14} 
+              size={16} 
               color={theme.colors.primary} 
             />
             <Text style={styles.modeText}>{appointment.mode}</Text>
           </View>
         </View>
 
-        <View style={styles.content}>
-          <View style={styles.professionalSection}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {appointment.professional_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-              </Text>
-            </View>
-            <View style={styles.professionalInfo}>
-              <Text style={styles.professionalName}>{appointment.professional_name}</Text>
-              <Text style={styles.speciality}>
-                {appointment.speciality_new?.name || appointment.speciality || 'Wellness Professional'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.dateTimeSection}>
-            <View style={styles.dateTimeRow}>
-              <Ionicons name="calendar-outline" size={16} color={theme.colors.primary} />
-              <Text style={styles.dateTimeText}>
-                {formatAppointmentDateTime(appointment.date, appointment.time)}
-              </Text>
-            </View>
-          </View>
-
-          {appointment.session_link && onJoinSession && (
-            <TouchableOpacity 
-              style={styles.joinButton}
-              onPress={onJoinSession}
-              activeOpacity={0.8}
+        {/* Action Button */}
+        {onJoinSession && (
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={onJoinSession}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={[theme.colors.primary, theme.colors.secondary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.buttonGradient}
             >
-              <LinearGradient
-                colors={[theme.colors.primary, theme.colors.secondary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.buttonGradient}
-              >
-                <Ionicons name="videocam" size={18} color="#FFFFFF" />
-                <Text style={styles.buttonText}>Join Session</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <View style={styles.decorativeElement} />
-      </LinearGradient>
+              <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+              <Text style={styles.buttonText}>{buttonText || 'View Details'}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+      </View>
     );
   }
 
@@ -199,73 +242,55 @@ const ModernAppointmentCard: React.FC<ModernAppointmentCardProps> = ({
 const styles = StyleSheet.create({
   container: {
     width: width - theme.spacing.l * 2,
-    borderRadius: theme.borderRadius.l,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     padding: theme.spacing.l,
-    marginBottom: theme.spacing.l,
-    position: 'relative',
-    overflow: 'hidden',
-    ...theme.shadows.card,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: theme.spacing.m,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success, // 🆕 Green border to match ProfessionalStatsContainer
+    position: 'relative',
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  
+  // 🆕 Card Type Styles - Different Border Colors (thinner borders)
+  consultationCard: {
+    borderColor: '#10B981', // Green for consultation
+    borderLeftWidth: 2, // 🆕 Reduced from 4px to 2px
   },
-  statusIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: theme.spacing.s,
+  yogaCard: {
+    borderColor: '#8B5CF6', // Purple for yoga
+    borderLeftWidth: 2, // 🆕 Reduced from 4px to 2px
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.text.primary,
-  },
-  modeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 130, 114, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  modeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: theme.colors.primary,
-    marginLeft: 4,
-    textTransform: 'uppercase',
-  },
-  content: {
-    flex: 1,
-  },
+  
+  // Professional Section
   professionalSection: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: theme.spacing.m,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: theme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: theme.spacing.m,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#F3F4F6',
+  },
+  avatarImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
   avatarText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
   },
@@ -275,62 +300,97 @@ const styles = StyleSheet.create({
   professionalName: {
     fontSize: 18,
     fontWeight: '700',
-    color: theme.colors.text.primary,
-    marginBottom: 2,
+    color: '#1F2937',
+    marginBottom: 4,
   },
   speciality: {
     fontSize: 14,
-    color: theme.colors.text.secondary,
+    color: '#6B7280',
     fontWeight: '500',
   },
-  dateTimeSection: {
-    marginBottom: theme.spacing.m,
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
   },
-  dateTimeRow: {
+  statusText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  
+  // Date & Time Container
+  dateTimeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.m,
+    paddingVertical: theme.spacing.m, // 🆕 Increased vertical padding
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  dateTimeItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    marginRight: theme.spacing.m, // 🆕 Added right margin for spacing
+  },
+  modeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'flex-end',
   },
   dateTimeText: {
-    fontSize: 15,
+    fontSize: 13,
     color: theme.colors.primary,
     fontWeight: '600',
     marginLeft: 6,
   },
-  joinButton: {
-    borderRadius: theme.borderRadius.m,
+  modeText: {
+    fontSize: 12,
+    color: theme.colors.primary,
+    fontWeight: '600',
+    marginLeft: 6,
+    textTransform: 'uppercase',
+  },
+  
+  // Action Button
+  actionButton: {
+    borderRadius: 12,
     overflow: 'hidden',
-    ...theme.shadows.card,
   },
   buttonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: theme.spacing.s,
+    paddingVertical: 14,
     paddingHorizontal: theme.spacing.m,
-    borderRadius: theme.borderRadius.m,
+    borderRadius: 12,
   },
   buttonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
-    marginLeft: 6,
+    marginLeft: 8,
   },
-  decorativeElement: {
-    position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(0, 130, 114, 0.05)',
-    top: -40,
-    right: -40,
-  },
+  
+  // No Data Container
   noDataContainer: {
     width: width - theme.spacing.l * 2,
-    borderRadius: theme.borderRadius.l,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     padding: theme.spacing.xl,
     alignItems: 'center',
-    backgroundColor: theme.colors.background.surface,
-    ...theme.shadows.card,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   noDataContent: {
     alignItems: 'center',
@@ -340,7 +400,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(156, 163, 175, 0.1)',
+    backgroundColor: '#F9FAFB',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: theme.spacing.m,
@@ -348,26 +408,25 @@ const styles = StyleSheet.create({
   noDataText: {
     fontSize: 18,
     fontWeight: '700',
-    color: theme.colors.text.primary,
+    color: '#1F2937',
     marginBottom: theme.spacing.s,
     textAlign: 'center',
   },
   noDataSubtext: {
     fontSize: 14,
-    color: theme.colors.text.secondary,
+    color: '#6B7280',
     textAlign: 'center',
     marginBottom: theme.spacing.l,
     lineHeight: 20,
   },
   bookButton: {
-    borderRadius: theme.borderRadius.m,
+    borderRadius: 12,
     overflow: 'hidden',
-    ...theme.shadows.card,
   },
   errorContainer: {
     width: width - theme.spacing.l * 2,
     backgroundColor: '#FEF2F2',
-    borderRadius: theme.borderRadius.m,
+    borderRadius: 12,
     padding: theme.spacing.m,
     flexDirection: 'row',
     alignItems: 'center',
@@ -383,14 +442,20 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     width: width - theme.spacing.l * 2,
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: theme.borderRadius.m,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     padding: theme.spacing.l,
     alignItems: 'center',
-    ...theme.shadows.card,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   loadingText: {
-    color: theme.colors.text.secondary,
+    color: '#6B7280',
     fontSize: 14,
     fontWeight: '500',
   },

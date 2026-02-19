@@ -88,14 +88,21 @@ export const apiService = {
       // Import apiClient directly to avoid circular dependency
       const { apiClient } = await import('./apiClient');
       
-      // Exact paths based on backend route files
-      const path = type === 'yoga_class' 
-        ? `/user/yoga-booking/payment-status/${id}` // Use transactionId with payment-status endpoint
-        : `/user/consultation-booking/status/${id}`;
+      // ✅ FIX: Use correct endpoint defined in your backend routes
+      const endpointVariations = type === 'yoga_class' 
+        ? [`/user/yoga-booking/payment-status/${id}`]
+        : [
+            `/user/consultation-booking/payment-status/${id}`, // CORRECTED: Added 'payment-' prefix
+            `/user/consultation-booking/details/${id}`        // Safe fallback
+          ];
       
-      console.log(`📡 Getting payment status for ${type} booking: ${id} via ${path}`);
+      // Try primary endpoint first, then fallback if needed
+      const primaryEndpoint = endpointVariations[0];
+      const fallbackEndpoint = endpointVariations[1];
       
-      const response = await apiClient.get(path);
+      console.log(`📡 Getting payment status for ${type} booking: ${id} via ${primaryEndpoint}`);
+      
+      const response = await apiClient.get(primaryEndpoint);
       
       if (response.success && response.data) {
         let bookingData = response.data;
@@ -121,7 +128,7 @@ export const apiService = {
             'UNKNOWN';
 
         // 🛑 CRITICAL FIX: DO NOT convert PENDING to CONFIRMED.
-        // If it is PENDING, we want the UI to know so it triggers sync.
+        // If it is PENDING, we want to UI to know so it triggers sync.
         if (status === 'CONFIRMED') {
           status = 'SUCCESS';
         } 
@@ -143,6 +150,23 @@ export const apiService = {
             bookingDetails: bookingData
           }
         };
+      }
+      
+      // If primary endpoint fails, try fallback
+      if (fallbackEndpoint && type !== 'yoga_class') {
+        console.log(`📡 Trying fallback endpoint: ${fallbackEndpoint}`);
+        const fallbackResponse = await apiClient.get(fallbackEndpoint);
+        
+        if (fallbackResponse.success && fallbackResponse.data) {
+          return {
+            success: true,
+            data: {
+              status: fallbackResponse.data.booking_status || 'UNKNOWN',
+              amount: fallbackResponse.data.amount || 0,
+              bookingDetails: fallbackResponse.data
+            }
+          };
+        }
       }
       
       return {
@@ -246,22 +270,22 @@ export const apiService = {
       
       console.log('📤 Uploading profile picture...');
       
-      const response = await apiClient.post('/user/profile/upload-photo', formData, {
+      const response = await apiClient.post('/user/upload/profile-photo', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
       
-      if (response.success && response.data) {
+      if (response.success && response.data?.success) {
         return {
           success: true,
-          data: response.data
+          data: response.data.data,
         };
       }
       
       return {
         success: false,
-        error: response.error || 'Failed to upload profile picture'
+        error: response.data?.message || 'Failed to upload profile picture'
       };
     } catch (error: any) {
       return {

@@ -18,6 +18,7 @@ export interface UnifiedAppointment {
   payment_status: string;
   amount: number;
   date: string; // ISO Date String
+  mode?: 'online' | 'offline'; // Session mode
   
   // Display Helpers
   title: string;       // e.g., "Dr. Smith" or "Morning Yoga"

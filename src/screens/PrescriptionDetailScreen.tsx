@@ -353,9 +353,9 @@ const PrescriptionDetailScreen: React.FC = () => {
   if (isLoading && !isRefreshing) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
+        <StatusBar backgroundColor="#008272" barStyle="light-content" />
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={appTheme.colors.primary} />
+          <ActivityIndicator size="large" color="#008272" />
           <Text style={styles.loadingText}>Loading prescription details...</Text>
         </View>
       </SafeAreaView>
@@ -365,10 +365,10 @@ const PrescriptionDetailScreen: React.FC = () => {
   if (error && !prescription) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
+        <StatusBar backgroundColor="#008272" barStyle="light-content" />
         <View style={styles.center}>
           <View style={styles.errorCard}>
-            <Ionicons name="document-text-outline" size={48} color={appTheme.colors.primary} />
+            <Ionicons name="document-text-outline" size={48} color="#008272" />
             <Text style={styles.errorTitle}>No Prescription Found</Text>
             <Text style={styles.errorMessage}>{error}</Text>
             <TouchableOpacity
@@ -378,10 +378,10 @@ const PrescriptionDetailScreen: React.FC = () => {
               <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.retryButton, { backgroundColor: appTheme.colors.background.secondary }]}
+              style={[styles.retryButton, { backgroundColor: '#F5F2ED' }]}
               onPress={() => navigation.goBack()}
             >
-              <Text style={[styles.retryButtonText, { color: appTheme.colors.text.primary }]}>Go Back</Text>
+              <Text style={[styles.retryButtonText, { color: theme.colors.text.primary }]}>Go Back</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -395,34 +395,30 @@ const PrescriptionDetailScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={appTheme.colors.primary} barStyle="light-content" />
+      <StatusBar backgroundColor="#008272" barStyle="light-content" />
       <LinearGradient 
-        colors={[appTheme.colors.primary, appTheme.colors.secondary]}
+        colors={['#008272', '#4C7360', '#2F5233']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.header}
       >
-        
         <View style={styles.headerContent}>
           <TouchableOpacity 
             onPress={() => navigation.goBack()}
-            style={styles.backButton}
+            style={styles.menuButton}
             activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           
           <View style={styles.titleContainer}>
-            <Text style={styles.headerTitle}>Prescription Details</Text>
-            <Text style={styles.headerSubtitle}>View your medical prescription</Text>
+            <Text style={styles.headerTitle}>PRESCRIPTION</Text>
           </View>
           
-          <View style={styles.placeholderButton} />
+          <TouchableOpacity onPress={handleDownloadPdf} style={styles.menuButton} activeOpacity={0.7}>
+            <Ionicons name="download-outline" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
-        
-        {/* Decorative elements */}
-        <View style={styles.topCircle} />
-        <View style={styles.bottomWave} />
       </LinearGradient>
 
       <ScrollView 
@@ -433,228 +429,166 @@ const PrescriptionDetailScreen: React.FC = () => {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Main Info Card - Standardized */}
+        {/* Main Info Section - Simplified */}
         <Animated.View style={[
-          styles.card,
+          styles.section,
           { 
             opacity: fadeAnim, 
-            transform: [{ translateY: slideAnim }], 
-            borderLeftColor: theme.colors.primary, 
-            borderLeftWidth: 5 
+            transform: [{ translateY: slideAnim }]
           }
         ]}>
-          <View style={styles.cardHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.title}>Prescription Details</Text>
-              <Text style={styles.sub}>Medical prescription information</Text>
-            </View>
-            <View style={[styles.typeBadge, { backgroundColor: theme.colors.primary + '20' }]}>
-              <Ionicons name="document-text" size={14} color={theme.colors.primary} />
-              <Text style={[styles.typeText, { color: theme.colors.primary }]}>PRESCRIPTION</Text>
-            </View>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="document-text" size={20} color="#008272" />
+            <Text style={styles.sectionTitle}>Prescription Information</Text>
           </View>
           
-          {/* Patient Information */}
-          <View style={styles.cardContent}>
-            <View style={styles.detailRow}>
-              <Ionicons name="person-outline" size={16} color="#666" />
-              <Text style={styles.detailText}>
-                <Text style={styles.detailLabel}>Patient: </Text>
-                {prescription.patientName || 'N/A'}
-              </Text>
+          <View style={styles.sectionContent}>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Patient:</Text>
+              <Text style={styles.infoValue}>{prescription.patientName || 'N/A'}</Text>
             </View>
-            <View style={styles.detailRow}>
-              <Ionicons name="calendar-outline" size={16} color="#666" />
-              <Text style={styles.detailText}>
-                <Text style={styles.detailLabel}>Age: </Text>
-                {prescription.patientAge ? `${prescription.patientAge} years` : 'N/A'}
-              </Text>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Age:</Text>
+              <Text style={styles.infoValue}>{prescription.patientAge ? `${prescription.patientAge} years` : 'N/A'}</Text>
             </View>
-            <View style={styles.detailRow}>
-              <Ionicons name="medkit-outline" size={16} color="#666" />
-              <Text style={styles.detailText}>
-                <Text style={styles.detailLabel}>Doctor: </Text>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Doctor:</Text>
+              <Text style={styles.infoValue}>
                 {prescription.professional?.first_name && prescription.professional?.last_name ? 
                   `${prescription.professional.first_name} ${prescription.professional.last_name}` : 
                   prescription.practitionerName || 'N/A'
                 }
               </Text>
             </View>
-            <View style={styles.bookingIdRow}>
-              <Ionicons name="pricetag-outline" size={16} color="#666" />
-              <Text style={styles.bookingIdText}>
-                Booking ID: #{prescription.id || prescriptionId}
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Booking ID:</Text>
+              <Text style={styles.infoValue}>#{prescription.id || prescriptionId}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Date:</Text>
+              <Text style={styles.infoValue}>
+                {prescription.prescriptionDate ? 
+                  new Date(prescription.prescriptionDate).toLocaleDateString() : 
+                  'Date N/A'
+                }
               </Text>
             </View>
           </View>
-          
-          <View style={styles.cardFooter}>
-            <Text style={[styles.statusText, { color: theme.colors.primary }]}>
-              {prescription.prescriptionDate ? 
-                new Date(prescription.prescriptionDate).toLocaleDateString() : 
-                'Date N/A'
-              }
-            </Text>
-            <TouchableOpacity onPress={handleDownloadPdf}>
-              <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>Download PDF</Text>
-            </TouchableOpacity>
-          </View>
         </Animated.View>
 
-        {/* Diagnosis Section - Standardized */}
+        {/* Diagnosis Section - Simplified */}
         {prescription.diagnoses && prescription.diagnoses.length > 0 && (
           <Animated.View style={[
-            styles.card,
+            styles.section,
             { 
-              borderLeftColor: theme.colors.primary, 
-              borderLeftWidth: 5, 
               opacity: fadeAnim, 
               transform: [{ translateY: Animated.add(slideAnim, 20) }] 
             }
           ]}>
-            <View style={styles.cardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>Diagnosis</Text>
-                <Text style={styles.sub}>Medical conditions identified</Text>
-              </View>
-              <View style={[styles.typeBadge, { backgroundColor: theme.colors.primary + '20' }]}>
-                <Ionicons name="medical" size={14} color={theme.colors.primary} />
-                <Text style={[styles.typeText, { color: theme.colors.primary }]}>{prescription.diagnoses.length}</Text>
-              </View>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="medical" size={20} color="#008272" />
+              <Text style={styles.sectionTitle}>Diagnosis ({prescription.diagnoses.length})</Text>
             </View>
             
-            <View style={styles.cardContent}>
+            <View style={styles.sectionContent}>
               {prescription.diagnoses.map((diag: any, index: number) => (
-                <View key={diag.id || index} style={styles.detailRow}>
-                  <Ionicons name="medical-outline" size={16} color={theme.colors.primary} />
-                  <Text style={styles.detailText}>
-                    <Text style={styles.detailLabel}>{diag.condition}: </Text>
-                    {diag.severity && `Severity: ${diag.severity}`}
-                    {diag.duration && ` | Duration: ${diag.duration}`}
-                  </Text>
+                <View key={diag.id || index} style={styles.itemRow}>
+                  <View style={styles.itemBullet} />
+                  <View style={styles.itemContent}>
+                    <Text style={styles.itemTitle}>{diag.condition}</Text>
+                    {(diag.severity || diag.duration) && (
+                      <Text style={styles.itemSubtitle}>
+                        {diag.severity && `Severity: ${diag.severity}`}
+                        {diag.severity && diag.duration && ' | '}
+                        {diag.duration && `Duration: ${diag.duration}`}
+                      </Text>
+                    )}
+                  </View>
                 </View>
               ))}
-            </View>
-            
-            <View style={styles.cardFooter}>
-              <Text style={[styles.statusText, { color: theme.colors.primary }]}>
-                {prescription.diagnoses.length} {prescription.diagnoses.length === 1 ? 'condition' : 'conditions'}
-              </Text>
             </View>
           </Animated.View>
         )}
 
-        {/* Medicines Section - Standardized */}
+        {/* Medicines Section - Simplified */}
         {prescription.medicines && prescription.medicines.length > 0 && (
           <Animated.View style={[
-            styles.card,
+            styles.section,
             { 
-              borderLeftColor: '#FF9800', 
-              borderLeftWidth: 5, 
               opacity: fadeAnim, 
               transform: [{ translateY: Animated.add(slideAnim, 40) }] 
             }
           ]}>
-            <View style={styles.cardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>Medicines</Text>
-                <Text style={styles.sub}>Prescribed medications</Text>
-              </View>
-              <View style={[styles.typeBadge, { backgroundColor: '#FF9800' + '20' }]}>
-                <Ionicons name="pill" size={14} color="#FF9800" />
-                <Text style={[styles.typeText, { color: '#FF9800' }]}>{prescription.medicines.length}</Text>
-              </View>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="medkit" size={20} color="#008272" />
+              <Text style={styles.sectionTitle}>Medicines ({prescription.medicines.length})</Text>
             </View>
             
-            <View style={styles.cardContent}>
+            <View style={styles.sectionContent}>
               {prescription.medicines.map((med: any, index: number) => (
-                <View key={med.id || index} style={styles.detailRow}>
-                  <Ionicons name="medical" size={16} color="#FF9800" />
-                  <Text style={styles.detailText}>
-                    <Text style={styles.detailLabel}>{med.name}: </Text>
-                    {med.dosage} - {med.frequency} for {med.duration}
-                  </Text>
+                <View key={med.id || index} style={styles.itemRow}>
+                  <View style={styles.itemBullet} />
+                  <View style={styles.itemContent}>
+                    <Text style={styles.itemTitle}>{med.name}</Text>
+                    <Text style={styles.itemSubtitle}>
+                      {med.dosage} - {med.frequency} for {med.duration}
+                    </Text>
+                    {med.instructions && (
+                      <Text style={styles.itemNote}>Note: {med.instructions}</Text>
+                    )}
+                  </View>
                 </View>
               ))}
-            </View>
-            
-            <View style={styles.cardFooter}>
-              <Text style={[styles.statusText, { color: '#FF9800' }]}>
-                {prescription.medicines.length} {prescription.medicines.length === 1 ? 'medicine' : 'medicines'}
-              </Text>
             </View>
           </Animated.View>
         )}
 
-        {/* Medical Advice Section - Standardized */}
+        {/* Medical Advice Section - Simplified */}
         {prescription.advices && prescription.advices.length > 0 && (
           <Animated.View style={[
-            styles.card,
+            styles.section,
             { 
-              borderLeftColor: '#9C27B0', 
-              borderLeftWidth: 5, 
               opacity: fadeAnim, 
               transform: [{ translateY: Animated.add(slideAnim, 60) }] 
             }
           ]}>
-            <View style={styles.cardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>Medical Advice</Text>
-                <Text style={styles.sub}>Doctor's recommendations</Text>
-              </View>
-              <View style={[styles.typeBadge, { backgroundColor: '#9C27B0' + '20' }]}>
-                <Ionicons name="bulb" size={14} color="#9C27B0" />
-                <Text style={[styles.typeText, { color: '#9C27B0' }]}>{prescription.advices.length}</Text>
-              </View>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="bulb" size={20} color="#008272" />
+              <Text style={styles.sectionTitle}>Medical Advice ({prescription.advices.length})</Text>
             </View>
             
-            <View style={styles.cardContent}>
+            <View style={styles.sectionContent}>
               {prescription.advices.map((adv: any, index: number) => (
-                <View key={adv.id || index} style={styles.detailRow}>
-                  <Ionicons name="bulb-outline" size={16} color="#9C27B0" />
-                  <Text style={styles.detailText}>
-                    <Text style={styles.detailLabel}>{adv.title}: </Text>
-                    {adv.description}
-                  </Text>
+                <View key={adv.id || index} style={styles.itemRow}>
+                  <View style={styles.itemBullet} />
+                  <View style={styles.itemContent}>
+                    <Text style={styles.itemTitle}>{adv.title}</Text>
+                    <Text style={styles.itemSubtitle}>{adv.description}</Text>
+                  </View>
                 </View>
               ))}
-            </View>
-            
-            <View style={styles.cardFooter}>
-              <Text style={[styles.statusText, { color: '#9C27B0' }]}>
-                {prescription.advices.length} {prescription.advices.length === 1 ? 'tip' : 'tips'}
-              </Text>
             </View>
           </Animated.View>
         )}
 
-        {/* Follow-up Section - Standardized */}
+        {/* Follow-up Section - Simplified */}
         {prescription.followUpDate && (
           <Animated.View style={[
-            styles.card,
+            styles.section,
             { 
-              borderLeftColor: '#4CAF50', 
-              borderLeftWidth: 5, 
               opacity: fadeAnim, 
               transform: [{ translateY: Animated.add(slideAnim, 80) }] 
             }
           ]}>
-            <View style={styles.cardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>Next Follow-up</Text>
-                <Text style={styles.sub}>Schedule your next consultation</Text>
-              </View>
-              <View style={[styles.typeBadge, { backgroundColor: '#4CAF50' + '20' }]}>
-                <Ionicons name="calendar-check" size={14} color="#4CAF50" />
-                <Text style={[styles.typeText, { color: '#4CAF50' }]}>IMPORTANT</Text>
-              </View>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="calendar" size={20} color="#008272" />
+              <Text style={styles.sectionTitle}>Next Follow-up</Text>
             </View>
             
-            <View style={styles.cardContent}>
-              <View style={styles.detailRow}>
-                <Ionicons name="calendar" size={16} color="#4CAF50" />
-                <Text style={styles.detailText}>
-                  <Text style={styles.detailLabel}>Appointment Date: </Text>
+            <View style={styles.sectionContent}>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Appointment Date:</Text>
+                <Text style={styles.infoValue}>
                   {new Date(prescription.followUpDate).toLocaleDateString('en-US', {
                     weekday: 'long',
                     year: 'numeric',
@@ -663,22 +597,10 @@ const PrescriptionDetailScreen: React.FC = () => {
                   })}
                 </Text>
               </View>
-              <View style={styles.detailRow}>
-                <Ionicons name="notifications" size={16} color="#4CAF50" />
-                <Text style={styles.detailText}>
-                  <Text style={styles.detailLabel}>Reminder: </Text>
-                  We'll notify you 1 day before
-                </Text>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Reminder:</Text>
+                <Text style={styles.infoValue}>We'll notify you 1 day before</Text>
               </View>
-            </View>
-            
-            <View style={styles.cardFooter}>
-              <Text style={[styles.statusText, { color: '#4CAF50' }]}>
-                Follow-up scheduled
-              </Text>
-              <TouchableOpacity>
-                <Text style={{ color: '#4CAF50', fontWeight: 'bold' }}>Set Reminder</Text>
-              </TouchableOpacity>
             </View>
           </Animated.View>
         )}
@@ -690,70 +612,113 @@ const PrescriptionDetailScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background.primary },
+  container: { flex: 1, backgroundColor: '#F5F2ED' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollView: { flex: 1 },
   scrollContent: { flexGrow: 1, padding: 16 },
   
   header: { 
-    paddingTop: 40,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  backButton: {
-    padding: 8,
-    borderRadius: 20,
+  menuButton: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.borderRadius.s,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   titleContainer: {
     flex: 1,
     alignItems: 'center',
   },
   headerTitle: { 
-    color: theme.colors.background.surface, 
+    color: '#FFFFFF', 
     fontSize: 20, 
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 1,
   },
-  headerSubtitle: {
-    color: theme.colors.background.surface,
+
+  // Simplified Section Styles (matching ProfessionalHomeScreen)
+  section: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.l,
+    marginBottom: theme.spacing.m,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    ...theme.shadows.card,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.m,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+    marginLeft: theme.spacing.s,
+  },
+  sectionContent: {
+    gap: theme.spacing.s,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.xs,
+  },
+  infoLabel: {
     fontSize: 14,
-    opacity: 0.8,
-    marginTop: 2,
+    fontWeight: '600',
+    color: theme.colors.text.secondary,
+    flex: 1,
   },
-  placeholderButton: {
-    width: 40,
+  infoValue: {
+    fontSize: 14,
+    color: theme.colors.text.primary,
+    flex: 2,
+    textAlign: 'right',
   },
-  topCircle: {
-    position: 'absolute',
-    top: -50,
-    right: -50,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  itemRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: theme.spacing.s,
   },
-  bottomWave: {
-    position: 'absolute',
-    bottom: -20,
-    left: -50,
-    right: -50,
-    height: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+  itemBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#008272',
+    marginTop: 6,
+    marginRight: theme.spacing.s,
+  },
+  itemContent: {
+    flex: 1,
+  },
+  itemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 2,
+  },
+  itemSubtitle: {
+    fontSize: 13,
+    color: theme.colors.text.secondary,
+    lineHeight: 18,
+  },
+  itemNote: {
+    fontSize: 12,
+    color: '#008272',
+    fontStyle: 'italic',
+    marginTop: 4,
   },
 
   card: {
@@ -852,7 +817,6 @@ const styles = StyleSheet.create({
   },
 
   divider: { height: 1, backgroundColor: '#e9ecef', marginVertical: 15 },
-  infoRow: { flexDirection: 'row', alignItems: 'center' },
   infoText: { marginLeft: 10, color: theme.colors.text.primary, fontWeight: '500', fontSize: 15 },
 
   loadingText: {
@@ -884,7 +848,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.l,
   },
   retryButton: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: '#008272',
     paddingHorizontal: theme.spacing.l,
     paddingVertical: theme.spacing.m,
     borderRadius: theme.borderRadius.m,

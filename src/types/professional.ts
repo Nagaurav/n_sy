@@ -122,6 +122,12 @@ export interface ProfessionalAuthProfile {
   review_count?: number;
   starting_price?: number;
   experience_years?: number;
+  // Additional sections from API
+  educations?: any[];
+  experiences?: any[];
+  certificates?: any[];
+  achievements?: any[];
+  yoga_plans?: any[];
   created_at: string;
   updated_at: string;
 }
