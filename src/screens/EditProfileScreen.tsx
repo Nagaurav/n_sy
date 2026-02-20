@@ -15,6 +15,7 @@ import {
   Dimensions,
   Modal,
   Image,
+  RefreshControl,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -59,6 +60,29 @@ const EditProfileScreen = () => {
   const [emergencyContactName, setEmergencyContactName] = useState(currentUser.user_health?.emergency_contact_name || '');
   const [emergencyContactPhone, setEmergencyContactPhone] = useState(currentUser.user_health?.emergency_contact_phone || '');
   const [isSaving, setIsSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Refresh function
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    // Reset form with current user data
+    setProfileImage(currentUser.photo_url || null);
+    setFirstName(currentUser.first_name || '');
+    setLastName(currentUser.last_name || '');
+    setPhone(currentUser.phone || '');
+    setCity(currentUser.city || '');
+    setAddress(currentUser.address || '');
+    setPinCode(currentUser.pin_code || '');
+    setGender(currentUser.gender || '');
+    setDob(currentUser.dob || '');
+    setBloodGroup(currentUser.user_health?.blood_group || '');
+    setMaritalStatus(currentUser.user_health?.marital_status || '');
+    setHeight(currentUser.user_health?.height?.toString() || '');
+    setWeight(currentUser.user_health?.weight?.toString() || '');
+    setEmergencyContactName(currentUser.user_health?.emergency_contact_name || '');
+    setEmergencyContactPhone(currentUser.user_health?.emergency_contact_phone || '');
+    setTimeout(() => setRefreshing(false), 1000);
+  }, [currentUser]);
 
   // Image selection handlers
   const handleSelectImage = () => {
@@ -291,47 +315,31 @@ const EditProfileScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
+      <StatusBar backgroundColor="#008272" barStyle="light-content" />
       
-      {/* Modern Header with Gradient */}
-      <Animated.View
-        style={[
-          styles.headerWrapper,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
+      {/* Header matching ProfessionalHomeScreen */}
+      <LinearGradient
+        colors={['#008272', '#4C7360', '#2F5233']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.headerContainer}
       >
-        <LinearGradient
-          colors={[theme.colors.primary, theme.colors.secondary]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.header}
-        >
-          <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
+        <View style={styles.headerContent}>
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()}
+            style={styles.headerButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
           
-          <View style={styles.headerContent}>
-            <TouchableOpacity 
-              onPress={() => navigation.goBack()}
-              style={styles.backButton}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="arrow-back" size={24} color={theme.colors.background.surface} />
-            </TouchableOpacity>
-            
-            <View style={styles.titleContainer}>
-              <Text style={styles.headerTitle}>Edit Profile</Text>
-            </View>
-            
-            <View style={styles.placeholderButton} />
+          <View style={styles.titleContainer}>
+            <Text style={styles.headerTitle}>Edit Profile</Text>
           </View>
           
-          {/* Decorative elements */}
-          <View style={styles.topCircle} />
-          <View style={styles.bottomWave} />
-        </LinearGradient>
-      </Animated.View>
+          <View style={styles.placeholderButton} />
+        </View>
+      </LinearGradient>
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -339,8 +347,8 @@ const EditProfileScreen = () => {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
       >
         <Animated.ScrollView 
-          style={[styles.formContainer, { opacity: fadeAnim }]}
-          contentContainerStyle={styles.formContent}
+          style={[styles.scrollView, { opacity: fadeAnim }]}
+          contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -595,34 +603,26 @@ const EditProfileScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#F5F2ED',
   },
   flex: {
     flex: 1,
   },
   
-  // Modern Header Styles
-  headerWrapper: {
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  header: {
-    paddingTop: 40,
-    paddingBottom: 24,
-    paddingHorizontal: 24,
-    position: 'relative',
-    overflow: 'hidden',
+  // Header Styles matching ProfessionalHomeScreen
+  headerContainer: {
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    zIndex: 2,
   },
-  backButton: {
+  headerButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: theme.borderRadius.s,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -635,44 +635,23 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: -0.5,
+    letterSpacing: 1,
   },
   placeholderButton: {
     width: 44,
     height: 44,
   },
-  topCircle: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    top: -40,
-    left: -40,
-  },
-  bottomWave: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderTopLeftRadius: 100,
-    borderTopRightRadius: 100,
-  },
   
   // Profile Picture Styles
   profileSection: {
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.l,
+    marginBottom: theme.spacing.m,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    ...theme.shadows.card,
   },
   profileImageContainer: {
     position: 'relative',
@@ -720,24 +699,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   
-  // Form Styles
-  formContainer: {
+  // Form Styles matching ProfessionalHomeScreen
+  scrollView: {
     flex: 1,
-    padding: 20,
   },
-  formContent: {
-    paddingBottom: 32,
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
   },
+  // Card Styles matching ProfessionalHomeScreen
   card: {
-    backgroundColor: theme.colors.background.surface,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.l,
+    marginBottom: theme.spacing.m,
+    borderWidth: 1,
+    borderColor: theme.colors.feedback.success,
+    ...theme.shadows.card,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -804,16 +783,16 @@ const styles = StyleSheet.create({
     color: theme.colors.text.primary,
   },
   saveButton: {
+    backgroundColor: '#008272',
+    borderRadius: theme.borderRadius.m,
+    paddingVertical: theme.spacing.m,
+    paddingHorizontal: theme.spacing.l,
+    marginTop: theme.spacing.m,
+    marginBottom: theme.spacing.l,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.primary,
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    marginTop: 8,
-    marginBottom: 32,
-    gap: 8,
+    gap: theme.spacing.s,
   },
   saveButtonDisabled: {
     opacity: 0.7,

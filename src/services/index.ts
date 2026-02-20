@@ -270,7 +270,7 @@ export const apiService = {
       
       console.log('📤 Uploading profile picture...');
       
-      const response = await apiClient.post('/user/upload/profile-photo', formData, {
+      const response = await apiClient.post('/user/profile/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

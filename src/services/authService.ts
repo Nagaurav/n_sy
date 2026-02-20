@@ -86,6 +86,6 @@ export const authService = {
 
   // Update user profile
   updateProfile: async (userId: string, profileData: any): Promise<ApiResult<any>> => {
-    return apiClient.put(`/user/profile/${userId}`, profileData);
+    return apiClient.patch(`/user/profile/${userId}`, profileData);
   },
 };

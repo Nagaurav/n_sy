@@ -258,6 +258,23 @@ export const apiClient = {
     }
   },
 
+  patch: async <T = any>(
+    endpoint: string,
+    data?: any,
+    config?: any,
+  ): Promise<ApiResult<T>> => {
+    try {
+      const response = await retryRequest(async () => api.patch<T>(endpoint, data, config));
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: any) {
+      console.error('Error in PATCH request:', error);
+      return buildApiErrorResponse(error);
+    }
+  },
+
   delete: async <T = any>(
     endpoint: string,
     config?: any,
